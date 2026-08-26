@@ -1,0 +1,124 @@
+"""What a workflow expects and what it delivers — read from ComfyUI itself.
+
+ComfyUI declares, per node class (``GET /object_info``):
+  * every input with its TYPE (STRING / INT / COMBO / IMAGE …) and tooltip,
+  * ``output_node: true`` for the nodes that actually deliver a file.
+
+So the I/O contract of a workflow is not something to guess from parameter
+names: it is derived from the graph (which inputs are literal, hence settable)
+crossed with ComfyUI's own schema. Wiring adds the one thing the schema cannot
+say: whether a conditioning text is the positive or the negative side.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from . import autobind
+
+
+def _spec_type(spec: Any) -> str:
+    """ComfyUI input spec -> declared type. Handles both enum shapes."""
+    if isinstance(spec, list) and spec:
+        head = spec[0]
+        if isinstance(head, str):
+            return head                      # "STRING", "INT", "COMBO", …
+        if isinstance(head, list):
+            return "COMBO"                   # legacy: the list IS the options
+    return "UNKNOWN"
+
+
+def _spec_meta(spec: Any) -> dict[str, Any]:
+    if isinstance(spec, list):
+        for extra in spec[1:]:
+            if isinstance(extra, dict):
+                return extra
+    return {}
+
+
+def _option_values(options: list[Any], limit: int = 50) -> list[Any]:
+    """The values a combo really accepts.
+
+    A plain enum lists strings. ComfyUI's dynamic combos list objects whose
+    ``key`` is what the graph stores (the rest describes the inputs that option
+    reveals). Relaying the object made every choice read "[object Object]" in
+    the form; the key is the one thing a caller can actually send.
+    """
+    values: list[Any] = []
+    for opt in options[:limit]:
+        if isinstance(opt, dict):
+            for k in ("key", "value", "content", "name"):
+                if isinstance(opt.get(k), (str, int, float, bool)):
+                    values.append(opt[k])
+                    break
+        else:
+            values.append(opt)
+    return values
+
+
+def describe_io(graph: dict[str, Any], object_info: dict[str, Any],
+                titles: dict[str, str] | None = None) -> dict[str, Any]:
+    """The workflow's settable inputs and its delivering outputs.
+
+    ``titles`` carries the author's own node names (lost by the API export):
+    with them an entry reads "Duration" instead of "PrimitiveInt · value".
+    """
+    from .labels import label_for
+    negatives = autobind._negative_text_nodes(graph)
+    positives: set[str] = set()
+    for node in graph.values():
+        for key, val in (node.get("inputs") or {}).items():
+            if autobind._is_link(val) and key in ("positive", "prompt"):
+                positives.add(str(val[0]))
+
+    inputs: list[dict[str, Any]] = []
+    outputs: list[dict[str, Any]] = []
+    for nid, node in graph.items():
+        if not isinstance(node, dict):
+            continue
+        ct = node.get("class_type", "")
+        schema = object_info.get(ct) or {}
+        declared = {}
+        for section in ("required", "optional"):
+            declared.update((schema.get("input") or {}).get(section) or {})
+
+        if schema.get("output_node"):
+            outputs.append({
+                "node": nid,
+                "class_type": ct,
+                "display_name": schema.get("display_name") or ct,
+            })
+
+        for key, val in (node.get("inputs") or {}).items():
+            if autobind._is_link(val):
+                continue                      # produced by another node: not settable
+            spec = declared.get(key)
+            label = label_for(nid, titles or {})
+            entry = {
+                "node": nid,
+                "class_type": ct,
+                "label": label,          # the author's name, when they gave one
+                "input": key,
+                "type": _spec_type(spec) if spec is not None else "UNKNOWN",
+                "value": val,
+            }
+            meta = _spec_meta(spec)
+            if meta.get("tooltip"):
+                entry["tooltip"] = meta["tooltip"]
+            # Bounds and defaults are declared by ComfyUI: relay them so a form
+            # can be built from the workflow instead of from our guesses.
+            for key in ("min", "max", "step", "default", "multiline", "round"):
+                if key in meta:
+                    entry[key] = meta[key]
+            if isinstance(meta.get("options"), list):
+                entry["options"] = _option_values(meta["options"])
+            elif isinstance(spec, list) and isinstance(spec[0], list):
+                entry["options"] = _option_values(spec[0])
+            if nid in negatives:
+                entry["role"] = "negative"
+            elif nid in positives:
+                entry["role"] = "positive"
+            inputs.append(entry)
+
+    inputs.sort(key=lambda e: (e["class_type"], e["node"], e["input"]))
+    return {"inputs": inputs, "outputs": outputs}

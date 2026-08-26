@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "workflows": {
+    "video_ltx2_3_i2v": {
+      "source": "video_ltx2_3_i2v.json",
+      "source_hash": "ece59b8e37e0a7fa",
+      "extracted_at": null,
+      "titles": {
+        "103": "Model Links",
+        "299": "Height",
+        "300": "Frame Rate",
+        "301": "Duration",
+        "302": "Switch to Text to Video?",
+        "312": "Width",
+        "319": "Prompt",
+        "323": "Math Expression (length)",
+        "328": "Boolean (Enable Prompt Enhance)"
+      }
+    },
+    "video_minimax_h3_t2v": {
+      "source": "video_minimax_h3_t2v.json",
+      "source_hash": "dcf73f5f844cedab",
+      "extracted_at": null,
+      "titles": {
+        "118": "Note: Size Settings Reference",
+        "117": "Note: Model Links",
+        "116": "Note: MiniMax H3",
+        "133": "Float (duration)",
+        "135": "If/Else Switch (Model)",
+        "136": "If/Else Switch (Steps)",
+        "139": "Boolean (Enable Lightning LoRA)"
+      }
+    },
+    "video_wan2_2_14B_fun_camera": {
+      "source": "video_wan2_2_14B_fun_camera.json",
+      "source_hash": "cc87b4c435812997",
+      "extracted_at": null,
+      "titles": {
+        "74": "CLIP Text Encode (Negative Prompt)",
+        "99": "CLIP Text Encode (Negative Prompt)",
+        "107": "CLIP Text Encode (Positive Prompt)",
+        "81": "CLIP Text Encode (Positive Prompt)",
+        "112": "VRAM Usage",
+        "115": "About 4 Steps LoRA"
+      }
+    }
+  }
+}

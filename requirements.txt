@@ -1,0 +1,10 @@
+# Runtime dependencies (sober: stdlib does history via sqlite3).
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+
+# The engine itself is the official ComfyUI CLI, installed and invoked out of
+# process — NOT a Python dependency of this service:
+#   pip install comfy-cli
+# The bridge shells out to `comfy run --workflow <file> --wait`. In dry-run
+# (COMFY_DRY_RUN=1, the default) no ComfyUI install is required.

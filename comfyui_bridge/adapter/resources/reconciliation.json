@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "description": "Fichier de réconciliation : déclare les workflows appelables par nom. Ajouter un modèle = ajouter une entrée (workflow + bindings + defaults), aucun code à changer. Le pipeline choisit par nom via le champ 'workflow' de l'intention.",
+  "default": "sd15-txt2img",
+  "workflows": {
+    "sd15-txt2img": {
+      "kind": "image",
+      "workflow": "workflow_template.json",
+      "bindings": {
+        "prompt": {
+          "node": "6",
+          "input": "text"
+        },
+        "negative_prompt": {
+          "node": "7",
+          "input": "text"
+        },
+        "width": {
+          "node": "5",
+          "input": "width"
+        },
+        "height": {
+          "node": "5",
+          "input": "height"
+        },
+        "latent_batch": {
+          "node": "5",
+          "input": "batch_size"
+        },
+        "seed": {
+          "node": "3",
+          "input": "seed"
+        },
+        "steps": {
+          "node": "3",
+          "input": "steps"
+        },
+        "cfg": {
+          "node": "3",
+          "input": "cfg"
+        },
+        "filename_prefix": {
+          "node": "9",
+          "input": "filename_prefix"
+        }
+      }
+    },
+    "minimax-h3-court": {
+      "kind": "video",
+      "workflow": "workflows/video_minimax_h3_t2v.json",
+      "description": "MiniMax H3 texte→vidéo, durée pilotable. Entrée EXPLICITE : l'auto-binding ne peut pas deviner que la durée passe par un PrimitiveFloat consommé par une expression. Le workflow d'origine est réglé sur 12 s (~289 images) — ingérable ici.",
+      "defaults": {
+        "duration_s": 1.0,
+        "fps": 24
+      },
+      "bindings": {
+        "prompt": {
+          "node": "140:131",
+          "input": "prompt"
+        },
+        "seed": {
+          "node": "140:129",
+          "input": "noise_seed"
+        },
+        "duration_s": {
+          "node": "140:133",
+          "input": "value"
+        },
+        "fps": {
+          "node": "140:130",
+          "input": "fps"
+        },
+        "filename_prefix": {
+          "node": "92",
+          "input": "filename_prefix"
+        }
+      }
+    },
+    "z-image-turbo": {
+      "kind": "image",
+      "workflow": "workflow_zimage.json",
+      "defaults": {
+        "width": 1024,
+        "height": 1024,
+        "steps": 8,
+        "cfg": 1.0
+      },
+      "bindings": {
+        "prompt": {
+          "node": "27",
+          "input": "text"
+        },
+        "width": {
+          "node": "13",
+          "input": "width"
+        },
+        "height": {
+          "node": "13",
+          "input": "height"
+        },
+        "latent_batch": {
+          "node": "13",
+          "input": "batch_size"
+        },
+        "seed": {
+          "node": "3",
+          "input": "seed"
+        },
+        "steps": {
+          "node": "3",
+          "input": "steps"
+        },
+        "cfg": {
+          "node": "3",
+          "input": "cfg"
+        },
+        "filename_prefix": {
+          "node": "9",
+          "input": "filename_prefix"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+# Produced media and local memory: outputs of runs, not sources.
+_comfy_output/
+_data/
+_frames/
+_jobs.txt
+_jobid.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/

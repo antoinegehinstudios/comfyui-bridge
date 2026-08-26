@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comfyui-bridge"
+version = "0.1.0"
+description = "Decoupled FastAPI + CLI orchestration service for ComfyUI, with hardware reconciliation (Hermes)."
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+# One-click headless extraction (UI->API via ComfyUI's graphToPrompt).
+# After install: `playwright install chromium`.
+browser = ["playwright>=1.40"]
+
+[project.scripts]
+comfyui-bridge = "comfyui_bridge.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["comfyui_bridge*"]
+
+[tool.setuptools.package-data]
+"comfyui_bridge.adapter" = ["resources/*.json"]
+"comfyui_bridge.api" = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

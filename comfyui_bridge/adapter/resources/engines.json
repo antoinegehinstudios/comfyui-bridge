@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "description": "Réconciliation du MOTEUR : où tourne ComfyUI. 'attach' = un serveur lancé par quelqu'un d'autre (Desktop). 'manage' = le bridge lance lui-même un ComfyUI headless. Règle absolue : si l'URL répond déjà, on s'y raccroche — jamais de seconde instance.",
+  "default": "local",
+  "engines": {
+    "desktop": {
+      "description": "ComfyUI Desktop, lancé par l'utilisateur. Le bridge ne fait que s'y connecter.",
+      "base_url": "http://127.0.0.1:8189",
+      "manage": false
+    },
+    "local": {
+      "description": "ComfyUI headless lancé par le bridge, en --lowvram (réduit les bascules d'offload qui provoquaient des fautes CUDA sur 12 Go de VRAM). Aucune dépendance à Desktop.",
+      "base_url": "http://127.0.0.1:8188",
+      "manage": true,
+      "cwd": "E:/Comfy-Desktop/ComfyUI-Installs/ComfyUI/ComfyUI",
+      "command": [
+        "E:/Comfy-Desktop/ComfyUI-Installs/ComfyUI/ComfyUI/.venv/Scripts/python.exe",
+        "main.py",
+        "--port", "8188",
+        "--lowvram",
+        "--base-directory", "E:/Comfy-Desktop/ComfyUI-Shared",
+        "--user-directory", "E:/Comfy-Desktop/ComfyUI-Installs/ComfyUI/ComfyUI/user"
+      ]
+    }
+  }
+}

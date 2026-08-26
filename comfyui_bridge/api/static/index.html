@@ -1,0 +1,911 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ComfyUI Bridge — console</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --txt:#e6e9ef; --muted:#9aa4b2; --accent:#6ea8fe; --accent2:#8b5cf6;
+    --ok:#3fb950; --warn:#d29922; --err:#f85149; --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  header{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  header .dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+  header .dot.on{background:var(--ok)}
+  #mode{margin-left:auto;color:var(--muted);font-size:12px}
+  #mode b{color:var(--accent)}
+  main{display:grid;grid-template-columns:380px 1fr;gap:20px;padding:20px;max-width:1200px;margin:0 auto}
+  @media(max-width:820px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 14px}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  input,select,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    border-radius:8px;padding:8px 10px;font:inherit}
+  textarea{resize:vertical;min-height:64px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .grow{display:flex;gap:8px;align-items:end}
+  button{cursor:pointer;border:0;border-radius:8px;padding:10px 14px;font:inherit;font-weight:600}
+  .primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;width:100%;margin-top:16px;padding:12px}
+  .ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--line);font-weight:500;padding:6px 10px}
+  .constraint{display:grid;grid-template-columns:1fr 84px 1fr 34px;gap:6px;margin-bottom:6px}
+  .constraint button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);padding:0}
+  .hint{font-size:11px;color:var(--muted);margin-top:2px}
+  /* result */
+  #result:empty::after{content:"Aucun job. Envoie une intention.";color:var(--muted);font-size:13px}
+  .status{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:13px;
+    padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel2)}
+  .status .s{width:8px;height:8px;border-radius:50%}
+  .s.accepted,.s.queued,.s.running{background:var(--warn);animation:pulse 1s infinite}
+  .s.succeeded{background:var(--ok)} .s.failed{background:var(--err)}
+  .s.cancelled{background:var(--muted)}
+  @keyframes pulse{50%{opacity:.35}}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:14px 0;font-size:13px}
+  .kv .k{color:var(--muted)}
+  .chip{display:inline-block;background:rgba(110,168,254,.12);color:var(--accent);border:1px solid rgba(110,168,254,.3);
+    border-radius:999px;padding:2px 10px;margin:2px 4px 2px 0;font-size:12px}
+  .art{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;margin:4px 0;word-break:break-all}
+  .art .badge{color:var(--accent2);font-weight:700;margin-right:8px;text-transform:uppercase;font-size:10px}
+  .problem{border:1px solid var(--err);background:rgba(248,81,73,.08);border-radius:8px;padding:12px;margin-top:12px}
+  .problem h3{margin:0 0 6px;color:var(--err);font-size:13px}
+  .problem pre{margin:8px 0 0;white-space:pre-wrap;font-size:11px;color:var(--muted)}
+  details{margin-top:12px}
+  summary{cursor:pointer;color:var(--muted);font-size:12px}
+  pre.raw{background:#0b0d11;border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font-size:11px}
+  /* preview */
+  table.flow{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}
+  table.flow th{text-align:left;color:var(--muted);font-weight:500;padding:4px 8px;border-bottom:1px solid var(--line)}
+  table.flow td{padding:5px 8px;border-bottom:1px solid var(--panel2);vertical-align:top}
+  table.flow code{font-family:ui-monospace,Consolas,monospace;color:var(--accent)}
+  table.flow .val{font-family:ui-monospace,Consolas,monospace;color:var(--ok);word-break:break-all}
+  .nodes{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+  .node{border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:6px 10px;font-size:12px}
+  .node.touched{border-color:var(--accent2);background:rgba(139,92,246,.12)}
+  .node b{color:var(--txt)} .node span{color:var(--muted);font-size:11px}
+  .node .arrow{color:var(--accent2);margin-left:6px}
+  /* progress + delivery */
+  .bar{height:6px;border-radius:999px;background:var(--panel2);overflow:hidden;margin:12px 0}
+  .bar > i{display:block;height:100%;width:35%;border-radius:999px;
+    background:linear-gradient(90deg,var(--accent),var(--accent2));animation:slide 1.1s infinite}
+  .bar > i.determinate{animation:none;transition:width .25s ease}
+  @keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
+  .elapsed{color:var(--muted);font-size:12px;margin-left:8px}
+  .logs{background:#0b0d11;border:1px solid var(--line);border-radius:8px;padding:10px;margin:10px 0;
+    font-family:ui-monospace,Consolas,monospace;font-size:11px;max-height:150px;overflow:auto}
+  .logs div{color:var(--muted);white-space:pre-wrap}
+  .logs div:last-child{color:var(--txt)}
+  img.preview,video.preview{max-width:100%;border:1px solid var(--line);border-radius:8px;margin:6px 0}
+  .art{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .art .path{flex-basis:100%;color:var(--muted);font-size:11px;word-break:break-all;margin-top:2px}
+  a.open{color:#fff;background:var(--accent);border-radius:6px;padding:3px 10px;font-size:12px;
+    font-weight:600;text-decoration:none}
+  a.open:hover{filter:brightness(1.1)}
+  button.copy{background:var(--panel);border:1px solid var(--line);color:var(--muted);
+    border-radius:6px;padding:3px 10px;font-size:12px}
+  .loc{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;padding:8px 12px;margin:10px 0;font-size:12px}
+  .loc code{color:var(--accent);word-break:break-all}
+  /* tabs + management */
+  nav.tabs{display:flex;gap:6px;padding:10px 22px 0;background:var(--panel);border-bottom:1px solid var(--line)}
+  nav.tabs button{background:transparent;color:var(--muted);border:1px solid transparent;border-bottom:none;
+    border-radius:8px 8px 0 0;padding:9px 16px;font-weight:600}
+  nav.tabs button.active{background:var(--bg);color:var(--txt);border-color:var(--line)}
+  #view-mgmt,#view-out{max-width:1000px;margin:20px auto;padding:20px}
+  #view-mgmt h3,#view-out h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 0 8px}
+  .wfrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);
+    border-radius:8px;margin-bottom:6px;background:var(--panel2)}
+  .wfrow .nm{font-weight:600;flex:1;min-width:180px;word-break:break-all}
+  .wfrow .sub{color:var(--muted);font-size:11px;flex-basis:100%}
+  .badge2{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;border:1px solid}
+  .badge2.ok{color:var(--ok);border-color:var(--ok);background:rgba(63,185,80,.1)}
+  .badge2.warn{color:var(--warn);border-color:var(--warn);background:rgba(210,153,34,.12)}
+  .badge2.none{color:var(--muted);border-color:var(--line)}
+  .wfrow button{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600}
+  .wfrow button.g{background:var(--panel);color:var(--txt);border:1px solid var(--line);font-weight:500}
+  .dep{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;margin:2px 4px 2px 0;font-family:ui-monospace,Consolas,monospace}
+  .dep.ok{background:rgba(63,185,80,.12);color:var(--ok)} .dep.miss{background:rgba(248,81,73,.14);color:var(--err)}
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="health"></span>
+  <h1>ComfyUI Bridge</h1>
+  <button class="ghost" id="engineFix" type="button" title="Libère la VRAM (API ComfyUI) ; relance le moteur seulement si nécessaire">↻ Moteur</button>
+  <span id="mode">…</span><span id="backend"></span>
+</header>
+
+<nav class="tabs">
+  <button data-tab="gen" class="active">Générer</button>
+  <button data-tab="mgmt">Workflows</button>
+  <button data-tab="out">Livrables</button>
+</nav>
+
+<main id="view-gen">
+  <section class="card">
+    <h2>Intention de rendu</h2>
+    <label>Workflow <span class="hint" style="display:inline">(fichier de réconciliation)</span></label>
+    <select id="workflow"></select>
+    <div class="grow" style="margin-top:6px">
+      <input type="file" id="wffile" accept=".json" style="flex:1">
+      <button class="ghost" id="importWf" type="button">Importer</button>
+    </div>
+    <div class="hint">Workflow exporté de ComfyUI (Export API) → auto-lié, appelable par nom.</div>
+    <div class="loc" id="readiness" style="display:none;border-color:var(--err)"></div>
+
+    <!-- Everything below is BUILT FROM the workflow analysis. A field appears
+         only because the workflow was seen to accept it. -->
+    <div id="wfForm"></div>
+    <details id="ioBlock" style="display:none">
+      <summary>Autres entrées du workflow (brutes)</summary>
+      <div id="ioFields"></div>
+    </details>
+
+    <label>Contraintes déclaratives</label>
+    <div id="constraints"></div>
+    <button class="ghost" id="addC" type="button">+ contrainte</button>
+    <div class="hint">ex. width · lte · 1024 — appliquées avant Hermes</div>
+
+    <div class="loc" id="estimate" style="display:none;border-color:var(--accent)"></div>
+    <button class="primary" id="send">Envoyer l'intention</button>
+    <button class="ghost" id="preview" type="button" style="width:100%;margin-top:8px;padding:10px">
+      Prévisualiser le flux de nœuds
+    </button>
+    <div class="hint">La prévisualisation réconcilie avec Hermes mais n'exécute rien : elle montre le graphe ComfyUI qui SERAIT appelé.</div>
+  </section>
+
+  <section class="card">
+    <h2>Résultat</h2>
+    <div id="result"></div>
+  </section>
+</main>
+
+<section id="view-out" class="card" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+    <h2 style="margin:0">Derniers médias produits</h2>
+    <button class="ghost" id="outRefresh" type="button">↻ Rafraîchir</button>
+  </div>
+  <div class="loc" id="outDir">…</div>
+  <h3>File d'attente du moteur</h3>
+  <div class="loc" id="queueBox">…</div>
+  <div id="queueList"></div>
+  <button class="ghost" id="queueClear" type="button">Vider les tâches en attente</button>
+  <div class="loc" id="recovered" style="display:none;border-color:var(--accent)"></div>
+  <div id="outList"><span class="hint">…</span></div>
+</section>
+
+<section id="view-mgmt" class="card" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+    <h2 style="margin:0">Gestion des workflows</h2>
+    <button class="ghost" id="mgmtRefresh" type="button">↻ Rafraîchir</button>
+  </div>
+  <div id="comfyStatus" class="hint" style="margin-top:6px"></div>
+  <h3>Sauvés dans ComfyUI</h3>
+  <div id="savedList"><span class="hint">…</span></div>
+  <h3>Extraits — appelables par le pipeline</h3>
+  <div id="extractedList"><span class="hint">…</span></div>
+  <h3>Mémoire d'Hermès — ce qui s'est réellement passé ici</h3>
+  <div id="hermesList"><span class="hint">…</span></div>
+  <input type="file" id="extractFile" accept=".json" style="display:none">
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+let OPS = [];   // rempli depuis /v1/workflows (vocabulaire du domaine)
+
+// health banner
+let OUTPUT_DIR="", DRY_RUN=false;
+fetch("/healthz").then(r=>r.json()).then(h=>{
+  OUTPUT_DIR=h.output_dir||""; DRY_RUN=!!h.dry_run;
+  $("health").classList.add("on");
+  $("mode").innerHTML = `hôte <b>${h.host}</b> · moteur <b title="${h.comfyui_base_url||""}">${h.engine||"?"}</b> (${h.engine_state||"?"})`
+    + ` · Hermes <b>${h.hermes_mode}</b> · <b>${DRY_RUN?"SIMULATION (dry-run)":"live"}</b>`
+    + ` · sortie <b title="${OUTPUT_DIR}">${OUTPUT_DIR.replace(/^.*[\\\/]/,'…/')||"?"}</b>`;
+}).catch(()=>{ $("mode").textContent="service injoignable"; });
+
+// test de connexion backend (ComfyUI si http)
+fetch("/v1/backend").then(r=>r.json()).then(b=>{
+  const pr=b.probe||{}; let txt, col;
+  if(b.backend==="http"){ txt = pr.available ? "ComfyUI ✓ connecté" : "ComfyUI ✗ injoignable"; col = pr.available ? "var(--ok)" : "var(--warn)"; }
+  else { txt = `backend: ${b.backend}`; col = "var(--muted)"; }
+  $("backend").innerHTML = ` · <b style="color:${col}" title="${(pr.reason||'').replace(/"/g,'&quot;')}">${txt}</b>`;
+}).catch(()=>{});
+
+// workflows déclarés dans le fichier de réconciliation
+let WF = {}, VOCAB = {};
+// The form is BUILT FROM the workflow's analysis. A control exists only because
+// the workflow was seen to accept that input. Nothing generic is offered.
+const SEMANTIC = [
+  {key:"prompt",          label:"Prompt",              kind:"textarea"},
+  {key:"negative_prompt", label:"Prompt négatif",      kind:"text"},
+  {key:"image",           label:"Image d'entrée",      kind:"media"},
+  {key:"seed",            label:"Seed",                kind:"number"},
+  {key:"steps",           label:"Steps",               kind:"number"},
+  {key:"cfg",             label:"CFG",                 kind:"number", step:"0.5"},
+  {key:"width",           label:"Largeur",             kind:"number"},
+  {key:"height",          label:"Hauteur",             kind:"number"},
+  {key:"fps",             label:"FPS",                 kind:"number"},
+  {key:"duration_s",      label:"Durée (s)",           kind:"number", step:"0.5"},
+  {key:"latent_batch",    label:"Images / batch",      kind:"number"},
+];
+
+function buildWorkflowForm(name){
+  const w = WF[name]||{}, carried = w.carried||{}, d = w.defaults||{};
+  // Fields come from the analysis: those a node carries, plus those the
+  // orchestrator can convert (a duration in seconds becomes frames).
+  const derived = w.derived||[], accepts = (w.accepts||[]).concat(derived);
+  const box = $("wfForm");
+  if(!accepts.length){
+    box.innerHTML = `<div class="hint" style="color:var(--warn)">Ce workflow n’expose aucune entrée reconnue — il tournera tel quel.</div>`;
+    return;
+  }
+  box.innerHTML = SEMANTIC.filter(f=>accepts.includes(f.key)).map(f=>{
+    const val = (d[f.key]!==undefined && d[f.key]!==null) ? String(d[f.key]) : "";
+    if(f.kind==="textarea")
+      return `<label>${f.label}</label><textarea id="p_${f.key}"></textarea>`;
+    if(f.kind==="media"){
+      const c = carried[f.key];
+      return `<label>${f.label}</label><select id="p_${f.key}"></select>`+
+             `<div class="grow" style="margin-top:6px"><input type="file" id="up_${f.key}" accept="image/*" style="padding:4px">`+
+             `<button type="button" class="ghost" id="upBtn_${f.key}">Envoyer</button></div>`+
+             `<div class="hint" id="upNote_${f.key}"></div>`+
+             `<div class="hint" style="color:var(--warn)">${c
+               ? `Sans choix, une image NEUTRE (blanche) est envoyée — le contenu embarqué (${escapeHtml(c)}) n'est pas réutilisé.`
+               : "Sans choix, une image neutre (blanche) est envoyée."}</div>`;
+    }
+    const step = f.step?` step="${f.step}"`:"";
+    const note = derived.includes(f.key)
+      ? `<div class="hint">Converti en nombre d’images (durée × FPS) — ce workflow n’a pas de champ de durée.</div>` : "";
+    return `<label>${f.label}</label><input id="p_${f.key}" type="${f.kind}"${step} value="${escapeHtml(val)}" placeholder="valeur du workflow">${note}`;
+  }).join("");
+
+  const missing = SEMANTIC.filter(f=>!accepts.includes(f.key)).map(f=>f.label);
+  if(missing.length)
+    box.innerHTML += `<div class="hint">Non exposé par ce workflow : ${escapeHtml(missing.join(", "))}</div>`;
+
+  if(accepts.includes("image")){ fillImageOptions(name); wireImageUpload(name); }
+  loadWorkflowIO(name);
+  loadReadiness(name);
+  scheduleEstimate();
+}
+
+// Supplying an image is ComfyUI's own upload: the console must not ask the user
+// to go and copy a file into the engine's input folder by hand.
+function wireImageUpload(name){
+  const btn=$("upBtn_image"), input=$("up_image"), note=$("upNote_image"), sel=$("p_image");
+  if(!btn||!input||!sel) return;
+  btn.onclick = async ()=>{
+    const f = input.files && input.files[0];
+    if(!f){ note.textContent="Choisis un fichier image."; return; }
+    btn.disabled=true; note.textContent="envoi…";
+    try{
+      const fd = new FormData(); fd.append("file", f);
+      const r = await fetch("/v1/inputs/image", {method:"POST", body:fd});
+      const d = await r.json();
+      if(!r.ok){ note.textContent = d.detail || "envoi refusé"; return; }
+      const opt=document.createElement("option"); opt.value=d.name; opt.textContent=d.name+" (envoyée)";
+      sel.appendChild(opt); sel.value=d.name;
+      note.textContent = `ComfyUI la connaît sous : ${d.name}`;
+      scheduleEstimate();
+    }catch(e){ note.textContent = "envoi impossible : "+e; }
+    finally{ btn.disabled=false; }
+  };
+}
+
+function fillImageOptions(name){
+  const sel=$("p_image"); if(!sel) return;
+  const carried=(WF[name]||{}).carried||{};
+  sel.innerHTML = `<option value="">— image neutre (blanche) —</option>`
+    + (carried.image?`<option value="${escapeHtml(carried.image)}">garder celle du workflow (${escapeHtml(carried.image)})</option>`:"");
+  fetch(`/v1/workflows/${encodeURIComponent(name)}/io`).then(r=>r.json()).then(io=>{
+    if(!io.described) return;
+    const e=(io.inputs||[]).find(x=>x.input==="image"&&Array.isArray(x.options));
+    for(const o of (e?e.options:[])){
+      const opt=document.createElement("option"); opt.value=o; opt.textContent=o; sel.appendChild(opt);
+    }
+  }).catch(()=>{});
+}
+
+function pval(key){
+  const el=$("p_"+key); if(!el) return null;
+  const v=el.value; if(v==="") return null;
+  return (el.type==="number") ? Number(v) : v;
+}
+
+fetch("/v1/workflows").then(r=>r.json()).then(cat=>{
+  WF = cat.workflows||{};
+  VOCAB = cat.vocabulary||{};
+  OPS = VOCAB.constraint_ops||[];
+
+  const sel=$("workflow"); sel.innerHTML="";
+  for(const name of Object.keys(WF)){
+    const o=document.createElement("option"); o.value=name;
+    // A workflow a past run proved impossible here is said so in the list.
+    o.textContent = `${name} (${WF[name].kind})` + (WF[name].runnable===false ? " — problème connu ici" : "");
+    sel.appendChild(o);
+  }
+  // Open on something that can actually run: the shipped default references a
+  // model this host does not have, and the console opened on a dead workflow.
+  const openOn = (WF[cat.default] && WF[cat.default].runnable !== false)
+    ? cat.default
+    : (Object.keys(WF).find(n=>WF[n].runnable!==false) || cat.default);
+  if(openOn) sel.value = openOn;
+  sel.addEventListener("change", ()=>buildWorkflowForm(sel.value));
+  buildWorkflowForm(sel.value);
+  if(!document.querySelector(".constraint")) addConstraint();
+}).catch(()=>{ $("workflow").innerHTML='<option value="">(catalogue indisponible)</option>'; });
+
+// import self-service d'un workflow exporté de ComfyUI (Export API)
+$("importWf").onclick = async ()=>{
+  const f = $("wffile").files[0];
+  if(!f){ $("result").innerHTML='<div class="problem"><h3>Aucun fichier</h3><div>Choisis un .json exporté de ComfyUI (Export API).</div></div>'; scrollToResult(); return; }
+  let graph;
+  try{ graph = JSON.parse(await f.text()); }
+  catch(e){ $("result").innerHTML=`<div class="problem"><h3>JSON invalide</h3><pre>${escapeHtml(e.message)}</pre></div>`; scrollToResult(); return; }
+  const name = f.name.replace(/\.json$/i,"");
+  try{
+    const res = await fetch("/v1/workflows",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({name, workflow:graph})});
+    const data = await res.json();
+    if(res.status===201){
+      WF[data.name]={kind:data.kind, defaults:data.defaults};
+      const sel=$("workflow");
+      if(![...sel.options].some(o=>o.value===data.name)){
+        const o=document.createElement("option"); o.value=data.name; o.textContent=`${data.name} (${data.kind})`; sel.appendChild(o);
+      }
+      sel.value=data.name; buildWorkflowForm(data.name);
+      const binds=Object.keys(data.bindings||{}).join(", ")||"aucun";
+      $("result").innerHTML=`<div class="loc" style="border-color:var(--ok)">✓ Workflow importé : <code>${escapeHtml(data.name)}</code> (${data.kind}) — bindings auto : ${escapeHtml(binds)}. Appelable par nom.</div>`;
+    } else { problem(data); }
+  }catch(e){ $("result").innerHTML=`<div class="problem"><h3>Erreur réseau</h3><pre>${escapeHtml(String(e))}</pre></div>`; }
+  scrollToResult();
+};
+
+// constraint rows
+function addConstraint(key="width", op="lte", val="1024"){
+  const row = document.createElement("div");
+  row.className = "constraint";
+  row.innerHTML =
+    `<input class="ck" placeholder="clé" value="${key}"/>`+
+    `<select class="co">${OPS.map(o=>`<option ${o===op?"selected":""}>${o}</option>`).join("")}</select>`+
+    `<input class="cv" placeholder="valeur" value="${val}"/>`+
+    `<button type="button" title="retirer">✕</button>`;
+  row.querySelector("button").onclick = ()=>row.remove();
+  $("constraints").appendChild(row);
+}
+$("addC").onclick = ()=>addConstraint("","eq","");
+
+function collectConstraints(){
+  return [...document.querySelectorAll(".constraint")].map(r=>{
+    const key = r.querySelector(".ck").value.trim();
+    const op  = r.querySelector(".co").value;
+    let raw   = r.querySelector(".cv").value.trim();
+    if(!key || raw==="") return null;
+    let value;
+    if(op==="in") value = raw.split(",").map(v=>castVal(v.trim()));
+    else value = castVal(raw);
+    return {key, op, value};
+  }).filter(Boolean);
+}
+function castVal(v){ const n=Number(v); return (v!=="" && !isNaN(n)) ? n : v; }
+
+function num(id){ const v=$(id).value; return v===""?null:Number(v); }
+
+let _timer=null, _t0=0, _es=null;
+function stopLive(){ if(_es){_es.close();_es=null;} if(_timer){clearInterval(_timer);_timer=null;} }
+function escapeHtml(s){ return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+// Amène le résultat sous les yeux : sur écran étroit il est SOUS le formulaire.
+function scrollToResult(){ $("result").scrollIntoView({behavior:"smooth",block:"start"}); }
+
+async function submit(){
+  const btn=$("send"); btn.disabled=true; btn.textContent="Envoi…";
+  stopLive();
+  try{
+    const res = await fetch("/v1/render",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(buildBody())});
+    const data = await res.json();
+    if(res.status===202){ _t0=Date.now(); startTimer(); render(data); live(data.id); }
+    else { problem(data); }             // 422 reconciliation / validation, etc.
+  }catch(e){ $("result").innerHTML = `<div class="problem"><h3>Erreur réseau</h3><pre>${e}</pre></div>`; }
+  scrollToResult();
+  btn.disabled=false; btn.textContent="Envoyer l'intention";
+}
+
+function startTimer(){
+  _timer=setInterval(()=>{ const el=$("elapsed"); if(el) el.textContent="· "+((Date.now()-_t0)/1000).toFixed(1)+" s"; },100);
+}
+
+// Progression temps réel via Server-Sent Events, repli sur polling.
+// Le flux peut mourir (moteur saturé, serveur occupé) : on repasse alors en
+// polling au lieu d'afficher éternellement un état figé qui mentirait.
+function live(id){
+  if(typeof EventSource!=="undefined"){
+    _es=new EventSource(`/v1/jobs/${id}/events`);
+    _es.onmessage=ev=>{ const job=JSON.parse(ev.data); render(job);
+      if(["succeeded","failed","cancelled"].includes(job.status)) stopLive(); };
+    _es.onerror=()=>{ if(_es){_es.close();_es=null;} poll(id); };  // jamais figé
+  } else { poll(id); }
+}
+
+async function poll(id){
+  let misses=0;
+  for(let i=0;i<600;i++){                       // le polling ne renonce pas avant le job
+    await new Promise(r=>setTimeout(r,2000));
+    let job=null;
+    try{
+      const r=await fetch(`/v1/jobs/${id}`);
+      if(r.ok) job=await r.json();
+      else if(r.status===404){
+        // The service restarted: its job list is memory-only. Polling forever
+        // filled the console with red 404s and explained nothing.
+        stopLive();
+        $("result").innerHTML = `<div class="problem"><h3>Ce job n’est plus suivi ici</h3>`
+          + `<div>La passerelle a redémarré ; elle ne garde pas les jobs en mémoire d’une exécution à l’autre. `
+          + `Si le moteur avait fini le rendu, il a été récupéré : regarde l’onglet <b>Livrables</b>.</div></div>`;
+        return;
+      }
+    }catch(e){}
+    if(!job){ misses++; const el=$("elapsed"); if(el) el.textContent += " · service muet…"; continue; }
+    misses=0; render(job);
+    if(["succeeded","failed","cancelled"].includes(job.status)){ stopLive(); return; }
+  }
+  stopLive();
+}
+
+function artView(a){
+  const u=a.url||"", size=a.bytes?` · ${a.bytes} o`:"";
+  const open=u?` · <a class="open" href="${u}" target="_blank" rel="noopener">Ouvrir ↗</a>`:"";
+  return `<div class="art"><span class="badge">${a.kind}</span><span class="k">${size}</span>${open}`+
+    `<div class="path">${escapeHtml(a.path)}</div></div>`;
+}
+
+// The engine reports its own progress; we only display it. No fake percentage.
+function progressBar(p, engine){
+  if(engine && engine.state==="pending"){
+    return `<div class="bar"><i></i></div>`+
+      `<div class="hint">en file d'attente dans ComfyUI — ${engine.ahead} tâche(s) devant</div>`;
+  }
+  if(engine && engine.state==="unknown"){
+    // Neither running nor pending in ComfyUI: cancelled, or the engine lost it.
+    return `<div class="bar"><i></i></div>`+
+      `<div class="hint" style="color:var(--warn)">le moteur ne connaît plus ce run — annulé, ou le moteur a redémarré</div>`;
+  }
+  if(p && p.max>0){
+    const pct=Math.min(100,Math.round(100*p.value/p.max));
+    return `<div class="bar"><i class="determinate" style="width:${pct}%"></i></div>`+
+           `<div class="hint">${p.value}/${p.max} (${pct}%) — rapporté par ComfyUI${p.node?` · nœud ${escapeHtml(p.node)}`:""}</div>`;
+  }
+  return `<div class="bar"><i></i></div>`+
+         `<div class="hint">en attente du moteur — chargement du modèle, aucune étape annoncée avant le calcul</div>`;
+}
+
+async function cancelJob(id, btn){
+  btn.disabled = true; btn.textContent = "arrêt demandé…";
+  try{
+    const r = await fetch(`/v1/jobs/${encodeURIComponent(id)}/cancel`, {method:"POST"});
+    const d = await r.json();
+    if(!d.cancelled) btn.textContent = d.reason || "arrêt impossible";
+  }catch(e){ btn.textContent = "arrêt impossible"; }
+}
+
+function render(job){
+  const running = job.status==="accepted"||job.status==="queued"||job.status==="running";
+  const arts=(job.artifacts||[]).map(artView).join("")||"<span class='k'>en cours…</span>";
+  const logs=(job.logs||[]).map(l=>`<div>${escapeHtml(l)}</div>`).join("");
+  const simBanner = (DRY_RUN && !running)
+    ? `<div class="loc" style="border-color:var(--warn)">⚠ SIMULATION (dry-run) — aucun rendu, aucun GPU sollicité. Le livrable est le PLAN (manifest JSON), pas une image.</div>` : ``;
+  let html=
+    `<span class="status"><span class="s ${job.status}"></span>${job.status}${DRY_RUN?" (simulé)":""}</span><span class="elapsed" id="elapsed"></span>`+
+    // Stopping a run is the engine's own operation; the console must offer it.
+    (running?`<button class="ghost" id="cancelJob" type="button" style="margin-left:10px">Arrêter ce run</button>`:``)+
+    (running?progressBar(job.progress, job.engine_state):``)+
+    simBanner+
+    `<div class="kv">`+
+      `<span class="k">job</span><span>${job.id}</span>`+
+      `<span class="k">type</span><span>${job.kind}</span>`+
+      `<span class="k">workflow</span><span>${escapeHtml(job.workflow||"—")}</span>`+
+      `<span class="k">configuration</span><span>${escapeHtml(job.config||"—")}</span>`+
+      (job.engine_ref?`<span class="k">file d'attente ComfyUI</span><span title="ouvre ComfyUI pour suivre ou annuler">${escapeHtml(job.engine_ref)}</span>`:``)+
+    `</div>`+
+    (logs?`<div class="k" style="font-size:12px;color:var(--muted)">journal</div><div class="logs">${logs}</div>`:``)+
+    `<div class="k" style="font-size:12px;color:var(--muted);margin-bottom:4px">livrable(s)</div>${arts}`;
+  if(job.problem) html+=problemHtml(job.problem);
+  html+=`<details><summary>JSON brut</summary><pre class="raw">${JSON.stringify(job,null,2)}</pre></details>`;
+  $("result").innerHTML=html;
+  const stop = $("cancelJob");
+  if(stop) stop.onclick = ()=>cancelJob(job.id, stop);
+}
+
+function problem(p){ $("result").innerHTML = problemHtml(p) + `<details><summary>JSON brut</summary><pre class="raw">${JSON.stringify(p,null,2)}</pre></details>`; }
+function problemHtml(p){
+  const std=["type","title","status","detail","instance"];
+  const ext=Object.keys(p).filter(k=>!std.includes(k)).map(k=>`<span class="chip">${k}: ${JSON.stringify(p[k])}</span>`).join("");
+  return `<div class="problem"><h3>${p.title||"Problème"} · ${p.status||""}</h3>`+
+    `<div>${p.detail||""}</div>`+ (ext?`<div style="margin-top:8px">${ext}</div>`:"")+
+    `<pre>${p.type||""}</pre></div>`;
+}
+
+function buildBody(){
+  const body = {workflow:$("workflow").value||null, inputs:collectIO(), constraints:collectConstraints()};
+  for(const f of SEMANTIC){
+    const v = pval(f.key);
+    if(v!==null) body[f.key==="latent_batch"?"batch":f.key] = v;
+  }
+  if(body.prompt===undefined) body.prompt = "(sans prompt)";   // required by the API
+  return body;
+}
+
+async function preview(){
+  const btn=$("preview"); btn.disabled=true; btn.textContent="Analyse…";
+  try{
+    const res = await fetch("/v1/preview",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(buildBody())});
+    const data = await res.json();
+    if(res.ok) renderPreview(data); else problem(data);
+  }catch(e){ $("result").innerHTML = `<div class="problem"><h3>Erreur réseau</h3><pre>${e}</pre></div>`; }
+  scrollToResult();
+  btn.disabled=false; btn.textContent="Prévisualiser le flux de nœuds";
+}
+
+function renderPreview(p){
+  const rows = (p.bindings_applied||[]).map(b=>
+    `<tr><td><code>${b.param}</code></td><td>#${b.node} · <code>${b.class_type||"?"}</code></td>`+
+    `<td><code>${b.input}</code></td><td class="val">${JSON.stringify(b.value)}</td></tr>`).join("");
+  const nodes = (p.nodes||[]).map(n=>
+    `<div class="node ${n.touched?"touched":""}"><b>#${n.id}</b> <span>${n.class_type||"?"}</span>${n.touched?'<span class="arrow">◀ injecté</span>':""}</div>`).join("");
+  $("result").innerHTML =
+    `<span class="status"><span class="s succeeded"></span>flux prévisualisé (non exécuté)</span>`+
+    `<div class="kv" style="margin-bottom:8px">`+
+      `<span class="k">source workflow</span><span class="val" style="font-size:12px">${p.workflow_source}</span>`+
+      `<span class="k">workflow</span><span>${escapeHtml(p.workflow||"")}</span>`+
+      `<span class="k">configuration</span><span>${escapeHtml(p.config||"")}</span>`+
+    `</div>`+
+    `<div class="k" style="font-size:12px;color:var(--muted)">nœuds du graphe (violet = paramètre injecté)</div>`+
+    `<div class="nodes">${nodes}</div>`+
+    `<div class="k" style="font-size:12px;color:var(--muted);margin-top:8px">bindings appliqués (param → nœud.entrée = valeur)</div>`+
+    `<table class="flow"><thead><tr><th>param</th><th>nœud</th><th>entrée</th><th>valeur</th></tr></thead><tbody>${rows}</tbody></table>`+
+    `<details open><summary>workflow ComfyUI injecté (JSON envoyé au moteur)</summary><pre class="raw">${JSON.stringify(p.graph,null,2)}</pre></details>`;
+}
+
+// Everything this workflow declares as settable, straight from ComfyUI's node
+// schemas: resolution, steps, sigmas, model names… whatever it actually exposes.
+const IO_SKIP = new Set(["filename_prefix"]);
+// A workflow that already failed here for a reason that will recur is flagged
+// BEFORE the click — being offered a trap and refused after is not helpful.
+async function loadReadiness(name){
+  const el=$("readiness"); el.style.display="none"; el.textContent="";
+  try{
+    const d=await (await fetch(`/v1/workflows/${encodeURIComponent(name)}/readiness`)).json();
+    if(d.runnable) return;
+    const miss=(d.dependencies&&d.dependencies.models)||[];
+    // The memory is per CONFIGURATION: saying otherwise condemned a workflow
+    // that another size would have run.
+    const cfg = d.config && d.config !== "workflow-default" ? d.config : null;
+    el.innerHTML = `⚠ <b>Problème connu sur ce workflow</b> — ${escapeHtml(d.problem||"problème connu")}`
+      + (cfg?` en <code>${escapeHtml(cfg)}</code>`:"") + `.`
+      + (d.detail?`<br><span class="hint">${escapeHtml(d.detail.slice(0,220))}</span>`:"")
+      + (miss.length?`<br>Modèles requis : <code>${miss.map(escapeHtml).join(", ")}</code>`:"")
+      + `<br><span class="hint">Constaté lors d'un run précédent ; ${cfg?"cette configuration sera refusée, une autre reste tentable":"le lancement sera refusé"}.</span>`;
+    el.style.display="block";
+  }catch(e){}
+}
+
+function humanDuration(sec){
+  if(sec < 90) return `${sec} s`;
+  const m=Math.floor(sec/60), r=sec%60;
+  return r>=30 ? `${m} min ${r} s` : `${m} min`;
+}
+
+// Hermes speaks from experience only, and every parameter counts: resolution,
+// frame count and steps change the amount of work, so the estimate is asked for
+// with the WHOLE intent, right before launching.
+let _estTimer = null;
+function scheduleEstimate(){
+  clearTimeout(_estTimer);
+  _estTimer = setTimeout(loadEstimate, 400);      // after the user stops typing
+}
+
+async function loadEstimate(){
+  const el = $("estimate");
+  if(!$("workflow").value){ el.style.display="none"; return; }
+  try{
+    const res = await fetch("/v1/estimate", {method:"POST",
+      headers:{"content-type":"application/json"}, body:JSON.stringify(buildBody())});
+    if(!res.ok){
+      // Silently hiding the estimate left the user with no idea why it vanished.
+      const pb = await res.json().catch(()=>({}));
+      el.innerHTML = `⏱ Estimation impossible : ${escapeHtml(pb.detail || pb.title || ("HTTP "+res.status))}`;
+      el.style.display="block";
+      return;
+    }
+    const d = await res.json(), e = d.estimate, v = d.effective || {};
+    const size = (v.width && v.height) ? `${v.width}×${v.height}` : "taille du workflow";
+    const frames = v.frames ? `, ${v.frames} image(s)` : "";
+    const steps = v.steps ? `, ${v.steps} étape(s)` : "";
+    if(!e){
+      el.innerHTML = `⏱ Aucune estimation : rien de comparable n’a encore été mesuré ici.`
+        + `<span class="hint"> (${escapeHtml(size)}${escapeHtml(frames)}${escapeHtml(steps)})</span>`;
+    } else {
+      const how = e.basis === "work-fit"
+        ? `d’après ${e.samples} run(s) mesuré(s) : ~${humanDuration(e.setup_s)} de mise en route `
+          + `(variable selon que le modèle est déjà chargé) + ${e.per_unit_s} s par unité de charge`
+        : e.basis === "work-rate"
+        ? `d’après ${e.samples} run(s) mesuré(s) d’une seule taille, rapporté à la charge de CELUI-CI`
+        : `d’après ${e.samples} run(s), ${e.basis === "same-config" ? "même configuration" : "autres configurations"}`;
+      el.innerHTML = `⏱ <b>~${humanDuration(e.seconds)}</b> pour ${escapeHtml(size)}${escapeHtml(frames)}${escapeHtml(steps)}`
+        + `<span class="hint"> — ${how} ; de ${humanDuration(e.min)} à ${humanDuration(e.max)}</span>`;
+    }
+    // A value that will not reach the graph is said here, next to the launch.
+    if((d.ignored||[]).length)
+      el.innerHTML += `<div class="hint" style="color:var(--warn)">Non transmis à ce workflow : `
+        + `${escapeHtml(d.ignored.join(", "))} — il n’expose pas ces entrées.</div>`;
+    el.style.display="block";
+  }catch(err){
+    el.innerHTML = `⏱ Estimation indisponible : ${escapeHtml(String(err))}`;
+    el.style.display="block";
+  }
+}
+
+async function loadWorkflowIO(name){
+  const blk=$("ioBlock"), box=$("ioFields");
+  blk.style.display="none"; box.innerHTML="";
+  try{
+    const io=await (await fetch(`/v1/workflows/${encodeURIComponent(name)}/io`)).json();
+    if(!io.described || !(io.inputs||[]).length) return;
+    const rows=io.inputs.filter(i=>!IO_SKIP.has(i.input));
+    if(!rows.length) return;
+    box.innerHTML = rows.map(i=>{
+      const id=`io__${i.node}.${i.input}`;
+      // The author's own name first — that is what ComfyUI Desktop shows.
+      const label = i.label
+        ? `${i.label} · ${i.input}${i.role?` (${i.role})`:""}`
+        : `${i.class_type} · ${i.input}${i.role?` (${i.role})`:""}`;
+      const tip=i.tooltip?` title="${escapeHtml(i.tooltip)}"`:"";
+      let field;
+      if(Array.isArray(i.options)){
+        field=`<select data-io="${i.node}.${i.input}"><option value="">— inchangé (${escapeHtml(String(i.value))}) —</option>`
+          + i.options.map(o=>`<option value="${escapeHtml(String(o))}">${escapeHtml(String(o))}</option>`).join("")+`</select>`;
+      } else if(i.type==="INT"||i.type==="FLOAT"){
+        const step=i.step!==undefined?` step="${i.step}"`:(i.type==="FLOAT"?' step="0.1"':"");
+        const mn=i.min!==undefined?` min="${i.min}"`:"", mx=i.max!==undefined?` max="${i.max}"`:"";
+        field=`<input type="number" data-io="${i.node}.${i.input}"${step}${mn}${mx} placeholder="inchangé (${escapeHtml(String(i.value))})">`;
+      } else {
+        field=`<input type="text" data-io="${i.node}.${i.input}" placeholder="inchangé (${escapeHtml(String(i.value).slice(0,40))})">`;
+      }
+      return `<label${tip} style="margin-top:8px">${escapeHtml(label)}</label>${field}`;
+    }).join("");
+    blk.style.display="block";
+    annotateSemanticBounds(name, io.inputs);
+  }catch(e){}
+}
+
+// The bounds shown on a semantic field are the ones ComfyUI declares for the
+// node it drives — never a number of ours. A field with no declared bound stays
+// unbounded, and the engine remains the one that validates.
+function annotateSemanticBounds(name, inputs){
+  const b = (WF[name]||{}).bindings||{};
+  const at = {};
+  for(const i of inputs||[]) at[`${i.node}.${i.input}`] = i;
+  for(const f of SEMANTIC){
+    const bind = b[f.key], el = $("p_"+f.key);
+    if(!bind || !el || el.type!=="number") continue;
+    const d = at[`${bind.node}.${bind.input}`];
+    if(!d) continue;
+    if(d.min!==undefined) el.min = d.min;
+    if(d.max!==undefined) el.max = d.max;
+    if(d.step!==undefined) el.step = d.step;
+    if(d.min!==undefined || d.max!==undefined){
+      const txt = `déclaré par le workflow : ${d.min!==undefined?`min ${d.min}`:""}${(d.min!==undefined&&d.max!==undefined)?" · ":""}${d.max!==undefined?`max ${d.max}`:""}`;
+      const hint = document.createElement("div");
+      hint.className = "hint"; hint.textContent = txt;
+      el.insertAdjacentElement("afterend", hint);
+    }
+  }
+}
+
+function collectIO(){
+  const out={};
+  document.querySelectorAll("[data-io]").forEach(el=>{
+    const v=el.value; if(v==="") return;          // vide = on ne touche pas
+    out[el.dataset.io] = (el.type==="number") ? Number(v) : v;
+  });
+  return out;
+}
+
+$("engineFix").onclick = async ()=>{
+  const b=$("engineFix"); b.disabled=true; const old=b.textContent; b.textContent="Moteur…";
+  try{
+    const d=await (await fetch("/v1/engine/restart",{method:"POST"})).json();
+    const steps=(d.steps||[]).map(s=>s.step).join(" → ");
+    $("backend").innerHTML = ` · <b>moteur : ${escapeHtml(d.outcome||"?")}</b> <span class="hint">${escapeHtml(steps)}</span>`;
+    setTimeout(()=>location.reload(), 1500);
+  }catch(e){ $("backend").innerHTML=` · <b style="color:var(--err)">échec: ${escapeHtml(String(e))}</b>`; }
+  b.disabled=false; b.textContent=old;
+};
+
+// every control feeds the work estimate
+document.addEventListener("input", e=>{
+  if(e.target.closest("#wfForm, #ioFields")) scheduleEstimate();
+});
+document.addEventListener("change", e=>{
+  if(e.target.closest("#wfForm, #ioFields")) scheduleEstimate();
+});
+
+$("send").onclick = submit;
+$("preview").onclick = preview;
+
+// ---- Onglets + vue de gestion des workflows ----
+document.querySelectorAll("nav.tabs button").forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll("nav.tabs button").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    const t=b.dataset.tab;
+    $("view-gen").style.display = t==="gen"?"":"none";
+    $("view-mgmt").style.display = t==="mgmt"?"":"none";
+    $("view-out").style.display = t==="out"?"":"none";
+    if(t==="mgmt"){ loadMgmt(); loadHermes(); }
+    if(t==="out"){ loadOut(); loadQueue(); loadRecovered(); }
+  };
+});
+$("mgmtRefresh").onclick = ()=>{ loadMgmt(); loadHermes(); };
+$("outRefresh").onclick = ()=>{ loadOut(); loadQueue(); loadRecovered(); };
+$("queueClear").onclick = async ()=>{
+  const b=$("queueClear"); b.disabled=true;
+  try{ await fetch("/v1/engine/queue/clear",{method:"POST"}); }catch(e){}
+  b.disabled=false; loadQueue();
+};
+
+// The engine runs ONE job at a time — everything else waits. Shown, not assumed.
+async function loadQueue(){
+  try{
+    const q=await (await fetch("/v1/engine/queue")).json();
+    const run=(q.running||[]).length, pend=(q.pending||[]).length;
+    if(!(q.engine && q.engine.available)){ $("queueBox").textContent="moteur injoignable"; $("queueList").innerHTML=""; return; }
+    $("queueBox").innerHTML = `⏳ <b>${run}</b> en cours · <b>${pend}</b> en attente — ${escapeHtml(q.note||"")}`;
+    const items=q.items||[];
+    $("queueList").innerHTML = items.length ? items.map(it=>
+      `<div class="wfrow"><span class="badge2 ${it.state==="running"?"ok":"warn"}">${it.state==="running"?"en cours":"en attente"}</span>`+
+      `<span class="nm" style="font-family:ui-monospace,Consolas,monospace">${escapeHtml(it.prompt_id)}</span>`+
+      `<span class="sub">#${it.number}</span></div>`).join("")
+      : '<span class="hint">File vide.</span>';
+  }catch(e){ $("queueBox").textContent="file indisponible"; }
+}
+
+// Where the OUT actually is: the produced files, newest first, with the path
+// on this host so they can be opened outside the browser too.
+// A run the engine finished while the bridge was down is delivered late: say so
+// rather than let it appear from nowhere in the list.
+async function loadRecovered(){
+  const box = $("recovered");
+  if(!box) return;
+  try{
+    const d = await (await fetch("/v1/recovered")).json();
+    const rows = d.recovered||[];
+    const kept = rows.filter(r=>r.state==="recovered");
+    if(!kept.length && !(d.still_in_flight||[]).length){ box.style.display="none"; return; }
+    box.innerHTML = (kept.length
+        ? `↩ ${kept.length} run(s) récupéré(s) au démarrage (terminés par le moteur pendant que la passerelle était arrêtée) : `
+          + kept.map(r=>`<code>${escapeHtml((r.artifacts||[]).join(", "))}</code>`).join(" · ")
+        : "")
+      + ((d.still_in_flight||[]).length
+        ? `<div class="hint">${d.still_in_flight.length} run(s) encore en vol dans le moteur.</div>` : "");
+    box.style.display="block";
+  }catch(e){ box.style.display="none"; }
+}
+
+async function loadOut(){
+  $("outList").innerHTML='<span class="hint">lecture du dossier de sortie…</span>';
+  try{
+    const d=await (await fetch("/v1/artifacts?limit=25")).json();
+    $("outDir").innerHTML = `📁 Dossier de sortie sur l'hôte : <code>${escapeHtml(d.output_dir)}</code> — ${d.count} média(s)`;
+    if(!(d.artifacts||[]).length){ $("outList").innerHTML='<span class="hint">Aucun média produit pour le moment.</span>'; return; }
+    $("outList").innerHTML = d.artifacts.map(a=>{
+      const mo=(a.bytes/1048576).toFixed(2), when=(a.modified||"").replace("T"," ").slice(0,16);
+      return `<div class="wfrow"><span class="badge2 none">${escapeHtml(a.kind)}</span>`+
+        `<span class="nm">${escapeHtml(a.name)}</span>`+
+        `<span class="sub">${when} · ${mo} Mo</span>`+
+        `<a class="open" href="${a.url}" target="_blank" rel="noopener">Ouvrir ↗</a>`+
+        `<div class="sub" style="font-family:ui-monospace,Consolas,monospace">${escapeHtml(a.path)}</div></div>`;
+    }).join("");
+  }catch(e){ $("outList").innerHTML=`<span class="hint">erreur: ${escapeHtml(String(e))}</span>`; }
+}
+
+let _extractSource=null, HEADLESS=false;
+function badge(s){
+  if(s==="extracted") return '<span class="badge2 ok">extrait</span>';
+  if(s==="update-available") return '<span class="badge2 warn">MAJ dispo</span>';
+  return '<span class="badge2 none">à extraire</span>';
+}
+// Hermes is a memory, not an oracle: showing it is the only way to tell an
+// empty registry ("nothing known") from a silent one.
+async function loadHermes(){
+  const box = $("hermesList"); if(!box) return;
+  try{
+    const d = await (await fetch("/v1/hermes/runs?limit=12")).json();
+    const runs = d.runs||[];
+    if(!runs.length){ box.innerHTML = '<span class="hint">Aucun run enregistré : rien n’est connu, et rien ne sera refusé sur ce fondement.</span>'; return; }
+    box.innerHTML = runs.map(r=>{
+      const when = (r.ts||"").replace("T"," ").slice(0,16);
+      const what = r.status === "succeeded"
+        ? `<span class="badge2 ok">réussi</span>`
+        : `<span class="badge2 warn">${escapeHtml(r.problem||"échec")}</span>`;
+      const measured = r.duration_s ? `${humanDuration(Math.round(r.duration_s))}` : "—";
+      const load = r.work ? ` · charge ${Math.round(r.work)}` : "";
+      return `<div class="wfrow"><span class="nm">${escapeHtml(r.workflow)}</span>${what}`
+        + `<span class="sub">${escapeHtml(when)} · ${escapeHtml(r.config||"")} · ${measured}${load}`
+        + (r.detail?` · ${escapeHtml(String(r.detail).slice(0,120))}`:"") + `</span></div>`;
+    }).join("");
+  }catch(e){ box.innerHTML = `<span class="hint">erreur: ${escapeHtml(String(e))}</span>`; }
+}
+
+async function loadMgmt(){
+  $("savedList").innerHTML='<span class="hint">chargement…</span>';
+  $("extractedList").innerHTML='';
+  try{
+    const d=await (await fetch("/v1/comfyui/workflows")).json();
+    const av=d.comfyui&&d.comfyui.available;
+    HEADLESS = !!(d.headless&&d.headless.available);
+    const mode = HEADLESS ? "extraction un-clic (headless)" : "extraction par import (Export API)";
+    $("comfyStatus").innerHTML = av ? `ComfyUI connecté · <code>${escapeHtml(d.comfyui.base_url)}</code> · <span class="hint" style="display:inline">${mode}</span>`
+      : `ComfyUI injoignable — ${escapeHtml((d.comfyui&&d.comfyui.reason)||"")}`;
+    if(!av) $("savedList").innerHTML='<span class="hint">Lance ComfyUI pour lister les workflows sauvés.</span>';
+    else if(!(d.saved||[]).length) $("savedList").innerHTML='<span class="hint">Aucun workflow sauvé dans ComfyUI.</span>';
+    else{
+      $("savedList").innerHTML=d.saved.map(s=>{
+        const act = s.status==="extracted"
+          ? `<span class="sub">→ ${escapeHtml(s.extracted_as||"")}</span>`
+          : `<button type="button" data-src="${escapeHtml(s.name)}" class="extractBtn">${s.status==="update-available"?"Mettre à jour":"Extraire"}</button>`;
+        const why = s.reason ? `<span class="sub">${escapeHtml(s.reason)}</span>` : "";
+        return `<div class="wfrow"><span class="nm">${escapeHtml(s.name)}</span>${badge(s.status)}${why}${act}</div>`;
+      }).join("");
+      document.querySelectorAll(".extractBtn").forEach(b=>b.onclick=()=> HEADLESS ? oneClickExtract(b.dataset.src,b) : startExtract(b.dataset.src));
+    }
+  }catch(e){ $("savedList").innerHTML=`<span class="hint">erreur: ${escapeHtml(String(e))}</span>`; }
+  try{
+    const c=await (await fetch("/v1/workflows")).json();
+    const names=Object.keys(c.workflows||{});
+    if(!names.length){ $("extractedList").innerHTML='<span class="hint">Aucun workflow extrait.</span>'; return; }
+    $("extractedList").innerHTML="";
+    for(const n of names){
+      const w=c.workflows[n], dep=w.dependencies||{};
+      const row=document.createElement("div"); row.className="wfrow";
+      row.innerHTML=`<span class="nm">${escapeHtml(n)}</span><span class="badge2 none">${escapeHtml(w.kind)}</span>`+
+        `<span class="sub">${(dep.models||[]).length} modèle(s), ${(dep.node_types||[]).length} nœud(s)${n===c.default?" · défaut":""}</span>`;
+      $("extractedList").appendChild(row);
+    }
+  }catch(e){ $("extractedList").innerHTML=`<span class="hint">erreur: ${escapeHtml(String(e))}</span>`; }
+}
+async function oneClickExtract(src, btn){
+  btn.disabled=true; btn.textContent="Extraction…";
+  $("comfyStatus").innerHTML=`Extraction headless de <b>${escapeHtml(src)}</b> (graphToPrompt de ComfyUI)…`;
+  try{
+    const res=await fetch(`/v1/comfyui/workflows/${encodeURIComponent(src)}/extract`,{method:"POST"});
+    const data=await res.json();
+    if(res.status===201){
+      const nm=(data.dependencies&&data.dependencies.models||[]).length;
+      $("comfyStatus").innerHTML=`<span style="color:var(--ok)">✓ Extrait : <code>${escapeHtml(data.name)}</code> — ${nm} modèle(s), bindings auto : ${escapeHtml(Object.keys(data.bindings||{}).join(", ")||"aucun")}</span>`;
+      loadMgmt();
+    } else { $("comfyStatus").innerHTML=`<span style="color:var(--err)">${escapeHtml(data.title||"erreur")}: ${escapeHtml(data.detail||"")}</span>`; btn.disabled=false; btn.textContent="Extraire"; }
+  }catch(e){ $("comfyStatus").innerHTML=`<span style="color:var(--err)">erreur: ${escapeHtml(String(e))}</span>`; btn.disabled=false; btn.textContent="Extraire"; }
+}
+function startExtract(src){
+  _extractSource=src;
+  $("comfyStatus").innerHTML=`Pour extraire <b>${escapeHtml(src)}</b> : dans ComfyUI, ouvre-le → <b>Workflow → Export (API)</b>, puis choisis le fichier exporté…`;
+  $("extractFile").value=""; $("extractFile").click();
+}
+$("extractFile").onchange=async()=>{
+  const f=$("extractFile").files[0]; if(!f) return;
+  let graph; try{ graph=JSON.parse(await f.text()); }
+  catch(e){ $("comfyStatus").innerHTML='<span style="color:var(--err)">JSON invalide</span>'; return; }
+  const name=(_extractSource||f.name).replace(/\.json$/i,"");
+  try{
+    const res=await fetch("/v1/workflows",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({name, workflow:graph, source:_extractSource})});
+    const data=await res.json();
+    if(res.status===201){ $("comfyStatus").innerHTML=`<span style="color:var(--ok)">✓ Extrait : <code>${escapeHtml(data.name)}</code> — bindings auto : ${escapeHtml(Object.keys(data.bindings||{}).join(", ")||"aucun")}</span>`; loadMgmt(); }
+    else $("comfyStatus").innerHTML=`<span style="color:var(--err)">${escapeHtml(data.title||"erreur")}: ${escapeHtml(data.detail||"")}</span>`;
+  }catch(e){ $("comfyStatus").innerHTML=`<span style="color:var(--err)">erreur: ${escapeHtml(String(e))}</span>`; }
+};
+</script>
+</body>
+</html>
