@@ -187,3 +187,14 @@ def test_a_titled_node_whose_inputs_are_all_links_is_not_bound():
     }
     b = autobind.derive_bindings(graph, {"136": "If/Else Switch (Steps)"})
     assert "steps" not in b
+
+
+def test_a_workflow_that_starts_from_a_video_exposes_that_input():
+    """A frame-interpolation workflow accepted nothing at all: its source video
+    lives in a LoadVideo node, which the image-only scan never looked at."""
+    graph = {
+        "1": {"class_type": "LoadVideo", "inputs": {"file": "clip.mp4"}},
+        "2": {"class_type": "SaveVideo", "inputs": {"filename_prefix": "out", "video": ["1", 0]}},
+    }
+    b = autobind.derive_bindings(graph, {})
+    assert (b["video"].node, b["video"].input) == ("1", "file")

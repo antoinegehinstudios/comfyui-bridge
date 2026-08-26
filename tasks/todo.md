@@ -50,6 +50,12 @@ toute zone qui ment ou qui frustre.
 - [x] Voir la mémoire d'Hermès (runs réels, durées mesurées, problèmes)
 - [x] Un job disparu après redémarrage : dit une fois, plus de 404 en boucle
 
+## 8. Autres formes de workflow
+- [x] Workflow partant d'une VIDÉO (interpolation) : entrée découverte, choix
+      réels proposés, envoi de fichier, run livré depuis l'UI
+- [x] Catégorie sans élément neutre : dit clairement que le contenu du
+      workflow sera utilisé (au lieu d'annoncer un neutre inexistant)
+
 ## Revue — 2026-08-27
 
 Campagne menée depuis l'UI, moteur réel (RTX 3060 12 Go, ComfyUI :8188).

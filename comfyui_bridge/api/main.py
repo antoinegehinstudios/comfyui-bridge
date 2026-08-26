@@ -278,6 +278,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "derived": derivable_params(spec.kind, spec.bindings),
                 # Media already inside the workflow: used as-is if not replaced.
                 "carried": spec.carried,
+                # …and those a neutral element can stand in for.
+                "neutral_for": list(spec.profile.neutral_for),
                 "defaults": spec.defaults,
                 "limits": spec.limits,
                 "dependencies": spec.dependencies,
@@ -506,6 +508,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    @app.post("/v1/inputs/media", status_code=201, tags=["render"])
     @app.post("/v1/inputs/image", status_code=201, tags=["render"])
     async def upload_input_image(request: Request, file: UploadFile = File(...)) -> dict:
         """Hand a local image to ComfyUI so a workflow can use it as input.

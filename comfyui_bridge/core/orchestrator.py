@@ -85,8 +85,9 @@ class Orchestrator:
                 asked[field] = v
 
         params: dict[str, Any] = {"prompt": intent.prompt}
-        if getattr(intent, "image", None):
-            params["image"] = intent.image
+        for media in ("image", "video"):
+            if getattr(intent, media, None):
+                params[media] = getattr(intent, media)
         for field, cast in (("negative_prompt", str), ("width", int), ("height", int),
                             ("steps", int), ("cfg", float), ("seed", int), ("fps", int),
                             ("duration_s", float)):
@@ -177,10 +178,18 @@ class Orchestrator:
         profile = self._registry.get_profile(plan.workflow)
         for param, value in (profile.carried or {}).items():
             if param not in plan.params:
-                self._store.append_log(
-                    job.id,
-                    f"{param} non fourni — élément NEUTRE envoyé à la place "
-                    f"(le contenu du workflow, {value}, n'est pas réutilisé)")
+                if param in (profile.neutral_for or ()):
+                    self._store.append_log(
+                        job.id,
+                        f"{param} non fourni — élément NEUTRE envoyé à la place "
+                        f"(le contenu du workflow, {value}, n'est pas réutilisé)")
+                else:
+                    # No neutral element exists for this category: the workflow
+                    # runs on what it carries, and that must not be implied away.
+                    self._store.append_log(
+                        job.id,
+                        f"{param} non fourni et aucun élément neutre disponible "
+                        f"pour cette catégorie — le contenu du workflow est utilisé : {value}")
         return job, plan
 
     def execute(self, job_id: str, plan: ExecutionPlan) -> None:

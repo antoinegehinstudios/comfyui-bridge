@@ -45,6 +45,7 @@ class RenderIntent:
     duration_s: float | None = None
     seed: int | None = None
     image: str | None = None      # input media, by the name ComfyUI knows
+    video: str | None = None      # idem, for a workflow that starts from a clip
     steps: int | None = None
     cfg: float | None = None
     batch: int | None = None

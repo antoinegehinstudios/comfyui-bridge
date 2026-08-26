@@ -36,6 +36,7 @@ class IntentIn(BaseModel):
     duration_s: float | None = Field(None, ge=0.0)
     seed: int | None = None
     image: str | None = Field(None, description="Input media name as ComfyUI knows it")
+    video: str | None = Field(None, description="Input clip name as ComfyUI knows it")
     steps: int | None = Field(None, ge=1)
     cfg: float | None = Field(None, ge=0.0)
     batch: int | None = Field(None, ge=1)
@@ -55,6 +56,7 @@ class IntentIn(BaseModel):
             duration_s=self.duration_s,
             seed=self.seed,
             image=self.image,
+            video=self.video,
             steps=self.steps,
             cfg=self.cfg,
             batch=self.batch,

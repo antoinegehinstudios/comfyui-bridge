@@ -26,3 +26,6 @@ class WorkflowProfile:
     # purpose: the core never learns HOW they are wired, only whether asking
     # for one means anything here.
     accepts: tuple[str, ...] = ()
+    # Media inputs a neutral element can stand in for. Anything carried that is
+    # NOT in here runs on the workflow's own content — which must be said.
+    neutral_for: tuple[str, ...] = ()

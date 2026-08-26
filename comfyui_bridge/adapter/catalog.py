@@ -59,9 +59,14 @@ class WorkflowSpec:
 
     @property
     def profile(self) -> WorkflowProfile:
+        from .neutral import NEUTRAL_NAMES
         return WorkflowProfile(self.name, self.kind, dict(self.defaults),
                                dict(self.limits), dict(self.carried),
-                               tuple(sorted(self.bindings)))
+                               tuple(sorted(self.bindings)),
+                               # Media inputs for which a neutral element exists:
+                               # for the others, saying "neutral was sent" would
+                               # be false and the workflow's own content is used.
+                               tuple(sorted(set(NEUTRAL_NAMES) & set(self.bindings))))
 
 
 class WorkflowCatalog:

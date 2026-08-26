@@ -223,6 +223,7 @@ const SEMANTIC = [
   {key:"prompt",          label:"Prompt",              kind:"textarea"},
   {key:"negative_prompt", label:"Prompt négatif",      kind:"text"},
   {key:"image",           label:"Image d'entrée",      kind:"media"},
+  {key:"video",           label:"Vidéo d'entrée",      kind:"media"},
   {key:"seed",            label:"Seed",                kind:"number"},
   {key:"steps",           label:"Steps",               kind:"number"},
   {key:"cfg",             label:"CFG",                 kind:"number", step:"0.5"},
@@ -249,13 +250,18 @@ function buildWorkflowForm(name){
       return `<label>${f.label}</label><textarea id="p_${f.key}"></textarea>`;
     if(f.kind==="media"){
       const c = carried[f.key];
+      const neutral = (w.neutral_for||[]).includes(f.key);
+      const accept = f.key === "video" ? "video/*" : "image/*";
+      const note = neutral
+        ? (c ? `Sans choix, une image NEUTRE (blanche) est envoyée — le contenu embarqué (${escapeHtml(c)}) n'est pas réutilisé.`
+             : "Sans choix, une image neutre (blanche) est envoyée.")
+        : (c ? `Aucun élément neutre pour cette catégorie : sans choix, le workflow tourne sur son propre contenu (${escapeHtml(c)}).`
+             : "Aucun élément neutre pour cette catégorie : sans choix, le workflow garde le sien.");
       return `<label>${f.label}</label><select id="p_${f.key}"></select>`+
-             `<div class="grow" style="margin-top:6px"><input type="file" id="up_${f.key}" accept="image/*" style="padding:4px">`+
+             `<div class="grow" style="margin-top:6px"><input type="file" id="up_${f.key}" accept="${accept}" style="padding:4px">`+
              `<button type="button" class="ghost" id="upBtn_${f.key}">Envoyer</button></div>`+
              `<div class="hint" id="upNote_${f.key}"></div>`+
-             `<div class="hint" style="color:var(--warn)">${c
-               ? `Sans choix, une image NEUTRE (blanche) est envoyée — le contenu embarqué (${escapeHtml(c)}) n'est pas réutilisé.`
-               : "Sans choix, une image neutre (blanche) est envoyée."}</div>`;
+             `<div class="hint" style="color:var(--warn)">${note}</div>`;
     }
     const step = f.step?` step="${f.step}"`:"";
     const note = derived.includes(f.key)
@@ -267,7 +273,8 @@ function buildWorkflowForm(name){
   if(missing.length)
     box.innerHTML += `<div class="hint">Non exposé par ce workflow : ${escapeHtml(missing.join(", "))}</div>`;
 
-  if(accepts.includes("image")){ fillImageOptions(name); wireImageUpload(name); }
+  for(const media of ["image","video"])
+    if(accepts.includes(media)){ fillMediaOptions(name, media); wireMediaUpload(name, media); }
   loadWorkflowIO(name);
   loadReadiness(name);
   scheduleEstimate();
@@ -275,16 +282,16 @@ function buildWorkflowForm(name){
 
 // Supplying an image is ComfyUI's own upload: the console must not ask the user
 // to go and copy a file into the engine's input folder by hand.
-function wireImageUpload(name){
-  const btn=$("upBtn_image"), input=$("up_image"), note=$("upNote_image"), sel=$("p_image");
+function wireMediaUpload(name, param){
+  const btn=$("upBtn_"+param), input=$("up_"+param), note=$("upNote_"+param), sel=$("p_"+param);
   if(!btn||!input||!sel) return;
   btn.onclick = async ()=>{
     const f = input.files && input.files[0];
-    if(!f){ note.textContent="Choisis un fichier image."; return; }
+    if(!f){ note.textContent="Choisis un fichier."; return; }
     btn.disabled=true; note.textContent="envoi…";
     try{
       const fd = new FormData(); fd.append("file", f);
-      const r = await fetch("/v1/inputs/image", {method:"POST", body:fd});
+      const r = await fetch("/v1/inputs/media", {method:"POST", body:fd});
       const d = await r.json();
       if(!r.ok){ note.textContent = d.detail || "envoi refusé"; return; }
       const opt=document.createElement("option"); opt.value=d.name; opt.textContent=d.name+" (envoyée)";
@@ -296,14 +303,18 @@ function wireImageUpload(name){
   };
 }
 
-function fillImageOptions(name){
-  const sel=$("p_image"); if(!sel) return;
-  const carried=(WF[name]||{}).carried||{};
-  sel.innerHTML = `<option value="">— image neutre (blanche) —</option>`
-    + (carried.image?`<option value="${escapeHtml(carried.image)}">garder celle du workflow (${escapeHtml(carried.image)})</option>`:"");
+function fillMediaOptions(name, param){
+  const sel=$("p_"+param); if(!sel) return;
+  const w = WF[name]||{}, carried = w.carried||{};
+  const neutral = (w.neutral_for||[]).includes(param);
+  sel.innerHTML = `<option value="">${neutral ? "— élément neutre —" : "— celui du workflow —"}</option>`
+    + (carried[param]?`<option value="${escapeHtml(carried[param])}">garder celui du workflow (${escapeHtml(carried[param])})</option>`:"");
+  const bind = (w.bindings||{})[param];
   fetch(`/v1/workflows/${encodeURIComponent(name)}/io`).then(r=>r.json()).then(io=>{
     if(!io.described) return;
-    const e=(io.inputs||[]).find(x=>x.input==="image"&&Array.isArray(x.options));
+    // The choices are the ones the engine declares FOR THAT NODE.
+    const e=(io.inputs||[]).find(x=>Array.isArray(x.options) && bind
+              && x.node===bind.node && x.input===bind.input);
     for(const o of (e?e.options:[])){
       const opt=document.createElement("option"); opt.value=o; opt.textContent=o; sel.appendChild(opt);
     }

@@ -196,11 +196,14 @@ def derive_bindings(graph: dict[str, Any], titles: dict[str, str] | None = None)
             b["negative_prompt"] = Binding(nid, key)
             break
 
-    # An input image is an input like any other: name it so a caller can set it.
-    for nid, node in graph.items():
-        if node.get("class_type") == "LoadImage" and isinstance(_inputs(node).get("image"), str):
-            b.setdefault("image", Binding(nid, "image"))
-            break
+    # Input MEDIA are inputs like any other: name them so a caller can set them.
+    # A workflow that starts from a video was offering nothing at all to drive.
+    for param, class_type, key in (("image", "LoadImage", "image"),
+                                   ("video", "LoadVideo", "file")):
+        for nid, node in graph.items():
+            if node.get("class_type") == class_type and isinstance(_inputs(node).get(key), str):
+                b.setdefault(param, Binding(nid, key))
+                break
     return _complete_bindings(graph, b, negatives,
                               need_prompt="prompt" not in b, is_video=is_video)
 

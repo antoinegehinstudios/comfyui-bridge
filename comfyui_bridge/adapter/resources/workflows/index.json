@@ -43,6 +43,16 @@
         "112": "VRAM Usage",
         "115": "About 4 Steps LoRA"
       }
+    },
+    "utility_video_frame_interpolation": {
+      "source": "utility_video_frame_interpolation.json",
+      "source_hash": "4132a1aab2aa904f",
+      "extracted_at": null,
+      "titles": {
+        "17": "Model Link",
+        "9": "Int (Multiplier)",
+        "13": "Boolean (Apply multiplier to FPS?)"
+      }
     }
   }
 }
