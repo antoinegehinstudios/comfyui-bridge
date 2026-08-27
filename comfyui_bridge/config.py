@@ -73,7 +73,10 @@ class Settings:
 
     # Drop folder: any API-format workflow saved here is auto-discovered and
     # auto-bound (no hand-written bindings). Self-service ingestion from ComfyUI.
-    workflows_dir: Path = Path(os.getenv("COMFY_WORKFLOWS_DIR", str(_RESOURCES / "workflows")))
+    # Ce qu'on extrait du ComfyUI de CETTE machine : des données, pas du code.
+    # Les garder dans le paquet publiait les workflows — et les prompts — de son
+    # propriétaire.
+    workflows_dir: Path = Path(os.getenv("COMFY_WORKFLOWS_DIR", str(_DATA / "workflows")))
 
     # --- Hermes (hardware reconciliation) ------------------------------------
     # Knowledge base is LOCAL to this pipeline (private _data dir) and SCOPED to

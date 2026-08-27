@@ -285,12 +285,20 @@ def _graph_of(path: Path) -> dict[str, Any]:
         return {}
 
 
-def load_catalog(path: str | Path, workflows_dir: str | Path | None = None) -> WorkflowCatalog:
+def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
+                 data_dir: str | Path | None = None) -> WorkflowCatalog:
     path = Path(path)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise WorkflowMappingError(f"cannot read reconciliation file {path}: {exc}") from exc
+
+    # Les workflows propres à CETTE machine vivent à côté, jamais dans le paquet.
+    from .local_overlay import merge, read_overlay
+    try:
+        data = merge(data, read_overlay(Path(data_dir) if data_dir else None, path), "workflows")
+    except (OSError, json.JSONDecodeError) as exc:
+        raise WorkflowMappingError(f"cannot read local reconciliation overlay: {exc}") from exc
 
     workflows = data.get("workflows")
     if not isinstance(workflows, dict) or not workflows:

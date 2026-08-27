@@ -14,11 +14,13 @@ from __future__ import annotations
 import json
 import sys
 import time
+import os
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-BASE = "http://127.0.0.1:8077"
+# Adressable ailleurs qu'ici : rien n'oblige la passerelle à tourner sur ce poste.
+BASE = os.environ.get("CORTEX_BRIDGE_URL", "http://127.0.0.1:8077")
 TERMINAL = {"succeeded", "failed", "cancelled"}
 
 

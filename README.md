@@ -73,6 +73,26 @@ tests/                   # test_injector, test_reconciler, test_api
 scripts/smoke.py         # test de bout en bout SANS dépendance
 ```
 
+## Ce qui est livré, ce qui appartient à la machine
+
+Le paquet ne décrit **aucune machine** : ni chemin d'installation, ni workflow
+extrait d'ailleurs, ni identifiant. Tout ce qui décrit UN poste vit dans le
+dossier de données (`_data/`, jamais versionné) et se fusionne par-dessus les
+ressources livrées :
+
+| ressource livrée | surcharge locale | ce qu'elle déclare |
+|---|---|---|
+| `resources/engines.json` (profil *attach* seul) | `_data/engines.local.json` | où ComfyUI est installé, comment le lancer |
+| `resources/reconciliation.json` (exemples neutres) | `_data/reconciliation.local.json` | les workflows propres à ce poste |
+| — | `_data/workflows/` | les graphes extraits d'ICI, ré-extractibles à tout moment |
+
+Une entrée locale de même nom remplace celle livrée ; ce que la surcharge ne dit
+pas reste inchangé. Un fichier local illisible est signalé, jamais avalé.
+Pour lancer ComfyUI depuis la passerelle, copiez
+`resources/engines.local.exemple.json` en `_data/engines.local.json` et mettez
+vos chemins. Un test du dépôt vérifie qu'aucune ressource livrée ne nomme de
+machine.
+
 ## Démarrage rapide
 
 ### Raccourci bureau (Windows)
@@ -104,9 +124,9 @@ python scripts/smoke.py
 
 # 2. Le serveur REST + console web
 pip install -r requirements.txt
-python -m comfyui_bridge serve --port 8000
-#   Console (UI)  : http://127.0.0.1:8000/ui
-#   Docs OpenAPI  : http://127.0.0.1:8000/docs
+python -m comfyui_bridge serve --port 8077
+#   Console (UI)  : http://127.0.0.1:8077/ui
+#   Docs OpenAPI  : http://127.0.0.1:8077/docs
 
 # 3. La CLI opérateur (même moteur que le REST)
 python -m comfyui_bridge render --prompt "a lone astronaut on a red dune" --steps 24
@@ -141,7 +161,7 @@ python -m comfyui_bridge workflows
 ### Exemple — soumettre une intention
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/render -H 'content-type: application/json' -d '{
+curl -X POST http://127.0.0.1:8077/v1/render -H 'content-type: application/json' -d '{
   "prompt": "a lone astronaut on a red dune, cinematic",
   "kind": "video",
   "width": 768, "height": 768,

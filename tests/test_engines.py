@@ -14,12 +14,26 @@ def _file(tmp_path, data):
     return p
 
 
-def test_shipped_file_declares_desktop_and_local():
+def test_the_shipped_file_only_attaches_and_names_no_machine():
+    """Le fichier livré dit COMMENT se connecter, jamais OÙ ComfyUI est installé :
+    un profil qui LANCE a besoin d'un chemin, et un chemin décrit une machine."""
     default, profiles = E.load_engines(Settings().engines_file)
     assert default in profiles
-    assert profiles["desktop"].manage is False          # attach only
-    assert profiles["local"].manage is True             # bridge starts it
-    assert "--lowvram" in profiles["local"].command     # the stability flag
+    assert all(p.manage is False for p in profiles.values())
+    assert all(not p.command for p in profiles.values())
+
+
+def test_the_example_overlay_shows_how_to_declare_a_launching_engine():
+    """La connaissance acquise ici — --lowvram évite les fautes CUDA sur 12 Go —
+    ne doit pas se perdre en sortant les chemins du paquet."""
+    import json
+    from pathlib import Path
+    exemple = json.loads(
+        (Path(Settings().engines_file).parent / "engines.local.exemple.json")
+        .read_text(encoding="utf-8"))
+    local = exemple["engines"]["local"]
+    assert local["manage"] is True
+    assert "--lowvram" in local["command"]
 
 
 def test_attaches_instead_of_starting_a_second_instance(tmp_path, monkeypatch):

@@ -42,12 +42,21 @@ class EngineProfile:
     description: str = ""
 
 
-def load_engines(path: str | Path) -> tuple[str, dict[str, EngineProfile]]:
+def load_engines(path: str | Path,
+                 data_dir: str | Path | None = None) -> tuple[str, dict[str, EngineProfile]]:
     path = Path(path)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise EngineError(f"cannot read engines file {path}: {exc}") from exc
+
+    # Le chemin d'une installation ComfyUI décrit UNE machine : il se déclare
+    # à côté, pas dans le paquet, qui ne doit publier l'arborescence de personne.
+    from .local_overlay import merge, read_overlay
+    try:
+        data = merge(data, read_overlay(Path(data_dir) if data_dir else None, path), "engines")
+    except (OSError, json.JSONDecodeError) as exc:
+        raise EngineError(f"cannot read local engines overlay: {exc}") from exc
     profiles: dict[str, EngineProfile] = {}
     for name, entry in (data.get("engines") or {}).items():
         if not isinstance(entry, dict) or "base_url" not in entry:

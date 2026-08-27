@@ -11,7 +11,9 @@
 
 $ErrorActionPreference = 'Stop'
 $racine  = Split-Path -Parent $PSScriptRoot
-$url     = 'http://127.0.0.1:8077'
+# Port surchargeable : deux passerelles peuvent cohabiter sur un poste.
+$port    = if ($env:CORTEX_BRIDGE_PORT) { $env:CORTEX_BRIDGE_PORT } else { '8077' }
+$url     = "http://127.0.0.1:$port"
 $journal = Join-Path $racine '_data\bridge.err.log'
 
 # Sur un port ferme, Invoke-WebRequest met 2 s a echouer (resolution/proxy) :
@@ -21,7 +23,7 @@ $journal = Join-Path $racine '_data\bridge.err.log'
 function PortOuvert {
     $client = New-Object System.Net.Sockets.TcpClient
     try {
-        $essai = $client.BeginConnect('127.0.0.1', 8077, $null, $null)
+        $essai = $client.BeginConnect('127.0.0.1', [int]$port, $null, $null)
         if (-not $essai.AsyncWaitHandle.WaitOne(300)) { return $false }
         $client.EndConnect($essai)
         return $true
@@ -53,7 +55,7 @@ if (Test-Path $venv) { $python = $venv }
 
 $env:PYTHONUTF8 = '1'
 Start-Process -FilePath $python `
-    -ArgumentList '-m','uvicorn','comfyui_bridge.api.main:app','--host','127.0.0.1','--port','8077' `
+    -ArgumentList '-m','uvicorn','comfyui_bridge.api.main:app','--host','127.0.0.1','--port',$port `
     -WorkingDirectory $racine -WindowStyle Hidden `
     -RedirectStandardOutput (Join-Path $racine '_data\bridge.out.log') `
     -RedirectStandardError  $journal

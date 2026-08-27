@@ -40,10 +40,11 @@ class Container:
 def build_container(settings: Settings | None = None) -> Container:
     settings = settings or Settings.from_env()
     registry = ProblemRegistry(settings.hermes_db, scope=settings.hermes_scope)
-    catalog = load_catalog(settings.catalog_file, settings.workflows_dir)
+    data_dir = settings.hermes_db.parent
+    catalog = load_catalog(settings.catalog_file, settings.workflows_dir, data_dir=data_dir)
 
     # Resolve WHERE ComfyUI runs before anything talks to it.
-    default_engine, engines = load_engines(settings.engines_file)
+    default_engine, engines = load_engines(settings.engines_file, data_dir=data_dir)
     engine = engines[settings.engine or default_engine]
     if settings.comfyui_base_url:            # explicit override stays king
         engine = EngineProfile(engine.name, settings.comfyui_base_url, manage=False,

@@ -1,0 +1,19 @@
+{
+  "_lisez_moi": "Copiez ce fichier en _data/engines.local.json et remplacez les chemins par ceux de VOTRE installation ComfyUI. Il n'est jamais versionné.",
+  "default": "local",
+  "engines": {
+    "local": {
+      "description": "ComfyUI lancé par la passerelle, en --lowvram.",
+      "base_url": "http://127.0.0.1:8188",
+      "manage": true,
+      "cwd": "/chemin/vers/ComfyUI",
+      "command": [
+        "/chemin/vers/ComfyUI/.venv/bin/python",
+        "main.py",
+        "--port",
+        "8188",
+        "--lowvram"
+      ]
+    }
+  }
+}

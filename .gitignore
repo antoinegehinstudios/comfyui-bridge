@@ -11,3 +11,6 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 .venv/
+
+# Ce qui décrit une machine (workflows extraits d'ICI, chemins d'installation)
+comfyui_bridge/adapter/resources/workflows/

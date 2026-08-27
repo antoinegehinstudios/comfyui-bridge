@@ -45,37 +45,6 @@
         }
       }
     },
-    "minimax-h3-court": {
-      "kind": "video",
-      "workflow": "workflows/video_minimax_h3_t2v.json",
-      "description": "MiniMax H3 texte→vidéo, durée pilotable. Entrée EXPLICITE : l'auto-binding ne peut pas deviner que la durée passe par un PrimitiveFloat consommé par une expression. Le workflow d'origine est réglé sur 12 s (~289 images) — ingérable ici.",
-      "defaults": {
-        "duration_s": 1.0,
-        "fps": 24
-      },
-      "bindings": {
-        "prompt": {
-          "node": "140:131",
-          "input": "prompt"
-        },
-        "seed": {
-          "node": "140:129",
-          "input": "noise_seed"
-        },
-        "duration_s": {
-          "node": "140:133",
-          "input": "value"
-        },
-        "fps": {
-          "node": "140:130",
-          "input": "fps"
-        },
-        "filename_prefix": {
-          "node": "92",
-          "input": "filename_prefix"
-        }
-      }
-    },
     "z-image-turbo": {
       "kind": "image",
       "workflow": "workflow_zimage.json",
