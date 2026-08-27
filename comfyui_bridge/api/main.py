@@ -147,17 +147,43 @@ def _analyse_workflow(container, spec) -> dict:
     }
 
 
-def _rewiring(avant: dict | None, spec) -> dict:
-    """Ce que la ré-analyse a re-mesuré, champ par champ.
+def _delivery(container, spec) -> list[dict]:
+    """Ce que ce workflow délivre : les nœuds de sortie déclarés par ComfyUI.
+
+    Le contrat d'un appel ne s'arrête pas aux entrées — un appelant doit savoir
+    ce qui va sortir. Sans cela, un workflow passé de SaveAudio à SaveAudioMP3
+    changeait le format livré sans que rien ne l'annonce.
+    """
+    try:
+        from ..adapter.workflow_io import describe_io
+        graph = container.catalog.load_template(spec)
+        io = describe_io(graph, container.comfyui.get_object_info(), spec.titles)
+        return io["outputs"]
+    except Exception:
+        return []
+
+
+def _outputs_signature(outputs: list[dict]) -> list[str]:
+    """Une sortie se reconnaît à son nœud ET à sa classe : changer de nœud de
+    sauvegarde change le fichier livré."""
+    return sorted(f"{o.get('node')}.{o.get('class_type')}" for o in outputs or [])
+
+
+def _rewiring(avant: dict | None, spec, apres_out: list[dict] | None = None) -> dict:
+    """Ce que la ré-analyse a re-mesuré, entrées ET sortie.
 
     Une ré-extraction qui répond « c'est fait » n'apprend rien : ce qui compte
-    est de savoir quelles entrées sont apparues, lesquelles ont disparu, et
-    lesquelles pilotent désormais un autre nœud.
+    est de savoir quelles entrées sont apparues, lesquelles ont disparu,
+    lesquelles pilotent désormais un autre nœud — et ce que le workflow délivre
+    maintenant, car un changement de nœud de sauvegarde change le format livré.
     """
     from ..core.intention import intent_field_of
     maintenant = {k: (b.node, b.input) for k, b in spec.bindings.items()}
     if avant is None:
-        return {"first_analysis": True, "added": sorted(intent_field_of(k) for k in maintenant)}
+        return {"first_analysis": True,
+                "added": sorted(intent_field_of(k) for k in maintenant),
+                "delivery_changed": False,
+                "delivers": [o.get("display_name") or o.get("class_type") for o in (apres_out or [])]}
     anciens = avant["bindings"]
     apparus = sorted(intent_field_of(k) for k in maintenant if k not in anciens)
     disparus = sorted(intent_field_of(k) for k in anciens if k not in maintenant)
@@ -166,10 +192,17 @@ def _rewiring(avant: dict | None, spec) -> dict:
          "to": f"{maintenant[k][0]}.{maintenant[k][1]}"}
         for k in sorted(set(anciens) & set(maintenant)) if anciens[k] != maintenant[k]
     ]
+    sortie_avant = _outputs_signature(avant.get("outputs"))
+    sortie_apres = _outputs_signature(apres_out)
+    delivery = False
+    if sortie_avant != sortie_apres:
+        delivery = {"from": sortie_avant, "to": sortie_apres}
     return {"first_analysis": False, "added": apparus, "removed": disparus,
             "moved": deplaces,
             "kind_changed": (avant["kind"] != spec.kind) and {"from": avant["kind"],
-                                                              "to": spec.kind} or False}
+                                                              "to": spec.kind} or False,
+            "delivery_changed": delivery,
+            "delivers": [o.get("display_name") or o.get("class_type") for o in (apres_out or [])]}
 
 
 def _freshness(container, spec) -> dict:
@@ -178,7 +211,10 @@ def _freshness(container, spec) -> dict:
     state = source_state(container.comfyui, spec)
     if state["fresh"]:
         return {"source_changed": False}
-    return {"source_changed": True, "source_change_reason": state["reason"]}
+    out = {"source_changed": True, "source_change_reason": state["reason"]}
+    if state.get("missing"):
+        out["source_missing"] = True
+    return out
 
 
 def _spec_dict(spec) -> dict:
@@ -390,11 +426,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         analysis = await run_in_threadpool(_analyse_workflow, c, spec)
         from ..adapter.freshness import forget
         forget(reg_name)                 # la question « est-ce à jour ? » a changé de réponse
+        apres_out = await run_in_threadpool(_delivery, c, spec)
         return {**_spec_dict(spec), "analysis": analysis,
-                "changes": _rewiring(avant, spec)}
+                "delivers": apres_out,
+                "changes": _rewiring(avant, spec, apres_out)}
 
     # Déclarée AVANT "/v1/workflows/{name}" : sinon "updates" est lu comme
     # un nom de workflow et la route répond 400.
+    @app.delete("/v1/workflows/{name}", tags=["workflows"])
+    async def remove_workflow(name: str, request: Request) -> dict:
+        """Retirer un extrait du catalogue.
+
+        Ce qui s'ingère doit pouvoir se retirer : une source supprimée dans
+        ComfyUI laissait un extrait orphelin, toujours appelable et que rien ne
+        pouvait sortir de la liste."""
+        from ..adapter.freshness import forget
+        c = request.app.state.container
+        out = c.catalog.unregister(name)
+        forget(name)
+        return out
+
     @app.get("/v1/workflows/updates", tags=["workflows"])
     async def workflow_updates(request: Request) -> dict:
         """Les extraits que leur source a dépassés — la notification, en une
@@ -532,7 +583,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             ancien = c.catalog.get_spec(reg_name)
             avant = {"kind": ancien.kind,
-                     "bindings": {k: (b.node, b.input) for k, b in ancien.bindings.items()}}
+                     "bindings": {k: (b.node, b.input) for k, b in ancien.bindings.items()},
+                     "outputs": await run_in_threadpool(_delivery, c, ancien)}
         except Exception:
             pass
         titles = {}
@@ -547,8 +599,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         analysis = await run_in_threadpool(_analyse_workflow, c, spec)
         from ..adapter.freshness import forget
         forget(reg_name)                 # la question « est-ce à jour ? » a changé de réponse
+        apres_out = await run_in_threadpool(_delivery, c, spec)
         return {**_spec_dict(spec), "analysis": analysis,
-                "changes": _rewiring(avant, spec)}
+                "delivers": apres_out,
+                "changes": _rewiring(avant, spec, apres_out)}
 
     @app.get("/v1/jobs/{job_id}", tags=["render"])
     async def get_job(job_id: str, request: Request) -> dict:

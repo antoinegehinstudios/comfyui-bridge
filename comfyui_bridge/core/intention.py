@@ -35,7 +35,7 @@ class Constraint:
 
 @dataclass(frozen=True)
 class RenderIntent:
-    prompt: str
+    prompt: str | None = None
     workflow: str | None = None          # named entry in the reconciliation file
     kind: MediaKind | None = None        # None -> the workflow's declared kind
     negative_prompt: str | None = None

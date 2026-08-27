@@ -71,6 +71,8 @@ class WorkflowSpec:
 
 
 class WorkflowCatalog:
+    # (méthodes de lecture plus bas ; l'ingestion et le retrait encadrent le cycle
+    #  de vie d'un extrait : ce qui s'ajoute doit pouvoir se retirer.)
     def __init__(self, default: str, specs: dict[str, WorkflowSpec],
                  workflows_dir: Path | None = None) -> None:
         self._default = default
@@ -141,6 +143,31 @@ class WorkflowCatalog:
         self._specs[name] = spec
         self._templates[name] = graph
         return spec
+
+    def unregister(self, name: str) -> dict[str, Any]:
+        """Retirer un extrait du catalogue — l'inverse de ``register``.
+
+        Ce qui s'ingère doit pouvoir se retirer : une source supprimée dans
+        ComfyUI laissait sinon un extrait orphelin, toujours appelable et que
+        rien ne pouvait sortir de la liste. Seul ce que NOUS avons écrit est
+        effacé ; une entrée déclarée à la main dans le fichier de réconciliation
+        n'est pas à nous et est refusée.
+        """
+        spec = self._specs.get(name)
+        if spec is None:
+            raise IntentValidationError(f"unknown workflow {name!r}", available=self.names())
+        if self._workflows_dir is None or not spec.source:
+            raise WorkflowMappingError(
+                f"{name!r} n'a pas été ingéré ici : il vient du fichier de "
+                f"réconciliation et ne peut pas être retiré par l'API", workflow=name)
+        index = self._read_index()
+        index.pop(name, None)
+        self._write_index(index)
+        fichier = self._workflows_dir / f"{name}.json"
+        fichier.unlink(missing_ok=True)
+        self._specs.pop(name, None)
+        self._templates.pop(name, None)
+        return {"removed": name, "graph_file": str(fichier), "source": spec.source}
 
     # -- WorkflowRegistry port (domain-facing) --------------------------------
 

@@ -35,11 +35,23 @@ def source_state(comfyui, spec, now: float | None = None) -> dict[str, Any]:
     if cached and stamp - cached[0] < _TTL_S:
         return cached[1]
 
-    state = {"fresh": True, "reason": None}
+    state: dict[str, Any] = {"fresh": True, "reason": None}
     try:
+        import urllib.error
+
         from .comfyui_client import source_hash
         from .labels import titles_from_ui_workflow
-        saved = comfyui.get_saved_workflow(spec.source)
+        try:
+            saved = comfyui.get_saved_workflow(spec.source)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:
+                raise
+            # La source a été supprimée. Le taire laissait le catalogue annoncer
+            # un workflow dont plus rien ne répond dans ComfyUI.
+            state = {"fresh": False, "missing": True,
+                     "reason": "la source a disparu de ComfyUI"}
+            _CACHE[key] = (stamp, state)
+            return state
         if spec.source_hash and source_hash(saved) != spec.source_hash:
             state = {"fresh": False, "reason": "le workflow a changé dans ComfyUI"}
         elif titles_from_ui_workflow(saved) and not spec.titles:

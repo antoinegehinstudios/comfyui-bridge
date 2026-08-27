@@ -53,9 +53,19 @@ def test_known_problem_refusal_is_problem_json(client):
 
 
 def test_validation_error_is_problem_json(client):
-    r = client.post("/v1/render", json={"prompt": ""})  # min_length=1
+    r = client.post("/v1/render", json={"prompt": "x", "width": 0})   # ge=1
     assert r.status_code == 422
     assert r.headers["content-type"].startswith("application/problem+json")
+
+
+def test_a_workflow_without_text_needs_no_prompt(client):
+    """Une mise à l'échelle ou une interpolation n'a pas de texte : exiger un
+    prompt obligeait à inventer "(sans prompt)", qui repartait ensuite dans les
+    paramètres non transmis."""
+    r = client.post("/v1/preview", json={"workflow": "sd15-txt2img", "width": 512})
+    assert r.status_code == 200
+    # Rien n'est injecté à la place : le graphe garde le texte de son auteur.
+    assert "prompt" not in r.json()["params"]
 
 
 def test_unknown_job_is_404_problem(client):
@@ -284,3 +294,47 @@ def test_the_updates_route_is_not_eaten_by_the_name_route(client):
     r = client.get("/v1/workflows/updates")
     assert r.status_code == 200
     assert set(r.json()) == {"count", "updates"}
+
+
+def test_the_re_analysis_also_reports_what_changed_on_the_way_OUT():
+    """Un workflow passé de SaveAudio à SaveAudioMP3 changeait le format livré
+    sans que rien ne l'annonce : le diff ne regardait que les entrées."""
+    from comfyui_bridge.adapter.mapping import Binding
+    from comfyui_bridge.api.main import _rewiring
+
+    class _Spec:
+        kind = "audio"
+        bindings = {"prompt": Binding("2", "text")}
+
+    avant = {"kind": "audio", "bindings": {"prompt": ("2", "text")},
+             "outputs": [{"node": "7", "class_type": "SaveAudio"}]}
+    apres = [{"node": "7", "class_type": "SaveAudioMP3", "display_name": "Save Audio (MP3)"}]
+
+    diff = _rewiring(avant, _Spec(), apres)
+    assert diff["added"] == [] and diff["removed"] == []      # les IN n'ont pas bougé…
+    assert diff["delivery_changed"] == {"from": ["7.SaveAudio"], "to": ["7.SaveAudioMP3"]}
+    assert diff["delivers"] == ["Save Audio (MP3)"]
+
+    # Une sortie inchangée ne crie pas au changement.
+    inchange = _rewiring(avant, _Spec(), [{"node": "7", "class_type": "SaveAudio"}])
+    assert inchange["delivery_changed"] is False
+
+
+def test_a_source_deleted_from_comfyui_is_not_passed_over_in_silence():
+    """Supprimée dans ComfyUI, la source laissait le catalogue annoncer
+    `source_changed: False` — un workflow dont plus rien ne répond."""
+    import urllib.error
+
+    from comfyui_bridge.adapter.freshness import forget, source_state
+
+    class _Spec:
+        name, source, source_hash, titles = "wf", "wf.json", "abc", {}
+
+    class _Absent:
+        def get_saved_workflow(self, name):
+            raise urllib.error.HTTPError("u", 404, "Not Found", None, None)
+
+    forget()
+    state = source_state(_Absent(), _Spec(), now=0.0)
+    assert state["fresh"] is False and state["missing"] is True
+    forget()

@@ -947,11 +947,16 @@ async function oneClickExtract(src, btn){
         : [ (ch.added||[]).length ? `+ ${escapeHtml(ch.added.join(", "))}` : "",
             (ch.removed||[]).length ? `− ${escapeHtml(ch.removed.join(", "))}` : "",
             (ch.moved||[]).length ? `déplacés : ${escapeHtml(ch.moved.map(m=>`${m.field} (${m.from} → ${m.to})`).join(", "))}` : "",
-            ch.kind_changed ? `type : ${escapeHtml(ch.kind_changed.from)} → ${escapeHtml(ch.kind_changed.to)}` : ""
+            ch.kind_changed ? `type : ${escapeHtml(ch.kind_changed.from)} → ${escapeHtml(ch.kind_changed.to)}` : "",
+            // Le OUT compte autant que les IN : changer de nœud de sauvegarde
+            // change le fichier livré.
+            ch.delivery_changed ? `livraison : ${escapeHtml((ch.delivery_changed.from||[]).join(", "))} → ${escapeHtml((ch.delivery_changed.to||[]).join(", "))}` : ""
           ].filter(Boolean).join(" · ") || "câblage inchangé";
       const box=$("remesure");
+      const livre = (data.delivers||[]).map(o=>o.display_name||o.class_type).join(", ");
       box.innerHTML=`<div><b>✓ ${escapeHtml(data.name)}</b> ré-analysé — ${nm} modèle(s)`
-        + `<div class="hint" style="margin-top:4px">câblage re-mesuré → ${remesure}</div></div>`;
+        + `<div class="hint" style="margin-top:4px">câblage re-mesuré → ${remesure}</div>`
+        + (livre?`<div class="hint">délivre : ${escapeHtml(livre)}</div>`:"") + `</div>`;
       box.style.display="block";
       loadMgmt();      // réécrit comfyStatus : le rapport vit ailleurs, exprès
     } else { $("comfyStatus").innerHTML=`<span style="color:var(--err)">${escapeHtml(data.title||"erreur")}: ${escapeHtml(data.detail||"")}</span>`; btn.disabled=false; btn.textContent="Extraire"; }

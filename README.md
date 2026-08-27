@@ -360,7 +360,14 @@ workflow sélectionné.
 
 Ré-analyser (`POST /v1/comfyui/workflows/{fichier}/extract`) relit le graphe par
 `graphToPrompt` et **dit ce qu'elle a re-mesuré** — `changes` : entrées apparues,
-disparues, déplacées d'un nœud à l'autre, et changement de type de média.
+disparues, déplacées d'un nœud à l'autre, changement de type de média, et
+**changement de LIVRAISON** (`delivery_changed`, `delivers`) : le nœud qui
+délivre fait partie du contrat autant que les entrées, puisqu'en changer change
+le fichier produit.
+
+Une source **supprimée** dans ComfyUI n'est pas passée sous silence
+(`source_missing`), et `DELETE /v1/workflows/{nom}` retire l'extrait devenu
+orphelin — ce qui s'ingère doit pouvoir se retirer.
 Éprouvé sur un workflow dont les IN ont été bouleversés :
 
 ```

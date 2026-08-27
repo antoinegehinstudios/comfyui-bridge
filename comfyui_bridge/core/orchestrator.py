@@ -86,7 +86,11 @@ class Orchestrator:
             if v is not None:
                 asked[field] = v
 
-        params: dict[str, Any] = {"prompt": intent.prompt}
+        # Comme tout le reste : injecté seulement s'il a été demandé. Poser une
+        # chaîne vide effacerait le texte que l'auteur a mis dans son graphe.
+        params: dict[str, Any] = {}
+        if intent.prompt:
+            params["prompt"] = intent.prompt
         for media in ("image", "video"):
             if getattr(intent, media, None):
                 params[media] = getattr(intent, media)

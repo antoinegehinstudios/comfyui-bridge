@@ -26,7 +26,10 @@ class IntentIn(BaseModel):
     # with a 200 and dropped. Refusing names the real cause.
     model_config = ConfigDict(extra="forbid")
 
-    prompt: str = Field(..., min_length=1, examples=["a lone astronaut on a red dune, cinematic"])
+    # Optionnel : tous les workflows n'ont pas de texte (mise à l'échelle,
+    # interpolation…). L'exiger obligeait un appelant à inventer "(sans prompt)",
+    # qui partait ensuite dans les paramètres non transmis.
+    prompt: str | None = Field(None, examples=["a lone astronaut on a red dune, cinematic"])
     workflow: str | None = Field(None, description="Named entry in the reconciliation file; omit for the default.")
     negative_prompt: str | None = None
     # Omitted fields inherit the workflow's declared defaults.

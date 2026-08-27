@@ -64,19 +64,6 @@
         "3": "CLIP Text Encode (Negative Prompt)",
         "4": "Duration"
       }
-    },
-    "test_maj_cablage": {
-      "source": "test_maj_cablage.json",
-      "source_hash": "b5591f3169548d64",
-      "extracted_at": null,
-      "titles": {
-        "8": "Text encoder (T5)",
-        "2": "CLIP Text Encode (Positive Prompt)",
-        "9": "Negative (zeroed)",
-        "10": "Duration",
-        "4": "Latent audio",
-        "12": "Sigmas (5 valeurs = 4 \u00e9tapes)"
-      }
     }
   }
 }
