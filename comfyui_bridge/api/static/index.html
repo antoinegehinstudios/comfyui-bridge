@@ -115,6 +115,8 @@
 <header>
   <span class="dot" id="health"></span>
   <h1>ComfyUI Bridge</h1>
+  <button class="ghost" id="engineStart" type="button" style="display:none"
+          title="Lance le serveur ComfyUI (ou se raccroche à celui qui répond déjà)">▶ Démarrer le moteur</button>
   <button class="ghost" id="engineFix" type="button" title="Libère la VRAM (API ComfyUI) ; relance le moteur seulement si nécessaire">↻ Moteur</button>
   <span id="mode">…</span><span id="backend"></span>
 </header>
@@ -208,12 +210,31 @@ fetch("/healthz").then(r=>r.json()).then(h=>{
 }).catch(()=>{ $("mode").textContent="service injoignable"; });
 
 // test de connexion backend (ComfyUI si http)
-fetch("/v1/backend").then(r=>r.json()).then(b=>{
-  const pr=b.probe||{}; let txt, col;
-  if(b.backend==="http"){ txt = pr.available ? "ComfyUI ✓ connecté" : "ComfyUI ✗ injoignable"; col = pr.available ? "var(--ok)" : "var(--warn)"; }
-  else { txt = `backend: ${b.backend}`; col = "var(--muted)"; }
-  $("backend").innerHTML = ` · <b style="color:${col}" title="${(pr.reason||'').replace(/"/g,'&quot;')}">${txt}</b>`;
-}).catch(()=>{});
+// Le bouton de démarrage n'apparaît QUE si le moteur ne répond pas : proposer
+// « démarrer » un serveur déjà debout invite à en lancer un second.
+function refreshBackend(){
+  return fetch("/v1/backend").then(r=>r.json()).then(b=>{
+    const pr=b.probe||{}; let txt, col;
+    if(b.backend==="http"){ txt = pr.available ? "ComfyUI ✓ connecté" : "ComfyUI ✗ injoignable"; col = pr.available ? "var(--ok)" : "var(--warn)"; }
+    else { txt = `backend: ${b.backend}`; col = "var(--muted)"; }
+    $("backend").innerHTML = ` · <b style="color:${col}" title="${(pr.reason||'').replace(/"/g,'&quot;')}">${txt}</b>`;
+    $("engineStart").style.display = (b.backend==="http" && !pr.available) ? "" : "none";
+    return !!pr.available;
+  }).catch(()=>false);
+}
+refreshBackend();
+
+$("engineStart").onclick = async ()=>{
+  const b=$("engineStart"); b.disabled=true; const old=b.textContent;
+  b.textContent="Démarrage… (le chargement prend une minute ou deux)";
+  try{
+    const d=await (await fetch("/v1/engine/start",{method:"POST"})).json();
+    $("backend").innerHTML = ` · <b>moteur : ${escapeHtml(d.state||"?")}</b>`
+      + (d.reason?` <span class="hint">${escapeHtml(d.reason)}</span>`:"");
+    if(await refreshBackend()) setTimeout(()=>location.reload(), 1200);
+  }catch(e){ $("backend").innerHTML=` · <b style="color:var(--err)">échec: ${escapeHtml(String(e))}</b>`; }
+  b.disabled=false; b.textContent=old;
+};
 
 // workflows déclarés dans le fichier de réconciliation
 let WF = {}, VOCAB = {};

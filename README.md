@@ -75,6 +75,24 @@ scripts/smoke.py         # test de bout en bout SANS dépendance
 
 ## Démarrage rapide
 
+### Raccourci bureau (Windows)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/installer-raccourci.ps1
+```
+
+Pose « **ComfyUI Bridge** » sur le Bureau. Un double-clic lance la passerelle si
+elle dort, attend qu'elle réponde vraiment, puis ouvre la console. Si elle
+tourne déjà, il ouvre simplement la console — jamais un second service. Le
+script est rejouable : le relancer après un déplacement du projet suffit.
+
+Le moteur ComfyUI, lui, est amené par la passerelle (elle se raccroche à celui
+qui répond, sinon elle le lance selon le profil actif). S'il est éteint, la
+console affiche un bouton **▶ Démarrer le moteur** — il n'apparaît QUE dans ce
+cas, pour ne jamais inviter à lancer un second serveur sur un port occupé.
+
+### À la main
+
 Par défaut le backend est **`http`** : le service pilote un vrai serveur ComfyUI
 et livre le média produit. Pour travailler hors-ligne (aucun ComfyUI requis),
 passer `COMFY_BACKEND=cli` — le dry-run écrit alors un *manifest* de plan,

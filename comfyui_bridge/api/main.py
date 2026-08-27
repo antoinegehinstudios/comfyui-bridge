@@ -578,6 +578,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         }
 
+    @app.post("/v1/engine/start", tags=["backend"])
+    async def engine_start(request: Request) -> dict:
+        """Bring the engine up if it is not there.
+
+        Same rule as at startup: attach to whatever already answers, and launch
+        one only when the active profile manages it. Never a second instance on
+        a port that already replies."""
+        from ..adapter.engines import ensure_engine
+        c = request.app.state.container
+        state = await run_in_threadpool(
+            ensure_engine, c.engine, 240.0, c.settings.hermes_db.parent)
+        c.engine_state.clear()
+        c.engine_state.update(state)
+        return state
+
     @app.post("/v1/engine/free", tags=["backend"])
     async def engine_free(request: Request) -> dict:
         """Relay ComfyUI's own /api/free: release VRAM without restarting."""

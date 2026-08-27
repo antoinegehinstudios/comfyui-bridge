@@ -149,3 +149,15 @@ def test_a_run_stopped_on_request_is_not_recorded_against_the_workflow():
     other = store.create(kind="video")
     store.mark_failed(other.id, {"title": "ComfyUI workflow error"})
     assert store.get(other.id).status is JobStatus.FAILED
+
+
+def test_starting_the_engine_never_raises_a_second_instance(client):
+    """The console offers "start the engine" only when nothing answers, and the
+    endpoint keeps the startup rule: attach to whatever is there, launch only a
+    profile we manage. Here nothing answers and the test profile is 'cli', so
+    the honest answer is a state, never a second server."""
+    r = client.post("/v1/engine/start")
+    assert r.status_code == 200
+    state = r.json()
+    assert state["started"] is False
+    assert state["state"] in {"attached", "absent", "started"}
