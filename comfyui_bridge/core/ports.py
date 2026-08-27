@@ -25,6 +25,15 @@ class RenderBackend(Protocol):
         ``on_progress(value, max, node)`` may relay the engine's OWN progress."""
         ...
 
+    def load_of(self, plan: ExecutionPlan) -> tuple[float | None, int | None]:
+        """How much work this plan represents, and by which barème.
+
+        Only the adapter can answer: the load is read from the injected graph.
+        The core asks for it at the moment it records a run, so that every way
+        in — API, CLI, recovery — measures the same thing. Computing it at one
+        entry point only left every CLI run with no load at all."""
+        ...
+
 
 @runtime_checkable
 class Reconciler(Protocol):

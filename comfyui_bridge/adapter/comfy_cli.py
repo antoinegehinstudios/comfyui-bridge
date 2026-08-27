@@ -31,6 +31,14 @@ class ComfyCliBackend:
         """Show the ComfyUI graph the named workflow WOULD run — no subprocess."""
         return build_injection(self._catalog, plan)
 
+    def load_of(self, plan):
+        """See ``RenderBackend.load_of`` — read from the graph, never assumed."""
+        from .work import WORK_MODEL, effective_values, work_units
+        try:
+            return work_units(effective_values(self._catalog, plan)), WORK_MODEL
+        except Exception:
+            return None, None
+
     def submit(self, plan: ExecutionPlan, on_enqueued=None, on_progress=None,
                on_note=None, on_started=None) -> BackendResult:
         spec = self._catalog.get_spec(plan.workflow)

@@ -236,3 +236,21 @@ def test_two_ways_of_counting_work_are_never_fitted_together(tmp_path):
     # The old one still fits its own points.
     old = reg.estimate_duration("h", "wf", work=8.0, work_model=1)
     assert old["basis"] == "work-fit"
+
+
+def test_loading_the_model_is_measured_apart_so_the_sizes_line_up(tmp_path):
+    """Measured on this host: a cold run of load 10 took 110 s, a warm run of
+    load 166 took 73 s. Fitted on raw durations, a bigger job looked cheaper and
+    no line could be drawn. Taking the measured loading time out first, the
+    compute times line up and the size drives the answer again."""
+    from comfyui_bridge.hermes.registry import ProblemRegistry
+    reg = ProblemRegistry(tmp_path / "h.sqlite3")
+    reg.record("h", "wf", {"width": 352}, status="succeeded",
+               duration_s=110.0, setup_s=100.0, work=10.0, work_model=2)   # froid
+    reg.record("h", "wf", {"width": 704}, status="succeeded",
+               duration_s=73.0, setup_s=6.0, work=166.0, work_model=2)     # à chaud
+    est = reg.estimate_duration("h", "wf", work=166.0, work_model=2)
+    assert est["basis"] == "work-fit" and est["setup_measured"] is True
+    petit = reg.estimate_duration("h", "wf", work=10.0, work_model=2)
+    assert est["seconds"] > petit["seconds"]        # la taille compte de nouveau
+    assert est["min"] < est["seconds"] < est["max"]  # l'écart de mise en route est dit

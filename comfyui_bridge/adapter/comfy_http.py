@@ -135,6 +135,21 @@ class ComfyUIHttpBackend:
         req_t = self._settings.comfyui_request_timeout_s
 
         # Connect first: a socket opened after queueing can miss early messages.
+        # The engine says nothing while it loads a model, then starts reporting
+        # steps: the gap between the two IS the setup, and it is what makes two
+        # runs of the same size take 110 s or 73 s. Measured, not guessed.
+        marks: dict[str, float] = {}
+
+        def _started() -> None:
+            marks.setdefault("start", time.monotonic())
+            if on_started is not None:
+                on_started()
+
+        def _progress(value: int, maximum: int, node: str) -> None:
+            marks.setdefault("first_step", time.monotonic())
+            if on_progress is not None:
+                on_progress(value, maximum, node)
+
         ws, ws_reason = self._open_ws()
         try:
             prompt_id = self._enqueue(graph, req_t)
@@ -142,7 +157,7 @@ class ComfyUIHttpBackend:
             if on_enqueued is not None:
                 on_enqueued(prompt_id, ws_reason)
             if ws is not None:
-                self._watch_ws(ws, prompt_id, on_progress, on_started)
+                self._watch_ws(ws, prompt_id, _progress, _started)
             entry = self._await_outputs(prompt_id, req_t, on_note)
         finally:
             if ws is not None:
@@ -164,8 +179,20 @@ class ComfyUIHttpBackend:
                 measured = _execution_seconds(again.get(prompt_id) or {})
             except Exception:
                 pass
+        setup = None
+        if "start" in marks and "first_step" in marks:
+            setup = max(0.0, marks["first_step"] - marks["start"])
         return BackendResult(artifacts=artifacts, raw_stdout=f"comfyui prompt {prompt_id}",
-                             execution_s=measured, cached=_served_from_cache(entry))
+                             execution_s=measured, setup_s=setup,
+                             cached=_served_from_cache(entry))
+
+    def load_of(self, plan):
+        """See ``RenderBackend.load_of`` — read from the graph, never assumed."""
+        from .work import WORK_MODEL, effective_values, work_units
+        try:
+            return work_units(effective_values(self._catalog, plan)), WORK_MODEL
+        except Exception:
+            return None, None
 
     def _note_inflight(self, prompt_id: str, plan: ExecutionPlan) -> None:
         if self._inflight is None:

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS runs (
     duration_s REAL,           -- how long the ENGINE took (queue wait excluded)
     work       REAL,           -- pixels x frames x steps (millions) for that run
     work_model INTEGER,        -- HOW that work was counted: two barèmes never mix
+    setup_s    REAL,           -- time before the first step: loading, not work
     ts        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_runs_lookup ON runs(scope, host, workflow, config);
@@ -75,6 +76,8 @@ class ProblemRegistry:
                 conn.execute("ALTER TABLE runs ADD COLUMN work REAL")
             if "work_model" not in cols:      # …and before it was counted this way
                 conn.execute("ALTER TABLE runs ADD COLUMN work_model INTEGER")
+            if "setup_s" not in cols:         # …and before loading was timed apart
+                conn.execute("ALTER TABLE runs ADD COLUMN setup_s REAL")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path)
@@ -86,13 +89,13 @@ class ProblemRegistry:
     def record(self, host: str, workflow: str, params: dict[str, Any], status: str,
                problem: str | None = None, detail: str | None = None,
                duration_s: float | None = None, work: float | None = None,
-               work_model: int | None = None) -> None:
+               work_model: int | None = None, setup_s: float | None = None) -> None:
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO runs(scope,host,workflow,config,status,problem,detail,"
-                "duration_s,work,work_model,ts) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "duration_s,work,work_model,setup_s,ts) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (self._scope, host, workflow, config_fingerprint(params), status,
-                 problem, (detail or "")[:500], duration_s, work, work_model,
+                 problem, (detail or "")[:500], duration_s, work, work_model, setup_s,
                  datetime.now(timezone.utc).isoformat()),
             )
 
@@ -116,10 +119,30 @@ class ProblemRegistry:
             # would fit a line through two different scales.
             with self._connect() as conn:
                 rows = conn.execute(
-                    "SELECT duration_s, work FROM runs WHERE scope=? AND host=? AND workflow=?"
-                    " AND status='succeeded' AND duration_s IS NOT NULL AND work > 0"
-                    " AND work_model IS ? ORDER BY id DESC LIMIT 30",
+                    "SELECT duration_s, work, setup_s FROM runs WHERE scope=? AND host=?"
+                    " AND workflow=? AND status='succeeded' AND duration_s IS NOT NULL"
+                    " AND work > 0 AND work_model IS ? ORDER BY id DESC LIMIT 30",
                     (self._scope, host, workflow, work_model)).fetchall()
+            # Where the loading time was measured, take it out before fitting:
+            # otherwise a run served by a warm model (73 s for a load of 166)
+            # and a cold one (110 s for a load of 10) describe no line at all.
+            timed = [r for r in rows if r["setup_s"] is not None]
+            if len(timed) >= 2:
+                setups = sorted(r["setup_s"] for r in timed)
+                median_setup = setups[len(setups) // 2]
+                points = [(r["work"], max(0.0, r["duration_s"] - r["setup_s"])) for r in timed]
+                fitted = _affine_fit(points)
+                if fitted is not None:
+                    _, per_unit = fitted
+                    compute = per_unit * work
+                    seconds = median_setup + compute
+                    spread = max((abs(d - per_unit * w) for w, d in points), default=0.0)
+                    return {"seconds": max(1, round(seconds)), "samples": len(points),
+                            "basis": "work-fit", "work": round(work, 1),
+                            "setup_s": round(median_setup), "per_unit_s": round(per_unit, 2),
+                            "setup_measured": True,
+                            "min": max(1, round(setups[0] + compute - spread)),
+                            "max": max(1, round(setups[-1] + compute + spread))}
             points = [(r["work"], r["duration_s"]) for r in rows]
             fitted = _affine_fit(points)
             if fitted is not None:

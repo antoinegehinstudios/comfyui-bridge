@@ -369,8 +369,13 @@ dans le graphe, donc identique à chaque run de ce workflow, et le coefficient
 appris l'absorbe. L'annuler rendait l'estimation sourde à tout : 24 images et
 96 images donnaient le même chiffre (mesuré : 134 s et 411 s).
 
-La **mise en route** et le **coefficient** ne sont jamais posés : ils sont
-ajustés au moindre carré sur les runs mesurés de CE workflow, sur cette machine.
+La **mise en route** est *mesurée* : le moteur ne dit rien tant qu'il charge son
+modèle, puis annonce ses étapes — l'écart entre les deux est le chargement. Elle
+est retirée avant l'ajustement, sans quoi les tailles ne s'alignent pas (mesuré :
+un run à froid de charge 10 en 110 s, un run à chaud de charge 166 en 73 s — le
+plus lourd paraissait le moins cher et aucune droite ne passait). Le
+**coefficient** est ensuite ajusté au moindre carré sur le temps de calcul des
+runs de CE workflow, sur cette machine, et la mise en route médiane est rajoutée.
 Il faut **deux tailles mesurées** pour séparer la mise en route de la charge :
 avec une seule, aucune estimation en charge n'est rendue (appliqué
 proportionnellement, un run mesuré à 110 s en annonçait 29 min pour un autre qui

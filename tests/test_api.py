@@ -192,3 +192,35 @@ def test_a_caller_can_name_its_own_output(client):
     # …and cannot be turned into a path of its own choosing.
     r = client.post("/v1/preview", json={"prompt": "x", "label": "../../etc/passwd"})
     assert r.json()["params"]["filename_prefix"] == "cortex/etcpasswd"
+
+
+def test_every_way_in_weighs_the_run_not_just_the_http_api():
+    """The load was computed at one entry point only: a run launched from the
+    CLI was journalled with no load and taught the estimate nothing. The core
+    now asks the backend for it just before recording, whatever the way in."""
+    from comfyui_bridge.core.orchestrator import Orchestrator
+    from comfyui_bridge.core.plan import ExecutionPlan
+
+    class _Backend:
+        def load_of(self, plan):
+            return 42.0, 7
+
+    orch = Orchestrator(backend=_Backend(), reconciler=None, journal=None, store=None,
+                        host_id="h", registry=None)
+    plan = ExecutionPlan(intent=None, params={"width": 512}, workflow="wf")
+    orch._weigh(plan)
+    assert (plan.work, plan.work_model) == (42.0, 7)
+
+    # A load already known is not recomputed…
+    known = ExecutionPlan(intent=None, params={}, workflow="wf", work=1.0, work_model=2)
+    orch._weigh(known)
+    assert (known.work, known.work_model) == (1.0, 2)
+
+    # …and a backend that cannot weigh leaves it unknown rather than invented.
+    class _Blind:
+        pass
+    blind = Orchestrator(backend=_Blind(), reconciler=None, journal=None, store=None,
+                         host_id="h", registry=None)
+    unknown = ExecutionPlan(intent=None, params={}, workflow="wf")
+    blind._weigh(unknown)
+    assert unknown.work is None

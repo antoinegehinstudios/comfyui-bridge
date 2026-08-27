@@ -51,6 +51,21 @@ class InflightLog:
         return self._read()
 
 
+def _load_of(backend, meta: dict[str, Any]) -> tuple[Any, Any]:
+    """The load of a recovered run, recomputed if it was never written down."""
+    if meta.get("work") is not None:
+        return meta["work"], meta.get("work_model")
+    weigh = getattr(backend, "load_of", None)
+    if weigh is None:
+        return None, None
+    try:
+        from ..core.plan import ExecutionPlan
+        return weigh(ExecutionPlan(intent=None, params=meta.get("params") or {},
+                                   workflow=meta.get("workflow", "")))
+    except Exception:
+        return None, None
+
+
 def recover(backend, log: InflightLog, registry, host: str) -> list[dict[str, Any]]:
     """Collect what the engine finished while nobody was listening.
 
@@ -78,9 +93,10 @@ def recover(backend, log: InflightLog, registry, host: str) -> list[dict[str, An
         artifacts, measured = result
         log.remove(prompt_id)
         if artifacts:
+            work, work_model = _load_of(backend, meta)
             registry.record(host, meta.get("workflow", "?"), meta.get("params") or {},
-                            status="succeeded", duration_s=measured, work=meta.get("work"),
-                            work_model=meta.get("work_model"))
+                            status="succeeded", duration_s=measured, work=work,
+                            work_model=work_model)
             recovered.append({"prompt_id": prompt_id, "state": "recovered",
                               "workflow": meta.get("workflow"),
                               "artifacts": [a.path for a in artifacts]})

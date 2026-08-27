@@ -164,6 +164,22 @@ class Orchestrator:
             )
         return verdict.plan
 
+    def _weigh(self, plan: ExecutionPlan) -> None:
+        """Make sure the plan carries its load before anything is recorded.
+
+        Measured: only the HTTP API computed it, so every run launched from the
+        CLI was journalled with no load and taught the estimate nothing.
+        """
+        if plan.work is not None:
+            return
+        weigh = getattr(self._backend, "load_of", None)
+        if weigh is None:
+            return
+        try:
+            plan.work, plan.work_model = weigh(plan)
+        except Exception:
+            pass            # a load we cannot read is left unknown, not invented
+
     # -- job lifecycle --------------------------------------------------------
 
     def accept(self, intent: RenderIntent) -> tuple[Job, ExecutionPlan]:
@@ -230,6 +246,7 @@ class Orchestrator:
             self._store.set_status(job_id, JobStatus.RUNNING)
             self._store.append_log(job_id, "le moteur a démarré ce run (fin de l'attente en file)")
 
+        self._weigh(plan)
         try:
             result = self._backend.submit(
                 plan, on_enqueued=on_enqueued, on_progress=on_progress,
@@ -278,7 +295,8 @@ class Orchestrator:
         self._journal.record(self._host, plan.workflow, plan.params, status="succeeded",
                              duration_s=measured,
                              work=None if result.cached else plan.work,
-                             work_model=None if result.cached else plan.work_model)
+                             work_model=None if result.cached else plan.work_model,
+                             setup_s=None if result.cached else result.setup_s)
         # Surface the backend's own truthful note (e.g. "dry-run: no render").
         if result.raw_stdout:
             self._store.append_log(job_id, result.raw_stdout.strip()[:200])
