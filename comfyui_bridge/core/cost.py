@@ -26,4 +26,14 @@ def config_fingerprint(params: dict[str, Any]) -> str:
         bits.append(f"h{int(height)}")
     if batch is not None:
         bits.append(f"x{max(1, int(batch))}")
+    # A duration pinned by the caller is part of WHAT was asked: without it two
+    # audio runs of 6 s and 30 s wore the same label, and the memory of one
+    # answered for the other.
+    # …but only when the batch does not already carry it: a video pins its
+    # frame count (which comes from the duration), whereas a batch of 1 says
+    # nothing about how much was asked for.
+    duration = params.get("duration_s")
+    if duration is not None and (batch is None or int(batch) <= 1):
+        # Separated: "x16s" read as one number and told nobody anything.
+        bits.append(f"-{duration:g}s" if bits else f"{duration:g}s")
     return "".join(bits) or WORKFLOW_DEFAULT

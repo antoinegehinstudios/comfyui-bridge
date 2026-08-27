@@ -53,6 +53,17 @@
         "9": "Int (Multiplier)",
         "13": "Boolean (Apply multiplier to FPS?)"
       }
+    },
+    "audio_stable_open_demo": {
+      "source": "audio_stable_open_demo.json",
+      "source_hash": "eb39b37e4d0da6be",
+      "extracted_at": null,
+      "titles": {
+        "8": "Text encoder (T5)",
+        "2": "CLIP Text Encode (Positive Prompt)",
+        "3": "CLIP Text Encode (Negative Prompt)",
+        "4": "Duration"
+      }
     }
   }
 }

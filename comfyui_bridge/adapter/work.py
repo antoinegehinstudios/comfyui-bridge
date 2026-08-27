@@ -129,14 +129,21 @@ def _latent_size(graph: dict[str, Any]) -> tuple[int | None, int | None]:
     return None, None
 
 
-def _frame_count(graph: dict[str, Any]) -> int | None:
-    for node in graph.values():
-        ins = _inputs(node)
-        if "length" not in ins:
-            continue
-        frames = _literal_int(_through_primitive(graph, ins["length"]))
-        if frames:
-            return frames
+def _produced_quantity(graph: dict[str, Any]) -> int | None:
+    """How much this graph produces: frames for a video, seconds for audio.
+
+    One factor, whatever the medium — the unit stays the same for a given
+    workflow, so the fitted coefficient carries it. Without the audio case, a
+    30 s track and a 5 s one weighed exactly the same.
+    """
+    for key in ("length", "seconds"):
+        for node in graph.values():
+            ins = _inputs(node)
+            if key not in ins:
+                continue
+            quantity = _literal_int(_through_primitive(graph, ins[key]))
+            if quantity:
+                return quantity
     return None
 
 
@@ -161,11 +168,13 @@ def effective_values(catalog, plan) -> dict[str, Any]:
         guessed_w, guessed_h = _latent_size(graph)
         width, height = width or guessed_w, height or guessed_h
 
-    frames = at("latent_batch") or _frame_count(graph)
+    frames = _produced_quantity(graph)
     if frames is None:
         duration, fps = at("duration_s"), at("fps")
         if duration and fps:
             frames = round(duration * fps)
+    if frames is None:
+        frames = at("latent_batch")
 
     return {
         "width": int(width) if width else None,

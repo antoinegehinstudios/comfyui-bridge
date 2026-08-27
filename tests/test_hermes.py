@@ -270,3 +270,16 @@ def test_the_compute_floor_is_kept_not_only_the_slope(tmp_path):
     for work, mesuré in ((10.4, 67.3), (166.5, 69.7)):
         est = reg.estimate_duration("h", "wf", work=work, work_model=2)
         assert abs(est["seconds"] - mesuré) < 3, (work, est["seconds"], mesuré)
+
+
+def test_a_pinned_duration_is_part_of_the_configuration():
+    """Two audio runs of 6 s and 30 s were both labelled "workflow-default":
+    the memory of one then answered for the other."""
+    from comfyui_bridge.core.cost import config_fingerprint
+    assert config_fingerprint({"duration_s": 6.0}) == "6s"
+    assert config_fingerprint({"duration_s": 30.0}) == "30s"
+    # A frame count already says it: no need to say it twice.
+    assert config_fingerprint({"duration_s": 2.0, "latent_batch": 48}) == "x48"
+    # A batch of 1 carries no quantity: the duration must still show.
+    assert config_fingerprint({"duration_s": 6.0, "latent_batch": 1}) == "x1-6s"
+    assert config_fingerprint({}) == "workflow-default"

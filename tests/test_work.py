@@ -74,3 +74,14 @@ def test_a_machine_limit_is_not_shown_as_a_bound():
                                                          "height": Binding("2", "width")}, "image")}
     assert "min" not in contract["width"] and "max" not in contract["width"]
     assert (contract["height"]["min"], contract["height"]["max"]) == (16, 16384)
+
+
+def test_seconds_of_audio_are_a_produced_quantity_like_frames():
+    """A 30 s track and a 5 s one weighed the same: only frames were counted,
+    and an audio latent has none."""
+    from comfyui_bridge.adapter.work import _produced_quantity
+
+    audio = {"4": {"class_type": "EmptyLatentAudio", "inputs": {"seconds": 30, "batch_size": 1}}}
+    video = {"4": {"class_type": "EmptyLatentVideo", "inputs": {"length": 48}}}
+    assert _produced_quantity(audio) == 30
+    assert _produced_quantity(video) == 48

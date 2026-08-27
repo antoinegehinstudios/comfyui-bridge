@@ -141,7 +141,7 @@ _TITLE_PARAMS = {
     "prompt": "prompt", "negative prompt": "negative_prompt",
     "length": "latent_batch", "frames": "latent_batch",
 }
-_VALUE_KEYS = ("value", "text", "int", "float", "string", "number")
+_VALUE_KEYS = ("value", "text", "int", "float", "string", "number", "seconds")
 
 
 def _title_candidates(title: str) -> list[str]:
@@ -235,6 +235,11 @@ def _complete_bindings(graph: dict[str, Any], b: dict[str, Binding],
         if "width" in ins and "height" in ins and not _is_link(ins["width"]):
             b.setdefault("width", Binding(nid, "width"))
             b.setdefault("height", Binding(nid, "height"))
+        # An audio latent is measured in SECONDS — ComfyUI's own name for it
+        # (EmptyLatentAudio.seconds). Without this the duration of an audio
+        # render, its main parameter, could not be set at all.
+        if "seconds" in ins and not _is_link(ins["seconds"]):
+            b.setdefault("duration_s", Binding(nid, "seconds"))
         # Frames and batch are NOT interchangeable. In a video workflow the
         # frame count lives in `length`; every `batch_size` there counts CLIPS
         # (video or audio latents alike). Falling back to batch_size turned

@@ -198,3 +198,16 @@ def test_a_workflow_that_starts_from_a_video_exposes_that_input():
     }
     b = autobind.derive_bindings(graph, {})
     assert (b["video"].node, b["video"].input) == ("1", "file")
+
+
+def test_an_audio_workflow_exposes_its_duration():
+    """Its length lives in `EmptyLatentAudio.seconds` — ComfyUI's own name for
+    it. Unbound, the main parameter of an audio render could not be set."""
+    graph = {
+        "4": {"class_type": "EmptyLatentAudio", "inputs": {"seconds": 8.0, "batch_size": 1}},
+        "7": {"class_type": "SaveAudio", "inputs": {"filename_prefix": "audio/x",
+                                                    "audio": ["6", 0]}},
+    }
+    b = autobind.derive_bindings(graph, {})
+    assert (b["duration_s"].node, b["duration_s"].input) == ("4", "seconds")
+    assert autobind.infer_kind(graph) == "audio"
