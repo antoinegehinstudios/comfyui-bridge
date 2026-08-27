@@ -49,6 +49,9 @@ class Job:
     # Real progress as REPORTED BY THE ENGINE (ComfyUI websocket), never guessed.
     progress: dict[str, Any] | None = None
     artifacts: list[Artifact] = field(default_factory=list)
+    # What the ENGINE measured for this run, queue wait excluded. A caller that
+    # drives this service from a larger flow needs the cost of what it asked.
+    duration_s: float | None = None
     problem: dict[str, Any] | None = None
     logs: list[str] = field(default_factory=list)
     created_at: str = field(default_factory=_now)
@@ -104,12 +107,13 @@ class JobStore:
             job.touch()
 
     def mark_succeeded(self, job_id: str, artifacts: list[Artifact],
-                       simulated: bool = False) -> None:
+                       simulated: bool = False, duration_s: float | None = None) -> None:
         with self._lock:
             job = self._jobs[job_id]
             job.simulated = simulated
             job.status = JobStatus.SUCCEEDED
             job.artifacts = list(artifacts)
+            job.duration_s = duration_s
             job.touch()
 
     def mark_failed(self, job_id: str, problem: dict[str, Any]) -> None:

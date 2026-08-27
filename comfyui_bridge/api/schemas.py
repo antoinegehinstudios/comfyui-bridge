@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.intention import Constraint, ConstraintOp, MediaKind, RenderIntent
 from ..core.jobs import Job
@@ -21,6 +21,11 @@ class ConstraintIn(BaseModel):
 
 
 class IntentIn(BaseModel):
+    # A field this model does not know is a caller mistake, and silence made it
+    # a trap: `latent_batch` (the name the catalogue announced) was accepted
+    # with a 200 and dropped. Refusing names the real cause.
+    model_config = ConfigDict(extra="forbid")
+
     prompt: str = Field(..., min_length=1, examples=["a lone astronaut on a red dune, cinematic"])
     workflow: str | None = Field(None, description="Named entry in the reconciliation file; omit for the default.")
     negative_prompt: str | None = None
@@ -40,6 +45,9 @@ class IntentIn(BaseModel):
     steps: int | None = Field(None, ge=1)
     cfg: float | None = Field(None, ge=0.0)
     batch: int | None = Field(None, ge=1)
+    label: str | None = Field(None, max_length=40, description=
+        "Nom de la sortie côté hôte (fichiers 'cortex/<label>_00001_.…'), pour "
+        "qu'un flux appelant retrouve SES livrables. Caractères non sûrs retirés.")
     inputs: dict[str, Any] = Field(default_factory=dict,
         description="Entrées propres au workflow, clé 'noeud.entree' (découvertes via /v1/workflows/{name}/io)")
     constraints: list[ConstraintIn] = Field(default_factory=list)
@@ -55,6 +63,7 @@ class IntentIn(BaseModel):
             fps=self.fps,
             duration_s=self.duration_s,
             seed=self.seed,
+            label=self.label,
             image=self.image,
             video=self.video,
             steps=self.steps,
@@ -90,6 +99,7 @@ class JobOut(BaseModel):
     engine_ref: str | None
     progress: dict[str, Any] | None
     artifacts: list[ArtifactOut]
+    duration_s: float | None = None      # measured by the engine, queue excluded
     problem: dict[str, Any] | None
     logs: list[str]
     created_at: str
@@ -107,6 +117,7 @@ class JobOut(BaseModel):
             engine_ref=job.engine_ref,
             progress=job.progress,
             artifacts=[ArtifactOut(**a.__dict__) for a in job.artifacts],
+            duration_s=job.duration_s,
             problem=job.problem,
             logs=job.logs,
             created_at=job.created_at,

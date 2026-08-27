@@ -18,13 +18,15 @@ from typing import Any
 
 from .errors import BridgeError, HardwareReconciliationError, to_problem
 from .problems import OOM as P_OOM, UNKNOWN as P_UNKNOWN, classify as classify_problem
-from .intention import Constraint, ConstraintOp, RenderIntent
+from .intention import Constraint, ConstraintOp, RenderIntent, intent_field_of, intent_fields
 from .jobs import Job, JobStatus, JobStore
 from .plan import ExecutionPlan
 from .ports import ExecutionJournal, Reconciler, RenderBackend, WorkflowRegistry
 
 # A user may constrain in intent terms; these fold onto resolved param keys.
-_CONSTRAINT_ALIASES = {"batch": "latent_batch", "frames": "latent_batch"}
+# Derived from the ONE correspondence, so a rename cannot drift between the two.
+_CONSTRAINT_ALIASES = {intent_field_of(p): p for p in ("latent_batch",)}
+_CONSTRAINT_ALIASES["frames"] = "latent_batch"
 
 # No global parameter defaults: values are not invented here. A workflow that
 # declares nothing keeps the values its author baked into the graph.
@@ -103,7 +105,10 @@ class Orchestrator:
         elif "batch" in asked:
             params["latent_batch"] = int(asked["batch"])
 
-        params["filename_prefix"] = f"cortex/{kind}"
+        # The caller's own name for its output, kept harmless: a flow driving
+        # this service finds its files back by it, whatever happens to the job.
+        label = "".join(c for c in (intent.label or "") if c.isalnum() or c in "-_")[:40]
+        params["filename_prefix"] = f"cortex/{label or kind}"
         return params, kind
 
     def _apply_constraints(
@@ -278,4 +283,5 @@ class Orchestrator:
             # End of chain on success: the produced MEDIA is the deliverable.
             for a in result.artifacts:
                 self._store.append_log(job_id, f"delivered media: {a.path}")
-        self._store.mark_succeeded(job_id, result.artifacts, simulated=result.simulated)
+        self._store.mark_succeeded(job_id, result.artifacts, simulated=result.simulated,
+                                   duration_s=measured)

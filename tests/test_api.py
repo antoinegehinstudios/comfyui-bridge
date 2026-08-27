@@ -161,3 +161,34 @@ def test_starting_the_engine_never_raises_a_second_instance(client):
     state = r.json()
     assert state["started"] is False
     assert state["state"] in {"attached", "absent", "started"}
+
+
+def test_the_announced_input_names_are_the_accepted_ones():
+    """The catalogue announced `latent_batch`; the API read only `batch` and
+    dropped the rest without a word — a trap for anything driving this service
+    from outside the console."""
+    from comfyui_bridge.core.intention import intent_fields
+
+    fields = intent_fields(["latent_batch", "filename_prefix", "prompt", "width"])
+    assert fields == ["label", "prompt", "width", "batch"] or set(fields) == {
+        "batch", "label", "prompt", "width"}
+    # Every announced name is a real field of the intent.
+    from comfyui_bridge.core.intention import RenderIntent
+    for f in fields:
+        assert f in RenderIntent.__dataclass_fields__
+
+
+def test_an_unknown_field_is_refused_not_swallowed(client):
+    r = client.post("/v1/preview", json={"prompt": "x", "latent_batch": 4})
+    assert r.status_code == 422
+    assert r.headers["content-type"].startswith("application/problem+json")
+
+
+def test_a_caller_can_name_its_own_output(client):
+    """A larger flow must recognise ITS files: the job id dies with the process,
+    the file name does not."""
+    r = client.post("/v1/preview", json={"prompt": "x", "label": "plan-42"})
+    assert r.json()["params"]["filename_prefix"] == "cortex/plan-42"
+    # …and cannot be turned into a path of its own choosing.
+    r = client.post("/v1/preview", json={"prompt": "x", "label": "../../etc/passwd"})
+    assert r.json()["params"]["filename_prefix"] == "cortex/etcpasswd"

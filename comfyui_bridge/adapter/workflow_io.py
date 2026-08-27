@@ -56,6 +56,52 @@ def _option_values(options: list[Any], limit: int = 50) -> list[Any]:
     return values
 
 
+# Beyond this, a declared bound is the machine's limit, not the author's: a
+# Primitive node says min=-2^63, which bounds nothing and only clutters a form.
+_NO_REAL_BOUND = 2 ** 53
+
+
+def _real_bound(value: Any) -> bool:
+    return isinstance(value, (int, float)) and abs(value) < _NO_REAL_BOUND
+
+
+def intent_inputs(io_inputs: list[dict[str, Any]], bindings, kind: str) -> list[dict[str, Any]]:
+    """The input contract, field by field: what to send and within which bounds.
+
+    The join between "the field a caller sends" and "what ComfyUI declares for
+    the node it drives" is done ONCE here. Left to each client, it was done in
+    the browser only — so anything driving this service without the console had
+    to redo it, or go without bounds.
+    """
+    from ..core.intention import intent_field_of, intent_fields
+    from ..core.orchestrator import derivable_params
+
+    declared = {(i["node"], i["input"]): i for i in io_inputs}
+    out: list[dict[str, Any]] = []
+    for param in sorted(bindings):
+        field = intent_field_of(param)
+        if field not in intent_fields(bindings):
+            continue                              # service-owned, e.g. filename_prefix
+        binding = bindings[param]
+        spec = declared.get((binding.node, binding.input), {})
+        entry = {"field": field, "param": param, "node": binding.node,
+                 "input": binding.input, "type": spec.get("type"),
+                 "value": spec.get("value"), "derived": False}
+        for key in ("min", "max", "step", "options", "tooltip", "label"):
+            value = spec.get(key)
+            if value is None:
+                continue
+            if key in ("min", "max") and not _real_bound(value):
+                continue                          # a limit that limits nothing
+            entry[key] = value
+        out.append(entry)
+    for field in derivable_params(kind, bindings):
+        # Converted rather than carried by a node: no node, no bounds, said so.
+        out.append({"field": field, "param": None, "node": None, "input": None,
+                    "type": "FLOAT", "value": None, "derived": True})
+    return out
+
+
 def describe_io(graph: dict[str, Any], object_info: dict[str, Any],
                 titles: dict[str, str] | None = None) -> dict[str, Any]:
     """The workflow's settable inputs and its delivering outputs.

@@ -58,3 +58,19 @@ def test_an_unreadable_factor_is_neutral_not_annulling():
     assert work_units({"width": 1024, "height": 1024, "frames": 1, "steps": 1}) == pytest.approx(1.048576)
     # …and nothing readable at all stays silent.
     assert work_units({"width": None, "height": None, "frames": None, "steps": None}) is None
+
+
+def test_a_machine_limit_is_not_shown_as_a_bound():
+    """A Primitive node declares min=-2^63: true, and useless. Shown as a bound
+    it filled the form with ±9223372036854775808."""
+    from comfyui_bridge.adapter.mapping import Binding
+    from comfyui_bridge.adapter.workflow_io import intent_inputs
+
+    io = [{"node": "1", "input": "value", "type": "INT", "value": 512,
+           "min": -2 ** 63, "max": 2 ** 63 - 1},
+          {"node": "2", "input": "width", "type": "INT", "value": 512,
+           "min": 16, "max": 16384}]
+    contract = {e["field"]: e for e in intent_inputs(io, {"width": Binding("1", "value"),
+                                                         "height": Binding("2", "width")}, "image")}
+    assert "min" not in contract["width"] and "max" not in contract["width"]
+    assert (contract["height"]["min"], contract["height"]["max"]) == (16, 16384)

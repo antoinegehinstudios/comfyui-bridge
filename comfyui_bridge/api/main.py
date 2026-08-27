@@ -24,6 +24,7 @@ from ..config import Settings
 from ..container import build_container
 from ..core.errors import DependencyUnavailableError, UnknownWorkflowInputError
 from ..core.jobs import JobStatus
+from ..core.intention import intent_fields
 from ..core.orchestrator import Orchestrator, derivable_params
 from .problems import install_problem_handlers
 from .schemas import ArtifactOut, IntentIn, JobOut, WorkflowImportIn
@@ -136,6 +137,8 @@ def _analyse_workflow(container, spec) -> dict:
     return {
         "described": True,
         "accepts": sorted(spec.bindings),          # semantic inputs we can drive
+        "intent_fields": sorted(set(intent_fields(spec.bindings))
+                                | set(derivable_params(spec.kind, spec.bindings))),
         "derived": derivable_params(spec.kind, spec.bindings),  # drivable via conversion
         "settable_inputs": len(io["inputs"]),      # everything the workflow exposes
         "outputs": io["outputs"],                  # what it delivers
@@ -149,6 +152,8 @@ def _spec_dict(spec) -> dict:
         "name": spec.name,
         "kind": spec.kind,
         "accepts": sorted(spec.bindings),
+        "intent_fields": sorted(set(intent_fields(spec.bindings))
+                                | set(derivable_params(spec.kind, spec.bindings))),
         "derived": derivable_params(spec.kind, spec.bindings),
         "defaults": spec.defaults,
         "limits": spec.limits,
@@ -273,6 +278,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # What this workflow can actually receive. A field it does not
                 # bind goes nowhere: offering it would be a lie.
                 "accepts": sorted(spec.bindings),
+                # The names to actually put in a render request — the contract a
+                # caller programs against, UI or not.
+                "intent_fields": sorted(set(intent_fields(spec.bindings))
+                                        | set(derivable_params(spec.kind, spec.bindings))),
                 # Same memory as /readiness and as the reconciler: a workflow
                 # known to fail here must not be the one the console opens on.
                 "runnable": not c.registry.blocking_problems(c.settings.host_id, name),
@@ -391,7 +400,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not probe.get("available"):
             return {"name": spec.name, "engine": probe, "described": False}
         io = describe_io(graph, await run_in_threadpool(c.comfyui.get_object_info), spec.titles)
-        return {"name": spec.name, "engine": probe, "described": True, **io}
+        from ..adapter.workflow_io import intent_inputs
+        return {"name": spec.name, "engine": probe, "described": True,
+                # The contract to program against: field name, bounds, current
+                # value — the join done once, server side.
+                "intent_inputs": intent_inputs(io["inputs"], spec.bindings, spec.kind),
+                **io}
 
     @app.get("/v1/comfyui/workflows", tags=["workflows"])
     async def list_comfyui_workflows(request: Request) -> dict:

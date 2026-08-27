@@ -52,5 +52,31 @@ class RenderIntent:
     # Direct overrides on the workflow's OWN inputs, keyed "node.input".
     # The neutral params above are conveniences; this is the full surface the
     # workflow declares (discovered from ComfyUI's node schemas).
+    # How the caller names its own output. A larger flow that drives this
+    # service needs to recognise ITS files among the others — by name, since a
+    # job id lives only as long as the service process.
+    label: str | None = None
     inputs: dict[str, object] = field(default_factory=dict)
     constraints: tuple[Constraint, ...] = field(default_factory=tuple)
+
+
+# The ONE correspondence between a resolved plan parameter and the intent field
+# that drives it. A workflow's analysis speaks in plan parameters; a caller
+# speaks in intent fields. Announcing one and accepting the other silently
+# dropped what an integrator sent: `latent_batch` was advertised, only `batch`
+# was read, and nothing said so.
+INTENT_FIELD_OF: dict[str, str] = {"latent_batch": "batch", "filename_prefix": "label"}
+
+
+def intent_field_of(param: str) -> str:
+    return INTENT_FIELD_OF.get(param, param)
+
+
+def intent_fields(params) -> list[str]:
+    """The intent fields that actually drive these plan parameters.
+
+    This is the input contract a caller programs against — the names to put in
+    the body of a render request, nothing else.
+    """
+    fields = {intent_field_of(p) for p in params}
+    return sorted(f for f in fields if f in RenderIntent.__dataclass_fields__)

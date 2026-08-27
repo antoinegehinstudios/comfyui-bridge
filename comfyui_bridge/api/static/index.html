@@ -711,22 +711,21 @@ async function loadWorkflowIO(name){
       return `<label${tip} style="margin-top:8px">${escapeHtml(label)}</label>${field}`;
     }).join("");
     blk.style.display="block";
-    annotateSemanticBounds(name, io.inputs);
+    annotateSemanticBounds(io.intent_inputs);
   }catch(e){}
 }
 
-// The bounds shown on a semantic field are the ones ComfyUI declares for the
-// node it drives — never a number of ours. A field with no declared bound stays
-// unbounded, and the engine remains the one that validates.
-function annotateSemanticBounds(name, inputs){
-  const b = (WF[name]||{}).bindings||{};
-  const at = {};
-  for(const i of inputs||[]) at[`${i.node}.${i.input}`] = i;
+// The bounds shown on a field are the ones ComfyUI declares for the node it
+// drives — never a number of ours. The join field->node->declaration is done by
+// the API (`intent_inputs`), so the console reads the same contract as any
+// other caller instead of rebuilding it here.
+function annotateSemanticBounds(contract){
+  const byField = {};
+  for(const i of contract||[]) byField[i.field] = i;
   for(const f of SEMANTIC){
-    const bind = b[f.key], el = $("p_"+f.key);
-    if(!bind || !el || el.type!=="number") continue;
-    const d = at[`${bind.node}.${bind.input}`];
-    if(!d) continue;
+    const key = f.key === "latent_batch" ? "batch" : f.key;
+    const d = byField[key], el = $("p_"+f.key);
+    if(!d || !el || el.type!=="number") continue;
     if(d.min!==undefined) el.min = d.min;
     if(d.max!==undefined) el.max = d.max;
     if(d.step!==undefined) el.step = d.step;

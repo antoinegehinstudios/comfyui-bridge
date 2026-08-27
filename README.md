@@ -304,6 +304,44 @@ une raison claire ; un job échoue proprement (RFC 7807), jamais de blocage.
 > SD1.5. Si ton install ComfyUI a d'autres modèles (LTX, Wan, z-image…), pointe
 > `COMFY_MAPPING` vers un mapping + workflow adaptés — aucun code à changer.
 
+## Piloter sans l'UI — l'intégration dans un flux plus grand
+
+La console web n'est **qu'un client** de cette API : elle n'appelle rien qu'un
+autre appelant ne puisse appeler, et ne calcule rien qu'il devrait recalculer.
+Un flux englobant envoie ses paramètres aux **IN** et récupère les fichiers
+créés dans le **OUT**.
+
+```bash
+python scripts/exemple_integration.py            # le parcours complet, sans UI
+```
+
+**Découvrir les IN** — jamais deviner un nom : `GET /v1/workflows` donne, par
+workflow, `intent_fields` — **les noms exacts à mettre dans le corps** d'un
+rendu — et `runnable` (ce qui a déjà échoué ici). `GET /v1/workflows/{n}/io`
+donne `intent_inputs` : pour chaque champ, le nœud piloté, le type, la valeur
+actuelle du workflow et les **bornes déclarées par ComfyUI** (une borne qui vaut
+la limite machine n'est pas une borne : elle n'est pas rendue). Tout le reste du
+graphe reste adressable en `inputs: {"noeud.entrée": valeur}`.
+
+Un champ que ce modèle ne connaît pas est **refusé** (422 `problem+json`) :
+rien n'est avalé en silence.
+
+**Connaître le coût avant** — `POST /v1/estimate` avec l'intention entière
+renvoie la charge lue sur le graphe, l'estimation ajustée sur les runs mesurés,
+et `ignored` : ce que ce workflow ne recevra pas.
+
+**Lancer et suivre** — `POST /v1/render` renvoie `202` + un identifiant ;
+`GET /v1/jobs/{id}` (ou le flux `…/events` en SSE) jusqu'à un état terminal
+(`succeeded` / `failed` / `cancelled`), avec la position en file quand le moteur
+est occupé. `POST /v1/jobs/{id}/cancel` arrête.
+
+**Récupérer le OUT** — le job terminé porte `artifacts` : `kind`, `path`
+**absolu sur l'hôte**, `url` téléchargeable, `bytes` ; plus `duration_s`, la
+durée mesurée par le moteur. Le champ `label` de l'intention nomme la sortie
+(`cortex/<label>_00001_.mp4`) : un flux appelant retrouve ainsi **ses** fichiers
+via `GET /v1/artifacts`, même si le service a redémarré entre-temps — les jobs
+vivent en mémoire, les fichiers non.
+
 ## Estimation du temps
 
 Forme reconnue pour la diffusion : le temps croît **linéairement avec le nombre
