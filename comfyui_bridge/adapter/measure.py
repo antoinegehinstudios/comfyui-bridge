@@ -2,8 +2,8 @@
 
 Ce qu'un appelant demande n'est pas toujours ce qu'il obtient : un workflow peut
 recalculer les dimensions (latent à la moitié puis suréchantillonné, longueur
-passée par une expression). Mesuré ici : 352x224 pour 1 s demandés, 320x192 pour
-0,75 s livrés — sans un mot.
+passée par une expression) : 352x224 demandés pour 1 s peuvent rendre 320x192
+pour 0,75 s, sans que rien ne le signale.
 
 On lit donc le fichier produit. On ne lit que ce qu'on sait lire, et on se tait
 sur le reste : une mesure absente vaut mieux qu'une mesure inventée.

@@ -1,8 +1,9 @@
 """Comparer ce qui a été livré à ce qui a été demandé.
 
-Un workflow peut recalculer ce qu'on lui donne : mesuré ici, 352x224 pour 1 s
-demandés ont produit 320x192 pour 0,75 s. Le livrable était juste — pour ce
-workflow — mais l'appelant n'en savait rien.
+Un workflow peut recalculer ce qu'on lui donne : 352x224 demandés pour 1 s
+produisent 320x192 pour 0,75 s quand le latent est construit à la moitié de la
+taille puis suréchantillonné. Le livrable est juste — pour ce workflow — mais
+l'appelant n'en sait rien.
 
 Ce module ne lit aucun fichier : il compare des nombres. La mesure du média est
 faite par l'adaptateur, la seule couche qui sait ouvrir un conteneur.

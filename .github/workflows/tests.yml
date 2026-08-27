@@ -1,0 +1,26 @@
+# La suite ne demande ni GPU, ni ComfyUI, ni navigateur : elle pointe vers un
+# port fermé et ne mesure jamais ce qu'elle ne peut pas lire. Elle tourne donc
+# telle quelle sur un exécuteur nu.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q

@@ -14,3 +14,6 @@ __pycache__/
 
 # Ce qui décrit une machine (workflows extraits d'ICI, chemins d'installation)
 comfyui_bridge/adapter/resources/workflows/
+
+# Notes de travail : journal de session, pas de la documentation produit
+tasks/

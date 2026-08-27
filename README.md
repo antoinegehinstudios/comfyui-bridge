@@ -1,5 +1,11 @@
 # ComfyUI Bridge
 
+[![tests](https://github.com/antoinegehinstudios/comfyui-bridge/actions/workflows/tests.yml/badge.svg)](https://github.com/antoinegehinstudios/comfyui-bridge/actions/workflows/tests.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688)](https://fastapi.tiangolo.com/)
+[![RFC 7807](https://img.shields.io/badge/erreurs-RFC%207807-informational)](https://datatracker.ietf.org/doc/html/rfc7807)
+[![Licence Apache 2.0](https://img.shields.io/badge/licence-Apache%202.0-green)](LICENSE)
+
 Service backend (FastAPI) + adaptateur CLI qui pilotent **ComfyUI de façon
 découplée**. On envoie une *intention de rendu* déclarative (prompt, contraintes
 multiples, durée, format, FPS) ; le service la résout, la **réconcilie avec les
@@ -82,7 +88,7 @@ dans `_data/engines.local.json` (voir plus bas). Les **modèles** dont un workfl
 a besoin doivent être installés dans ComfyUI : la passerelle ne les télécharge
 pas, elle relaie ce que ComfyUI répond quand il en manque un.
 
-**Python 3.10 ou plus** (développé et éprouvé sur 3.14).
+**Python 3.10 ou plus.**
 
 ```bash
 pip install -r requirements.txt
@@ -387,8 +393,9 @@ est occupé. `POST /v1/jobs/{id}/cancel` arrête.
 
 **Vérifier ce qui a été livré** — le média produit est **mesuré** (dimensions,
 durée, nombre d'images) et comparé à ce qui a été demandé. Un workflow peut
-recalculer ce qu'on lui donne : mesuré ici, 352×224 pour 1 s ont donné 320×192
-pour 0,75 s, et rien ne le disait. Chaque artefact porte `measured` et `gaps`, et
+recalculer ce qu'on lui donne — un latent construit à la moitié de la taille
+demandée puis suréchantillonné rend 320×192 pour 352×224 demandés, et 0,75 s
+pour 1 s. Chaque artefact porte `measured` et `gaps`, et
 le journal du run l'écrit. Ce qu'on ne sait pas lire (WEBM, MKV, OGG) ne produit
 aucune mesure — donc aucun écart : une mesure absente vaut mieux qu'une mesure
 inventée. Un arrondi de conteneur (48 images à 24 i/s tiennent en 2,042 s) n'est
