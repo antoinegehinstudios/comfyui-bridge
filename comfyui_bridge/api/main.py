@@ -147,6 +147,40 @@ def _analyse_workflow(container, spec) -> dict:
     }
 
 
+def _rewiring(avant: dict | None, spec) -> dict:
+    """Ce que la ré-analyse a re-mesuré, champ par champ.
+
+    Une ré-extraction qui répond « c'est fait » n'apprend rien : ce qui compte
+    est de savoir quelles entrées sont apparues, lesquelles ont disparu, et
+    lesquelles pilotent désormais un autre nœud.
+    """
+    from ..core.intention import intent_field_of
+    maintenant = {k: (b.node, b.input) for k, b in spec.bindings.items()}
+    if avant is None:
+        return {"first_analysis": True, "added": sorted(intent_field_of(k) for k in maintenant)}
+    anciens = avant["bindings"]
+    apparus = sorted(intent_field_of(k) for k in maintenant if k not in anciens)
+    disparus = sorted(intent_field_of(k) for k in anciens if k not in maintenant)
+    deplaces = [
+        {"field": intent_field_of(k), "from": f"{anciens[k][0]}.{anciens[k][1]}",
+         "to": f"{maintenant[k][0]}.{maintenant[k][1]}"}
+        for k in sorted(set(anciens) & set(maintenant)) if anciens[k] != maintenant[k]
+    ]
+    return {"first_analysis": False, "added": apparus, "removed": disparus,
+            "moved": deplaces,
+            "kind_changed": (avant["kind"] != spec.kind) and {"from": avant["kind"],
+                                                              "to": spec.kind} or False}
+
+
+def _freshness(container, spec) -> dict:
+    """Ce que le catalogue dit de la fraîcheur d'un extrait."""
+    from ..adapter.freshness import source_state
+    state = source_state(container.comfyui, spec)
+    if state["fresh"]:
+        return {"source_changed": False}
+    return {"source_changed": True, "source_change_reason": state["reason"]}
+
+
 def _spec_dict(spec) -> dict:
     return {
         "name": spec.name,
@@ -229,8 +263,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         orch = get_orchestrator(request)
         # accept() plans + reconciles synchronously; a strict rejection raises
         # HardwareReconciliationError here and leaves as a 422 problem+json.
+        c = request.app.state.container
         job, plan = orch.accept(intent_in.to_domain())
-        _with_work(request.app.state.container, plan)
+        _with_work(c, plan)
+        # Ce qui tourne, c'est l'ANALYSE stockée. Si la source a bougé depuis,
+        # le run exécute l'ancienne version : mesuré, il a rendu un .flac là où
+        # la nouvelle sauve un .mp3, sans un mot.
+        state = _freshness(c, c.catalog.get_spec(plan.workflow))
+        if state.get("source_changed"):
+            c.store.append_log(
+                job.id, "ATTENTION : ce workflow a changé dans ComfyUI depuis son "
+                        f"extraction ({state.get('source_change_reason')}) — c'est "
+                        "l'analyse précédente qui tourne ; ré-extrais pour prendre "
+                        "les nouveautés")
         background.add_task(orch.execute, job.id, plan)
         response.headers["Location"] = f"/v1/jobs/{job.id}"
         return JobOut.of(job)
@@ -285,6 +330,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # Same memory as /readiness and as the reconciler: a workflow
                 # known to fail here must not be the one the console opens on.
                 "runnable": not c.registry.blocking_problems(c.settings.host_id, name),
+                # L'extrait est-il encore fidèle à sa source ? Sans cette ligne,
+                # un appelant pilotait une analyse périmée sans le savoir.
+                **_freshness(c, spec),
                 # Drivable without a node of its own, by conversion (seconds -> frames).
                 "derived": derivable_params(spec.kind, spec.bindings),
                 # Media already inside the workflow: used as-is if not replaced.
@@ -340,7 +388,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         spec = c.catalog.register(body.name, body.workflow, source=body.source,
                                   source_hash=src_hash, titles=titles)
         analysis = await run_in_threadpool(_analyse_workflow, c, spec)
-        return {**_spec_dict(spec), "analysis": analysis}
+        from ..adapter.freshness import forget
+        forget(reg_name)                 # la question « est-ce à jour ? » a changé de réponse
+        return {**_spec_dict(spec), "analysis": analysis,
+                "changes": _rewiring(avant, spec)}
+
+    # Déclarée AVANT "/v1/workflows/{name}" : sinon "updates" est lu comme
+    # un nom de workflow et la route répond 400.
+    @app.get("/v1/workflows/updates", tags=["workflows"])
+    async def workflow_updates(request: Request) -> dict:
+        """Les extraits que leur source a dépassés — la notification, en une
+        requête, pour un flux qui n'affiche pas de console."""
+        c = request.app.state.container
+        stale = []
+        for name in c.catalog.names():
+            spec = c.catalog.get_spec(name)
+            state = _freshness(c, spec)
+            if state.get("source_changed"):
+                stale.append({"workflow": name, "source": spec.source,
+                              "reason": state.get("source_change_reason"),
+                              "extracted_at": spec.extracted_at})
+        return {"count": len(stale), "updates": stale}
 
     @app.get("/v1/workflows/{name}", tags=["workflows"])
     async def get_workflow(name: str, request: Request) -> dict:
@@ -415,8 +483,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ComfyUI source changed since extraction). This is the management view.
         """
         c = request.app.state.container
-        from ..adapter.comfyui_client import source_hash as _hash
-        from ..adapter.labels import titles_from_ui_workflow
+        from ..adapter.freshness import source_state
         from ..browser.headless import is_available as _hb
         hb_ok, hb_reason = _hb()
         headless = {"available": hb_ok, "reason": hb_reason}
@@ -432,20 +499,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if spec is not None:
                 entry["extracted_as"] = spec.name
                 entry["status"] = "extracted"
-                try:
-                    saved_doc = c.comfyui.get_saved_workflow(name)
-                    if spec.source_hash and _hash(saved_doc) != spec.source_hash:
-                        entry["status"] = "update-available"
-                        entry["reason"] = "le workflow a changé dans ComfyUI"
-                    elif titles_from_ui_workflow(saved_doc) and not spec.titles:
-                        # Extracted before the author's node titles were read:
-                        # the analysis is poorer than the source allows, so the
-                        # form under-exposes fields. Say so instead of showing
-                        # a reassuring "extrait".
-                        entry["status"] = "update-available"
-                        entry["reason"] = "analyse incomplète — les noms de nœuds de l'auteur n'ont pas été lus"
-                except Exception:
-                    pass
+                state = source_state(c.comfyui, spec)
+                if not state["fresh"]:
+                    entry["status"] = "update-available"
+                    entry["reason"] = state["reason"]
             saved.append(entry)
         return {"comfyui": probe, "headless": headless, "saved": saved}
 
@@ -469,6 +526,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             src_hash = None
         reg_name = name[:-5] if name.endswith(".json") else name
+        # Ce que l'analyse PRÉCÉDENTE avait câblé, avant de la remplacer : sans
+        # cette photo, une ré-extraction ne dit pas ce qu'elle a changé.
+        avant = None
+        try:
+            ancien = c.catalog.get_spec(reg_name)
+            avant = {"kind": ancien.kind,
+                     "bindings": {k: (b.node, b.input) for k, b in ancien.bindings.items()}}
+        except Exception:
+            pass
         titles = {}
         try:
             from ..adapter.labels import titles_from_ui_workflow
@@ -479,7 +545,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # A new workflow (or an updated one) is ANALYSED here, using ComfyUI's own
         # node schemas. The UI and the API then derive from that analysis.
         analysis = await run_in_threadpool(_analyse_workflow, c, spec)
-        return {**_spec_dict(spec), "analysis": analysis}
+        from ..adapter.freshness import forget
+        forget(reg_name)                 # la question « est-ce à jour ? » a changé de réponse
+        return {**_spec_dict(spec), "analysis": analysis,
+                "changes": _rewiring(avant, spec)}
 
     @app.get("/v1/jobs/{job_id}", tags=["render"])
     async def get_job(job_id: str, request: Request) -> dict:

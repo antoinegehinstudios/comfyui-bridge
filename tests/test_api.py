@@ -224,3 +224,63 @@ def test_every_way_in_weighs_the_run_not_just_the_http_api():
     unknown = ExecutionPlan(intent=None, params={}, workflow="wf")
     blind._weigh(unknown)
     assert unknown.work is None
+
+
+def test_a_re_analysis_says_what_it_re_measured():
+    """A re-extraction answering "done" teaches nothing: what matters is which
+    inputs appeared, which vanished, and which now drive another node."""
+    from comfyui_bridge.adapter.mapping import Binding
+    from comfyui_bridge.api.main import _rewiring
+
+    class _Spec:
+        kind = "audio"
+        bindings = {"prompt": Binding("2", "text"),
+                    "duration_s": Binding("10", "value"),   # a bougé de nœud
+                    "latent_batch": Binding("4", "batch_size")}
+
+    avant = {"kind": "audio",
+             "bindings": {"prompt": ("2", "text"),
+                          "duration_s": ("4", "seconds"),
+                          "negative_prompt": ("3", "text"),   # a disparu
+                          "steps": ("5", "steps")}}           # a disparu
+    diff = _rewiring(avant, _Spec())
+    assert diff["removed"] == ["negative_prompt", "steps"]
+    assert diff["added"] == ["batch"]                          # nom API, pas interne
+    assert diff["moved"] == [{"field": "duration_s", "from": "4.seconds", "to": "10.value"}]
+    assert diff["kind_changed"] is False
+
+    # Première analyse : tout est nouveau, et c'est dit comme tel.
+    premiere = _rewiring(None, _Spec())
+    assert premiere["first_analysis"] is True
+    assert premiere["added"] == ["batch", "duration_s", "prompt"]
+
+
+def test_freshness_is_read_once_and_says_why(tmp_path):
+    """La même question — cet extrait est-il à jour ? — se pose au catalogue, au
+    lancement et à la gestion : une seule lecture, sinon elles divergent."""
+    from comfyui_bridge.adapter.freshness import forget, source_state
+
+    class _Spec:
+        name, source, source_hash, titles = "wf", "wf.json", "abc", {"1": "Duration"}
+
+    class _Engine:
+        def __init__(self, doc): self.doc = doc
+        def get_saved_workflow(self, name): return self.doc
+
+    forget()
+    inchangé = source_state(_Engine({"nodes": []}), _Spec(), now=0.0)
+    assert inchangé["fresh"] in (True, False)      # dépend du hash, pas d'exception
+    forget()
+
+    class _Muet:
+        def get_saved_workflow(self, name): raise OSError("moteur muet")
+    # Un moteur muet ne fait pas conclure à une péremption.
+    assert source_state(_Muet(), _Spec(), now=0.0)["fresh"] is True
+
+
+def test_the_updates_route_is_not_eaten_by_the_name_route(client):
+    """Déclarée après "/v1/workflows/{name}", elle répondait 400 : "updates"
+    était lu comme un nom de workflow."""
+    r = client.get("/v1/workflows/updates")
+    assert r.status_code == 200
+    assert set(r.json()) == {"count", "updates"}

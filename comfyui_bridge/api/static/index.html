@@ -105,6 +105,8 @@
   .badge2.ok{color:var(--ok);border-color:var(--ok);background:rgba(63,185,80,.1)}
   .badge2.warn{color:var(--warn);border-color:var(--warn);background:rgba(210,153,34,.12)}
   .badge2.none{color:var(--muted);border-color:var(--line)}
+  #majDot{display:inline-block;min-width:18px;padding:0 6px;border-radius:999px;
+    background:var(--warn);color:#1b1400;font-size:11px;font-weight:700;margin-left:6px}
   .wfrow button{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:600}
   .wfrow button.g{background:var(--panel);color:var(--txt);border:1px solid var(--line);font-weight:500}
   .dep{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;margin:2px 4px 2px 0;font-family:ui-monospace,Consolas,monospace}
@@ -123,7 +125,7 @@
 
 <nav class="tabs">
   <button data-tab="gen" class="active">Générer</button>
-  <button data-tab="mgmt">Workflows</button>
+  <button data-tab="mgmt">Workflows <span id="majDot" style="display:none"></span></button>
   <button data-tab="out">Livrables</button>
 </nav>
 
@@ -186,6 +188,7 @@
     <button class="ghost" id="mgmtRefresh" type="button">↻ Rafraîchir</button>
   </div>
   <div id="comfyStatus" class="hint" style="margin-top:6px"></div>
+  <div class="loc" id="remesure" style="display:none;border-color:var(--accent)"></div>
   <h3>Sauvés dans ComfyUI</h3>
   <div id="savedList"><span class="hint">…</span></div>
   <h3>Extraits — appelables par le pipeline</h3>
@@ -255,6 +258,15 @@ const SEMANTIC = [
   {key:"latent_batch",    label:"Images / batch",      kind:"number"},
 ];
 
+// La notification doit rester juste après une ré-analyse, sans recharger la page.
+function majBadge(catalogue){
+  const dot = $("majDot"); if(!dot) return;
+  const périmés = Object.values(catalogue||{}).filter(w=>w.source_changed).length;
+  dot.textContent = périmés;
+  dot.title = `${périmés} workflow(s) modifié(s) dans ComfyUI`;
+  dot.style.display = périmés ? "" : "none";
+}
+
 function buildWorkflowForm(name){
   const w = WF[name]||{}, carried = w.carried||{}, d = w.defaults||{};
   // Fields come from the analysis: those a node carries, plus those the
@@ -296,6 +308,14 @@ function buildWorkflowForm(name){
 
   for(const media of ["image","video"])
     if(accepts.includes(media)){ fillMediaOptions(name, media); wireMediaUpload(name, media); }
+  // Une source qui a bougé depuis l'extraction : c'est l'ANCIENNE analyse qui
+  // tournera. Le taire, c'est livrer un résultat d'une version qu'on ne voit plus.
+  if(w.source_changed){
+    box.innerHTML = `<div class="loc" style="border-color:var(--warn)">⚠ Ce workflow a changé `
+      + `dans ComfyUI depuis son analyse (${escapeHtml(w.source_change_reason||"")}). `
+      + `C'est l'analyse précédente qui sera lancée — va dans <b>Workflows</b> pour la refaire.`
+      + `</div>` + box.innerHTML;
+  }
   loadWorkflowIO(name);
   loadReadiness(name);
   scheduleEstimate();
@@ -366,6 +386,7 @@ fetch("/v1/workflows").then(r=>r.json()).then(cat=>{
     ? cat.default
     : (Object.keys(WF).find(n=>WF[n].runnable!==false) || cat.default);
   if(openOn) sel.value = openOn;
+  majBadge(WF);
   sel.addEventListener("change", ()=>buildWorkflowForm(sel.value));
   buildWorkflowForm(sel.value);
   if(!document.querySelector(".constraint")) addConstraint();
@@ -899,6 +920,8 @@ async function loadMgmt(){
   }catch(e){ $("savedList").innerHTML=`<span class="hint">erreur: ${escapeHtml(String(e))}</span>`; }
   try{
     const c=await (await fetch("/v1/workflows")).json();
+    WF = c.workflows||WF;            // le catalogue vient de changer : on le garde
+    majBadge(c.workflows);
     const names=Object.keys(c.workflows||{});
     if(!names.length){ $("extractedList").innerHTML='<span class="hint">Aucun workflow extrait.</span>'; return; }
     $("extractedList").innerHTML="";
@@ -919,8 +942,18 @@ async function oneClickExtract(src, btn){
     const data=await res.json();
     if(res.status===201){
       const nm=(data.dependencies&&data.dependencies.models||[]).length;
-      $("comfyStatus").innerHTML=`<span style="color:var(--ok)">✓ Extrait : <code>${escapeHtml(data.name)}</code> — ${nm} modèle(s), bindings auto : ${escapeHtml(Object.keys(data.bindings||{}).join(", ")||"aucun")}</span>`;
-      loadMgmt();
+      const ch = data.changes||{};
+      const remesure = ch.first_analysis ? `première analyse : ${escapeHtml((ch.added||[]).join(", "))}`
+        : [ (ch.added||[]).length ? `+ ${escapeHtml(ch.added.join(", "))}` : "",
+            (ch.removed||[]).length ? `− ${escapeHtml(ch.removed.join(", "))}` : "",
+            (ch.moved||[]).length ? `déplacés : ${escapeHtml(ch.moved.map(m=>`${m.field} (${m.from} → ${m.to})`).join(", "))}` : "",
+            ch.kind_changed ? `type : ${escapeHtml(ch.kind_changed.from)} → ${escapeHtml(ch.kind_changed.to)}` : ""
+          ].filter(Boolean).join(" · ") || "câblage inchangé";
+      const box=$("remesure");
+      box.innerHTML=`<div><b>✓ ${escapeHtml(data.name)}</b> ré-analysé — ${nm} modèle(s)`
+        + `<div class="hint" style="margin-top:4px">câblage re-mesuré → ${remesure}</div></div>`;
+      box.style.display="block";
+      loadMgmt();      // réécrit comfyStatus : le rapport vit ailleurs, exprès
     } else { $("comfyStatus").innerHTML=`<span style="color:var(--err)">${escapeHtml(data.title||"erreur")}: ${escapeHtml(data.detail||"")}</span>`; btn.disabled=false; btn.textContent="Extraire"; }
   }catch(e){ $("comfyStatus").innerHTML=`<span style="color:var(--err)">erreur: ${escapeHtml(String(e))}</span>`; btn.disabled=false; btn.textContent="Extraire"; }
 }

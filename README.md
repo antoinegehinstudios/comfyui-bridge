@@ -342,6 +342,35 @@ durée mesurée par le moteur. Le champ `label` de l'intention nomme la sortie
 via `GET /v1/artifacts`, même si le service a redémarré entre-temps — les jobs
 vivent en mémoire, les fichiers non.
 
+## Quand un workflow change dans ComfyUI
+
+L'analyse stockée est une **photo** de la source au moment de l'extraction. Si
+l'auteur modifie le workflow dans ComfyUI, c'est cette photo qui continue de
+tourner. Une seule lecture de fraîcheur (empreinte de la source + noms de nœuds
+lus) répond à trois endroits, pour qu'ils ne divergent jamais :
+
+- `GET /v1/workflows` — chaque entrée porte `source_changed` et sa raison ;
+- `GET /v1/workflows/updates` — la notification en une requête, pour un flux
+  qui n'affiche aucune console ;
+- au **lancement**, le journal du job le dit : sans cela un run a rendu un
+  `.flac` alors que la nouvelle version sauvait un `.mp3`, sans un mot.
+
+La console montre une pastille sur l'onglet *Workflows* et avertit sur le
+workflow sélectionné.
+
+Ré-analyser (`POST /v1/comfyui/workflows/{fichier}/extract`) relit le graphe par
+`graphToPrompt` et **dit ce qu'elle a re-mesuré** — `changes` : entrées apparues,
+disparues, déplacées d'un nœud à l'autre, et changement de type de média.
+Éprouvé sur un workflow dont les IN ont été bouleversés :
+
+```
+− negative_prompt, steps · déplacés : cfg (5.cfg → 14.cfg),
+  duration_s (4.seconds → 10.value), seed (5.seed → 13.noise_seed)
+```
+
+Un appelant resté sur l'ancien contrat n'est pas trahi en silence : les champs
+qui n'existent plus reviennent dans `ignored`.
+
 ## Estimation du temps
 
 Forme reconnue pour la diffusion : le temps croît **linéairement avec le nombre

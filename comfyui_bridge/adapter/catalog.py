@@ -52,6 +52,7 @@ class WorkflowSpec:
     # Maintained manifest metadata (managed/extracted workflows):
     source: str | None = None                       # ComfyUI workflow it came from
     source_hash: str | None = None                  # source hash at extraction (MAJ detection)
+    extracted_at: str | None = None                 # WHEN this analysis was made
     dependencies: dict[str, list[str]] = field(default_factory=dict)  # {models, node_types}
 
     carried: dict[str, Any] = field(default_factory=dict)
@@ -208,6 +209,7 @@ def _spec_from_graph(name: str, path: Path, graph: dict[str, Any],
         limits={},
         source=meta.get("source"),
         source_hash=meta.get("source_hash"),
+        extracted_at=meta.get("extracted_at"),
         # Always read from the graph (the single source); never a stored copy.
         dependencies=autobind.derive_dependencies(graph),
         carried=_carried_media(graph, bindings),
