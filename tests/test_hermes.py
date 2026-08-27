@@ -253,4 +253,20 @@ def test_loading_the_model_is_measured_apart_so_the_sizes_line_up(tmp_path):
     assert est["basis"] == "work-fit" and est["setup_measured"] is True
     petit = reg.estimate_duration("h", "wf", work=10.0, work_model=2)
     assert est["seconds"] > petit["seconds"]        # la taille compte de nouveau
-    assert est["min"] < est["seconds"] < est["max"]  # l'écart de mise en route est dit
+    assert est["min"] <= est["seconds"] <= est["max"]  # l'écart de mise en route est dit
+    assert est["min"] < est["max"]                     # …et il n'est pas gommé
+
+
+def test_the_compute_floor_is_kept_not_only_the_slope(tmp_path):
+    """A graph does more than its sampling passes: 46 s of compute for a load of
+    10 and 50 s for a load of 166. Keeping only the slope announced 21 s for a
+    run measured at 67."""
+    from comfyui_bridge.hermes.registry import ProblemRegistry
+    reg = ProblemRegistry(tmp_path / "h.sqlite3")
+    reg.record("h", "wf", {"width": 352}, status="succeeded",
+               duration_s=67.3, setup_s=21.0, work=10.4, work_model=2)
+    reg.record("h", "wf", {"width": 704}, status="succeeded",
+               duration_s=69.7, setup_s=20.1, work=166.5, work_model=2)
+    for work, mesuré in ((10.4, 67.3), (166.5, 69.7)):
+        est = reg.estimate_duration("h", "wf", work=work, work_model=2)
+        assert abs(est["seconds"] - mesuré) < 3, (work, est["seconds"], mesuré)

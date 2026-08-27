@@ -129,14 +129,21 @@ class ProblemRegistry:
             timed = [r for r in rows if r["setup_s"] is not None]
             if len(timed) >= 2:
                 setups = sorted(r["setup_s"] for r in timed)
-                median_setup = setups[len(setups) // 2]
+                # A real median: on two measurements, taking the upper one meant
+                # always announcing the cold start.
+                mid = len(setups) // 2
+                median_setup = (setups[mid] if len(setups) % 2
+                                else (setups[mid - 1] + setups[mid]) / 2)
                 points = [(r["work"], max(0.0, r["duration_s"] - r["setup_s"])) for r in timed]
                 fitted = _affine_fit(points)
                 if fitted is not None:
-                    _, per_unit = fitted
-                    compute = per_unit * work
+                    # Computing has its own floor (a graph does more than its
+                    # sampling passes): dropping the intercept announced 21 s
+                    # for a run measured at 67. Both terms are kept.
+                    floor, per_unit = fitted
+                    compute = floor + per_unit * work
                     seconds = median_setup + compute
-                    spread = max((abs(d - per_unit * w) for w, d in points), default=0.0)
+                    spread = max((abs(d - (floor + per_unit * w)) for w, d in points), default=0.0)
                     return {"seconds": max(1, round(seconds)), "samples": len(points),
                             "basis": "work-fit", "work": round(work, 1),
                             "setup_s": round(median_setup), "per_unit_s": round(per_unit, 2),
