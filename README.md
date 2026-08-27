@@ -304,6 +304,39 @@ une raison claire ; un job échoue proprement (RFC 7807), jamais de blocage.
 > SD1.5. Si ton install ComfyUI a d'autres modèles (LTX, Wan, z-image…), pointe
 > `COMFY_MAPPING` vers un mapping + workflow adaptés — aucun code à changer.
 
+## Estimation du temps
+
+Forme reconnue pour la diffusion : le temps croît **linéairement avec le nombre
+d'étapes de débruitage** et avec la **surface** générée, multipliée par le nombre
+d'images. La passerelle mesure donc une **charge** :
+
+```
+charge = (largeur × hauteur / 1e6) × images × étapes
+temps  ≈ mise en route + coefficient × charge
+```
+
+Tout est **lu sur le graphe injecté**, celui que le moteur va réellement
+recevoir — jamais sur les seuls champs du formulaire :
+
+- **images** : `length` du latent, sinon durée × FPS ;
+- **étapes** : la somme de **toutes les passes d'échantillonnage**, qu'elles
+  portent un `steps`, un ordonnanceur en amont ou une liste explicite de sigmas
+  (un workflow LTX réel en fait deux : 3 + 8) ; une passe qui ne couvre qu'une
+  fenêtre de l'ordonnancement (Wan 2.2 : 0→10 puis 10→fin) n'est pas comptée
+  deux fois ;
+- **surface** : le nœud latent, ou la valeur liée en amont.
+
+Un facteur **illisible compte pour 1** — neutre, jamais annulant : il est fixé
+dans le graphe, donc identique à chaque run de ce workflow, et le coefficient
+appris l'absorbe. L'annuler rendait l'estimation sourde à tout : 24 images et
+96 images donnaient le même chiffre (mesuré : 134 s et 411 s).
+
+La **mise en route** et le **coefficient** ne sont jamais posés : ils sont
+ajustés au moindre carré sur les runs mesurés de CE workflow, sur cette machine.
+Tant qu'aucun run n'a été mesuré, la console le dit au lieu de laisser croire
+que les paramètres comptent. Le barème de charge est **versionné** : le changer
+n'autorise pas à mélanger deux échelles dans le même ajustement.
+
 ## Hermes — réconciliation contre les problèmes CONNUS
 
 Hermes est un **rôle de réconciliation** appelé en **mode local**. Sa valeur est

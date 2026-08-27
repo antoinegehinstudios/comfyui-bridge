@@ -24,6 +24,9 @@ class ExecutionPlan:
     # Effective size of the job (pixels x frames x steps, millions). Set by the
     # adapter, which is the only layer that can read the workflow's own values.
     work: float | None = None
+    # WHICH way that work was counted — a barème, not a value. Recorded with the
+    # run so a later change of counting cannot pollute the fit.
+    work_model: int | None = None
     # Values that were asked for but that this workflow binds nothing for: they
     # will not reach the graph. Kept so the run can SAY it, instead of letting a
     # setting quietly do nothing.

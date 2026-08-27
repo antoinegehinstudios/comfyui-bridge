@@ -206,3 +206,20 @@ def test_cancelling_a_run_is_not_recorded_as_a_workflow_problem():
     kind = P.classify("le moteur ne connaît plus ce run (ComfyUI a redémarré ou l'a perdu) — relancer")
     assert kind == P.LOST
     assert kind not in P.BLOCKING
+
+
+def test_two_ways_of_counting_work_are_never_fitted_together(tmp_path):
+    """Counting the LTX passes changed the scale of `work` elevenfold. Fitting
+    old and new measurements on one line would have described neither."""
+    from comfyui_bridge.hermes.registry import ProblemRegistry
+    reg = ProblemRegistry(tmp_path / "h.sqlite3")
+    reg.record("h", "wf", {"width": 512}, status="succeeded", duration_s=70.0,
+               work=1.0, work_model=1)
+    reg.record("h", "wf", {"width": 704}, status="succeeded", duration_s=126.0,
+               work=15.0, work_model=1)
+    # The new barème has nothing measured yet: no work-based answer at all.
+    fresh = reg.estimate_duration("h", "wf", work=11.0, work_model=2)
+    assert fresh is None or fresh["basis"] not in {"work-fit", "work-rate"}
+    # The old one still fits its own points.
+    old = reg.estimate_duration("h", "wf", work=8.0, work_model=1)
+    assert old["basis"] == "work-fit"

@@ -166,7 +166,7 @@ def test_a_run_left_in_flight_is_collected_after_a_restart(tmp_path):
     class _Registry:
         def __init__(self): self.rows = []
         def record(self, host, workflow, params, status, problem=None, detail=None,
-                   duration_s=None, work=None):
+                   duration_s=None, work=None, work_model=None):
             self.rows.append((workflow, status, duration_s, work))
 
     registry = _Registry()

@@ -35,10 +35,11 @@ class InflightLog:
         tmp.replace(self._path)
 
     def add(self, prompt_id: str, *, workflow: str, config: str,
-            work: float | None, params: dict[str, Any], at: str) -> None:
+            work: float | None, params: dict[str, Any], at: str,
+            work_model: int | None = None) -> None:
         data = self._read()
         data[prompt_id] = {"workflow": workflow, "config": config, "work": work,
-                           "params": params, "at": at}
+                           "work_model": work_model, "params": params, "at": at}
         self._write(data)
 
     def remove(self, prompt_id: str) -> None:
@@ -78,7 +79,8 @@ def recover(backend, log: InflightLog, registry, host: str) -> list[dict[str, An
         log.remove(prompt_id)
         if artifacts:
             registry.record(host, meta.get("workflow", "?"), meta.get("params") or {},
-                            status="succeeded", duration_s=measured, work=meta.get("work"))
+                            status="succeeded", duration_s=measured, work=meta.get("work"),
+                            work_model=meta.get("work_model"))
             recovered.append({"prompt_id": prompt_id, "state": "recovered",
                               "workflow": meta.get("workflow"),
                               "artifacts": [a.path for a in artifacts]})

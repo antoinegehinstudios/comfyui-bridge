@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS runs (
     detail    TEXT,            -- the real message, verbatim (truncated)
     duration_s REAL,           -- how long the ENGINE took (queue wait excluded)
     work       REAL,           -- pixels x frames x steps (millions) for that run
+    work_model INTEGER,        -- HOW that work was counted: two barèmes never mix
     ts        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_runs_lookup ON runs(scope, host, workflow, config);
@@ -72,6 +73,8 @@ class ProblemRegistry:
                 conn.execute("ALTER TABLE runs ADD COLUMN duration_s REAL")
             if "work" not in cols:            # …and before work was measured
                 conn.execute("ALTER TABLE runs ADD COLUMN work REAL")
+            if "work_model" not in cols:      # …and before it was counted this way
+                conn.execute("ALTER TABLE runs ADD COLUMN work_model INTEGER")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path)
@@ -82,20 +85,22 @@ class ProblemRegistry:
 
     def record(self, host: str, workflow: str, params: dict[str, Any], status: str,
                problem: str | None = None, detail: str | None = None,
-               duration_s: float | None = None, work: float | None = None) -> None:
+               duration_s: float | None = None, work: float | None = None,
+               work_model: int | None = None) -> None:
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO runs(scope,host,workflow,config,status,problem,detail,"
-                "duration_s,work,ts) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "duration_s,work,work_model,ts) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (self._scope, host, workflow, config_fingerprint(params), status,
-                 problem, (detail or "")[:500], duration_s, work,
+                 problem, (detail or "")[:500], duration_s, work, work_model,
                  datetime.now(timezone.utc).isoformat()),
             )
 
     # -- experience: how long does this usually take? -------------------------
 
     def estimate_duration(self, host: str, workflow: str, work: float | None = None,
-                          config: str | None = None) -> dict[str, Any] | None:
+                          config: str | None = None,
+                          work_model: int | None = None) -> dict[str, Any] | None:
         """How long this will take, from measured runs.
 
         With a work figure (pixels x frames x steps) and runs of DIFFERENT sizes,
@@ -107,11 +112,14 @@ class ProblemRegistry:
         nothing comparable was ever measured.
         """
         if work:
+            # Only runs whose work was counted the SAME way: mixing barèmes
+            # would fit a line through two different scales.
             with self._connect() as conn:
                 rows = conn.execute(
                     "SELECT duration_s, work FROM runs WHERE scope=? AND host=? AND workflow=?"
                     " AND status='succeeded' AND duration_s IS NOT NULL AND work > 0"
-                    " ORDER BY id DESC LIMIT 30", (self._scope, host, workflow)).fetchall()
+                    " AND work_model IS ? ORDER BY id DESC LIMIT 30",
+                    (self._scope, host, workflow, work_model)).fetchall()
             points = [(r["work"], r["duration_s"]) for r in rows]
             fitted = _affine_fit(points)
             if fitted is not None:

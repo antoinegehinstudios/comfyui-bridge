@@ -110,10 +110,11 @@ def _with_engine_state(container, out: dict) -> dict:
 
 def _with_work(container, plan):
     """Attach the effective size of the job, read from the injected graph."""
-    from ..adapter.work import effective_values, work_units
+    from ..adapter.work import WORK_MODEL, effective_values, work_units
     try:
         values = effective_values(container.catalog, plan)
         plan.work = work_units(values)
+        plan.work_model = WORK_MODEL
         return values
     except Exception:
         return {}
@@ -253,7 +254,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # Values that will not reach the graph: better said than silent.
             "ignored": list(plan.ignored),
             "estimated_duration": c.registry.estimate_duration(
-                c.settings.host_id, plan.workflow, plan.work, plan.config),
+                c.settings.host_id, plan.workflow, plan.work, plan.config,
+                work_model=plan.work_model),
             "graph": pv.pop("workflow"),        # the injected GRAPH (own key)
             **pv,
         }
@@ -373,7 +375,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "work": plan.work,
             "ignored": list(plan.ignored),
             "estimate": c.registry.estimate_duration(
-                c.settings.host_id, plan.workflow, plan.work, plan.config),
+                c.settings.host_id, plan.workflow, plan.work, plan.config,
+                work_model=plan.work_model),
         }
 
     @app.get("/v1/workflows/{name}/io", tags=["workflows"])

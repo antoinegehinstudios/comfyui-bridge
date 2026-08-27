@@ -265,7 +265,8 @@ class Orchestrator:
         if measured is None and result.simulated:
             measured = _time.monotonic() - started_at
         self._journal.record(self._host, plan.workflow, plan.params, status="succeeded",
-                             duration_s=measured, work=plan.work)
+                             duration_s=measured, work=plan.work,
+                             work_model=plan.work_model)
         # Surface the backend's own truthful note (e.g. "dry-run: no render").
         if result.raw_stdout:
             self._store.append_log(job_id, result.raw_stdout.strip()[:200])

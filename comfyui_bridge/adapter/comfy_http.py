@@ -159,7 +159,8 @@ class ComfyUIHttpBackend:
         try:
             self._inflight.add(prompt_id, workflow=plan.workflow, config=plan.config,
                                work=getattr(plan, "work", None), params=dict(plan.params),
-                               at=datetime.now(timezone.utc).isoformat())
+                               at=datetime.now(timezone.utc).isoformat(),
+                               work_model=getattr(plan, "work_model", None))
         except Exception:
             pass        # bookkeeping must never break a run
 
