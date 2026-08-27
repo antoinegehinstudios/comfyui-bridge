@@ -143,7 +143,10 @@ class Orchestrator:
         # A value the workflow cannot receive goes nowhere. Naming it here is
         # the difference between "your 10 frames were applied" and the truth.
         reachable = set(profile.accepts) | set(derivable_params(kind, profile.accepts))
-        ignored = tuple(sorted(k for k in params if profile.accepts and k not in reachable))
+        # Nommés comme l'appelant les a envoyés : lui rendre "latent_batch"
+        # quand il a écrit "batch" le laissait chercher un champ qui n'existe pas.
+        ignored = tuple(sorted(intent_field_of(k) for k in params
+                               if profile.accepts and k not in reachable))
         return ExecutionPlan(
             intent=intent,
             params=params,

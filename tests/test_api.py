@@ -142,7 +142,7 @@ def test_a_value_the_workflow_cannot_receive_is_named_not_swallowed():
     plan = orch.build_plan(RenderIntent(prompt="p", fps=24, duration_s=2.0,
                                         constraints=(Constraint("frames", ConstraintOp.LTE, 10),)))
     assert plan.params["latent_batch"] == 10       # the constraint did apply…
-    assert "latent_batch" in plan.ignored          # …but this workflow takes no frame count
+    assert "batch" in plan.ignored     # …under the name the caller actually sent
 
 
 def test_a_run_stopped_on_request_is_not_recorded_against_the_workflow():

@@ -255,7 +255,9 @@ const SEMANTIC = [
   {key:"height",          label:"Hauteur",             kind:"number"},
   {key:"fps",             label:"FPS",                 kind:"number"},
   {key:"duration_s",      label:"Durée (s)",           kind:"number", step:"0.5"},
-  {key:"latent_batch",    label:"Images / batch",      kind:"number"},
+  {key:"batch",           label:"Images / batch",      kind:"number"},
+  {key:"label",           label:"Nom de la sortie",    kind:"text",
+   note:"Nomme les fichiers produits (cortex/&lt;nom&gt;_00001_.…) — pour les retrouver."},
 ];
 
 // La notification doit rester juste après une ré-analyse, sans recharger la page.
@@ -271,7 +273,9 @@ function buildWorkflowForm(name){
   const w = WF[name]||{}, carried = w.carried||{}, d = w.defaults||{};
   // Fields come from the analysis: those a node carries, plus those the
   // orchestrator can convert (a duration in seconds becomes frames).
-  const derived = w.derived||[], accepts = (w.accepts||[]).concat(derived);
+  // Les champs offerts sont ceux que l'API annonce accepter — le même contrat
+  // qu'un appelant sans console. Traduire les noms ici dupliquait la table.
+  const accepts = w.intent_fields || [];
   const box = $("wfForm");
   if(!accepts.length){
     box.innerHTML = `<div class="hint" style="color:var(--warn)">Ce workflow n’expose aucune entrée reconnue — il tournera tel quel.</div>`;
@@ -297,8 +301,9 @@ function buildWorkflowForm(name){
              `<div class="hint" style="color:var(--warn)">${note}</div>`;
     }
     const step = f.step?` step="${f.step}"`:"";
-    const note = derived.includes(f.key)
-      ? `<div class="hint">Converti en nombre d’images (durée × FPS) — ce workflow n’a pas de champ de durée.</div>` : "";
+    const note = (w.derived||[]).includes(f.key)
+      ? `<div class="hint">Converti en nombre d’images (durée × FPS) — ce workflow n’a pas de champ de durée.</div>`
+      : (f.note ? `<div class="hint">${f.note}</div>` : "");
     return `<label>${f.label}</label><input id="p_${f.key}" type="${f.kind}"${step} value="${escapeHtml(val)}" placeholder="valeur du workflow">${note}`;
   }).join("");
 
@@ -584,7 +589,7 @@ function buildBody(){
   const body = {workflow:$("workflow").value||null, inputs:collectIO(), constraints:collectConstraints()};
   for(const f of SEMANTIC){
     const v = pval(f.key);
-    if(v!==null) body[f.key==="latent_batch"?"batch":f.key] = v;
+    if(v!==null) body[f.key] = v;
   }
   if(body.prompt===undefined) body.prompt = "(sans prompt)";   // required by the API
   return body;
@@ -745,8 +750,7 @@ function annotateSemanticBounds(contract){
   const byField = {};
   for(const i of contract||[]) byField[i.field] = i;
   for(const f of SEMANTIC){
-    const key = f.key === "latent_batch" ? "batch" : f.key;
-    const d = byField[key], el = $("p_"+f.key);
+    const d = byField[f.key], el = $("p_"+f.key);
     if(!d || !el || el.type!=="number") continue;
     if(d.min!==undefined) el.min = d.min;
     if(d.max!==undefined) el.max = d.max;
