@@ -100,6 +100,15 @@ Campagne menée depuis l'UI, moteur réel (RTX 3060 12 Go, ComfyUI :8188).
   workflow lançable et signale les autres.
 - Envoi d'une image depuis la console (relais de l'upload officiel).
 
+**Suite — 2026-08-27, sur constat de l'utilisateur**
+- L'estimation ignorait deux choses : les ÉTAPES quand aucun champ `steps`
+  n'existe (LTX : deux passes en sigmas, 3 + 8), et TOUTE la charge dès qu'un
+  facteur était illisible (minimax : 24 puis 96 images, 134 s puis 411 s
+  mesurées, même chiffre annoncé). Charge lue sur le graphe injecté ; facteur
+  illisible = neutre, jamais annulant ; barème versionné.
+- Un run orphelin n'était récupéré qu'au démarrage suivant : la consultation
+  des livrables déclenche aussi le balayage.
+
 **Limite connue**
 - La mise en route varie fortement selon que le modèle est déjà chargé
   (mesuré : 71 s à 97 s pour la même charge). L'intervalle affiché s'élargit

@@ -531,8 +531,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/v1/recovered", tags=["render"])
     async def recovered(request: Request) -> dict:
-        """Runs the engine finished while this service was down, collected at
-        startup. Empty is the normal case; a non-empty list is worth saying."""
+        """Runs the engine finished without anybody listening.
+
+        Collected at startup, and again when this is asked for: a run orphaned
+        mid-flight used to wait for the NEXT restart to be delivered, which can
+        be days. Looking at the deliverables is exactly the moment to close the
+        loop; the sweep costs one history request per run still in flight."""
+        late = await run_in_threadpool(_recover_inflight, request.app.state.container)
+        if late:
+            request.app.state.recovered = (getattr(request.app.state, "recovered", []) or []) + late
         return {"recovered": getattr(request.app.state, "recovered", []) or [],
                 "still_in_flight": list((request.app.state.container.inflight.entries()
                                          if getattr(request.app.state.container, "inflight", None)
