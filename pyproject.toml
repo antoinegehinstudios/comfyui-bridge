@@ -11,6 +11,10 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "pydantic>=2.6",
+    # L'élément neutre (et la mesure des images livrées) en dépendent.
+    "pillow>=10.0",
+    # La progression réelle du moteur ; son absence est annoncée, pas subie.
+    "websocket-client>=1.7",
 ]
 
 [project.optional-dependencies]

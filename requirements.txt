@@ -1,10 +1,24 @@
-# Runtime dependencies (sober: stdlib does history via sqlite3).
-fastapi>=0.110
-uvicorn[standard]>=0.29
-pydantic>=2.6
+# Dépendances d'exécution. Sobre : l'historique passe par sqlite3 (bibliothèque
+# standard), et le moteur n'est PAS une dépendance Python — c'est un serveur
+# ComfyUI que l'on pilote par son API HTTP.
 
-# The engine itself is the official ComfyUI CLI, installed and invoked out of
-# process — NOT a Python dependency of this service:
-#   pip install comfy-cli
-# The bridge shells out to `comfy run --workflow <file> --wait`. In dry-run
-# (COMFY_DRY_RUN=1, the default) no ComfyUI install is required.
+fastapi>=0.110          # l'API REST et la console
+uvicorn[standard]>=0.29 # le serveur qui la sert
+pydantic>=2.6           # la validation des intentions (RFC 7807 en sortie)
+
+# Obligatoire : l'élément NEUTRE envoyé quand aucun média n'est fourni est une
+# image générée ici. Sans Pillow, le workflow tournerait sur le contenu qu'il
+# embarque — exactement la fuite que ce mécanisme empêche. Sert aussi à mesurer
+# les images produites pour les comparer à la demande.
+pillow>=10.0
+
+# Fortement recommandé : la progression réelle rapportée par ComfyUI arrive par
+# son websocket (la bibliothèque de ses propres exemples). Sans lui le service
+# fonctionne, mais se rabat sur l'interrogation de l'historique et n'affiche plus
+# l'avancement pas à pas — il le dit alors explicitement.
+websocket-client>=1.7
+
+# Optionnel : extraction un-clic d'un workflow sauvé dans ComfyUI, via son propre
+# graphToPrompt dans un navigateur sans fenêtre. Sans lui, l'import se fait à la
+# main (Workflow -> Export (API) dans ComfyUI).
+#   pip install playwright && playwright install chromium

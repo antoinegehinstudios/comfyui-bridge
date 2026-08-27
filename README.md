@@ -73,6 +73,36 @@ tests/                   # test_injector, test_reconciler, test_api
 scripts/smoke.py         # test de bout en bout SANS dépendance
 ```
 
+## Ce qu'il faut pour que ça tourne
+
+**Un serveur ComfyUI** — c'est lui qui calcule ; la passerelle ne fait que le
+piloter par son API HTTP. Elle s'attache à celui qui répond déjà (ComfyUI
+Desktop, un service…) ; pour qu'elle le *lance* elle-même, déclarez son chemin
+dans `_data/engines.local.json` (voir plus bas). Les **modèles** dont un workflow
+a besoin doivent être installés dans ComfyUI : la passerelle ne les télécharge
+pas, elle relaie ce que ComfyUI répond quand il en manque un.
+
+**Python 3.10 ou plus** (développé et éprouvé sur 3.14).
+
+```bash
+pip install -r requirements.txt
+```
+
+| paquet | rôle | son absence |
+|---|---|---|
+| `fastapi`, `uvicorn`, `pydantic` | l'API REST et la console | rien ne démarre |
+| `pillow` | l'**élément neutre** envoyé quand aucun média n'est fourni ; la mesure des images livrées | le workflow tournerait sur le contenu qu'il embarque — la fuite même que ce mécanisme empêche |
+| `websocket-client` | la progression réelle, telle que ComfyUI la diffuse | fonctionne, mais se rabat sur l'interrogation de l'historique : plus d'avancement pas à pas, et il le dit |
+| `playwright` *(optionnel)* | l'extraction **un-clic** d'un workflow sauvé, par le `graphToPrompt` de ComfyUI | l'import se fait à la main : *Workflow → Export (API)* dans ComfyUI, puis « Importer » |
+
+```bash
+pip install playwright && playwright install chromium   # pour l'extraction un-clic
+pip install -r requirements-dev.txt                     # pour lancer les tests
+```
+
+Rien d'autre : l'historique des runs passe par `sqlite3` (bibliothèque standard),
+et aucun service tiers n'est appelé.
+
 ## Ce qui est livré, ce qui appartient à la machine
 
 Le paquet ne décrit **aucune machine** : ni chemin d'installation, ni workflow
