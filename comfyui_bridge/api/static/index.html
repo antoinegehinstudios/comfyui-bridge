@@ -662,12 +662,11 @@ async function loadEstimate(){
       const how = e.basis === "work-fit"
         ? `d’après ${e.samples} run(s) mesuré(s) : ~${humanDuration(e.setup_s)} de mise en route `
           + `(variable selon que le modèle est déjà chargé) + ${e.per_unit_s} s par unité de charge`
-        : e.basis === "work-rate"
-        ? `d’après ${e.samples} run(s) mesuré(s) d’une seule taille, rapporté à la charge de CELUI-CI`
         // Sans mesure en charge, ce chiffre est une MÉDIANE : il ne bouge pas
         // avec les paramètres. Le taire serait le mensonge le plus facile ici.
         : `d’après ${e.samples} run(s), ${e.basis === "same-config" ? "même configuration" : "autres configurations"}`
-          + ` — les paramètres n’entrent pas encore dans ce chiffre`;
+          + ` — les paramètres n’entrent pas dans ce chiffre `
+          + `(il faut deux tailles mesurées pour séparer la mise en route de la charge)`;
       el.innerHTML = `⏱ <b>~${humanDuration(e.seconds)}</b> pour ${escapeHtml(size)}${escapeHtml(frames)}${escapeHtml(steps)}`
         + `<span class="hint"> — ${how} ; de ${humanDuration(e.min)} à ${humanDuration(e.max)}</span>`;
     }

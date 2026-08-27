@@ -269,9 +269,16 @@ class Orchestrator:
         measured = result.execution_s
         if measured is None and result.simulated:
             measured = _time.monotonic() - started_at
+        # A run the engine served from its cache delivered a real file in no
+        # time: recording it as a measure of load would teach that this size
+        # costs nothing.
+        if result.cached:
+            self._store.append_log(
+                job_id, "résultat resservi par le cache du moteur — durée non représentative")
         self._journal.record(self._host, plan.workflow, plan.params, status="succeeded",
-                             duration_s=measured, work=plan.work,
-                             work_model=plan.work_model)
+                             duration_s=measured,
+                             work=None if result.cached else plan.work,
+                             work_model=None if result.cached else plan.work_model)
         # Surface the backend's own truthful note (e.g. "dry-run: no render").
         if result.raw_stdout:
             self._store.append_log(job_id, result.raw_stdout.strip()[:200])

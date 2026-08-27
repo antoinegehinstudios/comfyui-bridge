@@ -121,19 +121,30 @@ def test_no_engine_measure_means_no_duration_recorded():
 def test_estimate_scales_with_the_actual_work(reg):
     """Resolution and frame count must change the answer: 704x448 for 2 s is
     not the same job as 1280x720 for 5 s, even on the same workflow."""
-    # one measured run: 100 units of work took 200 s -> 2 s per unit
-    reg.record("h", "wf", plan().params, status="succeeded", duration_s=200.0, work=100.0)
-    small = reg.estimate_duration("h", "wf", work=50.0)
-    big = reg.estimate_duration("h", "wf", work=400.0)
-    assert small["seconds"] == 100 and big["seconds"] == 800
-    assert small["basis"] == "work-rate"
+    # Two measured sizes: 100 units took 200 s, 200 units took 300 s.
+    # -> 100 s of setup + 1 s per unit, both read from the measurements.
+    reg.record("h", "wf", {"width": 100}, status="succeeded", duration_s=200.0,
+               work=100.0, work_model=2)
+    reg.record("h", "wf", {"width": 200}, status="succeeded", duration_s=300.0,
+               work=200.0, work_model=2)
+    small = reg.estimate_duration("h", "wf", work=50.0, work_model=2)
+    big = reg.estimate_duration("h", "wf", work=400.0, work_model=2)
+    assert small["basis"] == "work-fit" and big["basis"] == "work-fit"
+    assert small["seconds"] == 150 and big["seconds"] == 500
+    assert big["seconds"] > small["seconds"]
 
 
-def test_work_rate_uses_the_median_of_observed_rates(reg):
-    for dur, wk in ((100.0, 100.0), (300.0, 100.0), (1000.0, 100.0)):
-        reg.record("h", "wf", plan().params, status="succeeded", duration_s=dur, work=wk)
-    est = reg.estimate_duration("h", "wf", work=100.0)
-    assert est["seconds"] == 300           # median rate, not dragged by the outlier
+def test_one_measured_size_falls_back_to_a_median_no_outlier_can_drag(reg):
+    """Same size, three very different durations: with a single size there is
+    nothing to fit, and the answer must be the middle one — not the average,
+    which the 1000 s outlier would carry away."""
+    for dur in (100.0, 300.0, 1000.0):
+        reg.record("h", "wf", plan().params, status="succeeded", duration_s=dur,
+                   work=100.0, work_model=2)
+    est = reg.estimate_duration("h", "wf", work=100.0, work_model=2,
+                                config=plan().config)
+    assert est["basis"] == "same-config"
+    assert est["seconds"] == 300
     assert est["min"] == 100 and est["max"] == 1000
 
 
@@ -190,12 +201,14 @@ def test_the_estimate_accounts_for_the_fixed_cost_of_a_run(tmp_path):
 
 
 def test_a_single_measured_size_cannot_pretend_to_separate_setup_from_work(tmp_path):
+    """Applied proportionally, one measurement announced 29 min for a run that
+    takes 2: the fixed cost of a run is invisible from a single size."""
     from comfyui_bridge.hermes.registry import ProblemRegistry
     reg = ProblemRegistry(tmp_path / "h.sqlite3")
-    reg.record("h", "wf", {"width": 704, "height": 448}, status="succeeded",
-               duration_s=126.2, work=15.14)
-    est = reg.estimate_duration("h", "wf", work=15.14)
-    assert est["basis"] == "work-rate"
+    reg.record("h", "wf", {"width": 352, "height": 224}, status="succeeded",
+               duration_s=110.0, work=10.4, work_model=2)
+    est = reg.estimate_duration("h", "wf", work=166.5, work_model=2)
+    assert est is None or est["basis"] not in {"work-fit", "work-rate"}
 
 
 def test_cancelling_a_run_is_not_recorded_as_a_workflow_problem():

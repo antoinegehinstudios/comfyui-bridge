@@ -175,3 +175,16 @@ def test_a_run_left_in_flight_is_collected_after_a_restart(tmp_path):
     assert registry.rows == [("wf", "succeeded", 42.0, 2.0)]
     # The collected one is forgotten; the one still running stays written down.
     assert list(log.entries()) == ["p-2"]
+
+
+def test_a_run_served_from_the_engine_cache_teaches_nothing_about_cost():
+    """Measured: an identical intent came back in 0.3 s, 48 of 51 nodes reused.
+    A real file — and a duration that must never be fitted as a cost."""
+    from comfyui_bridge.adapter.comfy_http import _served_from_cache
+
+    reused = {"status": {"messages": [["execution_cached", {"nodes": ["1", "2", "75"]}]]},
+              "outputs": {"75": {"images": [{"filename": "v.mp4"}]}}}
+    computed = {"status": {"messages": [["execution_cached", {"nodes": ["1", "2"]}]]},
+                "outputs": {"75": {"images": [{"filename": "v.mp4"}]}}}
+    assert _served_from_cache(reused) is True
+    assert _served_from_cache(computed) is False

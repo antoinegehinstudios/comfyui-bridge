@@ -72,3 +72,6 @@ class BackendResult:
     # Time the ENGINE spent computing, as it measured it — queue waiting
     # excluded. None when the engine did not report it.
     execution_s: float | None = None
+    # The engine served this from its own cache: the media is real, the duration
+    # measures nothing. Kept apart so it never teaches the wrong lesson.
+    cached: bool = False

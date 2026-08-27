@@ -103,13 +103,13 @@ class ProblemRegistry:
                           work_model: int | None = None) -> dict[str, Any] | None:
         """How long this will take, from measured runs.
 
-        With a work figure (pixels x frames x steps) and runs of DIFFERENT sizes,
-        the fit is affine: ``setup + work x seconds-per-unit``. A run carries a
-        real fixed cost (loading the model), so a purely proportional rule put a
-        70 s run at 8 s. With a single size measured, only the proportional rule
-        is available and it is labelled as such. Without any work figure, fall
-        back to the median duration of the same configuration. Returns None when
-        nothing comparable was ever measured.
+        With a work figure (megapixels x frames x steps) and runs of DIFFERENT
+        sizes, the fit is affine: ``setup + work x seconds-per-unit``. A run
+        carries a real fixed cost (loading the model), so a purely proportional
+        rule put a 70 s run at 8 s — and, the other way round, a 2 min run at
+        29 min. One measured size therefore yields NO load-based answer: the
+        median of that configuration is returned instead, labelled as such.
+        Returns None when nothing comparable was ever measured.
         """
         if work:
             # Only runs whose work was counted the SAME way: mixing barèmes
@@ -131,14 +131,10 @@ class ProblemRegistry:
                         "setup_s": round(setup), "per_unit_s": round(per_unit, 2),
                         "min": max(1, round(seconds - spread)),
                         "max": max(1, round(seconds + spread))}
-            rates = sorted(d / w for w, d in points)
-            if rates:
-                n = len(rates)
-                rate = rates[n // 2] if n % 2 else (rates[n // 2 - 1] + rates[n // 2]) / 2
-                return {"seconds": max(1, round(rate * work)), "samples": n,
-                        "basis": "work-rate", "work": round(work, 1),
-                        "min": max(1, round(rates[0] * work)),
-                        "max": max(1, round(rates[-1] * work))}
+            # One size measured cannot separate the fixed cost from the work:
+            # applied proportionally it announced 29 min for a run of 2 (110 s
+            # measured at load 10, asked for load 166). Better to fall back on a
+            # plain median and say a second size is needed.
 
         # No work figure (or nothing fitted yet): exact configuration first,
         # then the workflow's other configurations — labelled either way.

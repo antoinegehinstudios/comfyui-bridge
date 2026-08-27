@@ -55,6 +55,21 @@ def _execution_seconds(entry: dict) -> float | None:
     return None
 
 
+def _served_from_cache(entry: dict) -> bool:
+    """True when every delivering node was reused rather than computed.
+
+    ComfyUI says it itself (``execution_cached``). Measured: an identical
+    intent came back in 0.3 s with 48 of 51 nodes reused — a real file, and a
+    duration that says nothing about the cost of producing one.
+    """
+    cached: set[str] = set()
+    for m in ((entry.get("status") or {}).get("messages") or []):
+        if isinstance(m, list) and len(m) > 1 and m[0] == "execution_cached":
+            cached.update(str(n) for n in (m[1].get("nodes") or []))
+    producing = {str(n) for n in (entry.get("outputs") or {})}
+    return bool(producing) and producing.issubset(cached)
+
+
 class ComfyUIHttpBackend:
     def __init__(self, settings: Settings, catalog: WorkflowCatalog,
                  inflight: InflightLog | None = None) -> None:
@@ -150,7 +165,7 @@ class ComfyUIHttpBackend:
             except Exception:
                 pass
         return BackendResult(artifacts=artifacts, raw_stdout=f"comfyui prompt {prompt_id}",
-                             execution_s=measured)
+                             execution_s=measured, cached=_served_from_cache(entry))
 
     def _note_inflight(self, prompt_id: str, plan: ExecutionPlan) -> None:
         if self._inflight is None:

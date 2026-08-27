@@ -371,8 +371,14 @@ appris l'absorbe. L'annuler rendait l'estimation sourde à tout : 24 images et
 
 La **mise en route** et le **coefficient** ne sont jamais posés : ils sont
 ajustés au moindre carré sur les runs mesurés de CE workflow, sur cette machine.
-Tant qu'aucun run n'a été mesuré, la console le dit au lieu de laisser croire
-que les paramètres comptent. Le barème de charge est **versionné** : le changer
+Il faut **deux tailles mesurées** pour séparer la mise en route de la charge :
+avec une seule, aucune estimation en charge n'est rendue (appliqué
+proportionnellement, un run mesuré à 110 s en annonçait 29 min pour un autre qui
+en prend 2). Tant que c'est le cas, la console le dit au lieu de laisser croire
+que les paramètres comptent, et le repli est la médiane de cette configuration.
+Un run **resservi par le cache du moteur** livre un vrai fichier en quelques
+dixièmes de seconde : sa durée est journalisée mais n'entre jamais dans
+l'ajustement. Le barème de charge est **versionné** : le changer
 n'autorise pas à mélanger deux échelles dans le même ajustement.
 
 ## Hermes — réconciliation contre les problèmes CONNUS
