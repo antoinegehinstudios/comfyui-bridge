@@ -19,7 +19,7 @@ from ..core.errors import BackendExecutionError
 from ..core.plan import Artifact, BackendResult, ExecutionPlan
 from .catalog import WorkflowCatalog, build_injection
 from .injector import apply_overrides, inject
-from .media import MEDIA_EXT, artifact_url, media_kind
+from .media import DELIVERABLE_EXT, artifact_url, is_working_file, media_kind
 
 
 class ComfyCliBackend:
@@ -131,7 +131,8 @@ class ComfyCliBackend:
     def _collect(self, out_dir: Path, before: set[Path]) -> list[Artifact]:
         new_files = [
             p for p in out_dir.rglob("*")
-            if p.is_file() and p not in before and p.suffix.lower() in MEDIA_EXT
+            if p.is_file() and p not in before
+            and p.suffix.lower() in DELIVERABLE_EXT and not is_working_file(p)
         ]
         new_files.sort(key=lambda p: p.stat().st_mtime)
         return [

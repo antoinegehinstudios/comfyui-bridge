@@ -79,6 +79,9 @@ class WorkflowCatalog:
         self._specs = specs
         self._workflows_dir = Path(workflows_dir) if workflows_dir else None
         self._templates: dict[str, dict[str, Any]] = {}
+        # Noms servis par une entrée déclarée alors qu'un graphe enregistré
+        # porte le même : ce qui est masqué doit pouvoir être dit.
+        self.shadowed: tuple[str, ...] = ()
 
     # -- maintained manifest (provenance + dependencies) ----------------------
 
@@ -335,8 +338,13 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
     if default not in specs:
         raise WorkflowMappingError(f"{path}: default {default!r} not among declared workflows")
 
-    # Auto-discover API-format workflows dropped in the workflows folder.
-    # Declared entries win on a name clash (explicit bindings override).
+    # Les graphes déposés dans le dossier des workflows sont découverts seuls.
+    # Sur un nom déjà DÉCLARÉ, l'entrée déclarée l'emporte — ses liaisons sont
+    # écrites à la main, donc voulues. Mais le masquage était silencieux : un
+    # workflow enregistré par l'API répondait « praticable » jusqu'au
+    # redémarrage, puis cédait la place sans un mot. Les collisions sont donc
+    # retenues et exposées.
+    masques: list[str] = []
     if workflows_dir:
         wd = Path(workflows_dir)
         index: dict[str, Any] = {}
@@ -348,7 +356,10 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
                 index = {}
         if wd.is_dir():
             for f in sorted(wd.glob("*.json")):
-                if f.name == "index.json" or f.stem in specs:
+                if f.name == "index.json":
+                    continue
+                if f.stem in specs:
+                    masques.append(f.stem)
                     continue
                 try:
                     graph = json.loads(f.read_text(encoding="utf-8"))
@@ -357,5 +368,7 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
                 if autobind.looks_like_api_graph(graph):
                     specs[f.stem] = _spec_from_graph(f.stem, f, graph, index.get(f.stem))
 
-    return WorkflowCatalog(default=default, specs=specs,
-                           workflows_dir=Path(workflows_dir) if workflows_dir else None)
+    catalogue = WorkflowCatalog(default=default, specs=specs,
+                                workflows_dir=Path(workflows_dir) if workflows_dir else None)
+    catalogue.shadowed = tuple(masques)
+    return catalogue

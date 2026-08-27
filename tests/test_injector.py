@@ -53,3 +53,23 @@ def test_a_raw_input_that_points_nowhere_blames_the_caller_not_the_server():
         apply_overrides(graph, {"3.nope": 5})
     # …and a real target is simply applied.
     assert apply_overrides(graph, {"3.steps": 5})["3"]["inputs"]["steps"] == 5
+
+
+def test_the_output_name_reaches_every_saving_node():
+    """Un workflow qui délivre une image ET une mesure a deux nœuds de
+    sauvegarde. N'en piloter qu'un laissait la moitié des livrables hors du nom
+    demandé — introuvables pour l'appelant qui les cherche."""
+    from comfyui_bridge.adapter.injector import inject
+    from comfyui_bridge.adapter.mapping import Binding
+
+    graphe = {
+        "4": {"class_type": "SaveImage", "inputs": {"filename_prefix": "regard/annote"}},
+        "5": {"class_type": "SaveText", "inputs": {"filename_prefix": "faits"}},
+        "6": {"class_type": "KSampler", "inputs": {"steps": 20}},
+    }
+    sorti = inject(graphe, {"filename_prefix": Binding("4", "filename_prefix"),
+                            "steps": Binding("6", "steps")},
+                   {"filename_prefix": "cortex/analyse", "steps": 8})
+    assert sorti["4"]["inputs"]["filename_prefix"] == "cortex/analyse"
+    assert sorti["5"]["inputs"]["filename_prefix"] == "cortex/analyse"   # celui-ci était oublié
+    assert sorti["6"]["inputs"]["steps"] == 8        # les autres restent liés à leur nœud

@@ -158,10 +158,19 @@ class Orchestrator:
             ignored=ignored,
         )
 
-    def plan_and_reconcile(self, intent: RenderIntent) -> ExecutionPlan:
-        """Build a plan and put it past Hermes. Raises when a KNOWN problem stands."""
+    def plan_and_reconcile(self, intent: RenderIntent,
+                           force: bool = False) -> ExecutionPlan:
+        """Construire un plan et le soumettre à la mémoire des problèmes.
+
+        ``force`` passe outre un refus : ce qui bloque encore coûte cher à
+        redécouvrir, mais un souvenir doit toujours pouvoir être démenti par les
+        faits — sinon la seule preuve de la réparation est interdite par la
+        mémoire elle-même.
+        """
         plan = self.build_plan(intent)
         verdict = self._reconciler.reconcile(plan)
+        if not verdict.accepted and force:
+            return plan
         if not verdict.accepted:
             raise HardwareReconciliationError(
                 verdict.reason,
@@ -191,15 +200,17 @@ class Orchestrator:
 
     # -- job lifecycle --------------------------------------------------------
 
-    def accept(self, intent: RenderIntent) -> tuple[Job, ExecutionPlan]:
+    def accept(self, intent: RenderIntent, force: bool = False) -> tuple[Job, ExecutionPlan]:
         """Synchronous, cheap: plan + reconcile, then register a pending job."""
-        plan = self.plan_and_reconcile(intent)
+        plan = self.plan_and_reconcile(intent, force=force)
         job = self._store.create(
             kind=plan.kind,
             config=plan.config,
             workflow=plan.workflow,
         )
-        self._store.append_log(job.id, f"accepted: workflow '{plan.workflow}' ({plan.config}), no known problem")
+        self._store.append_log(job.id, f"accepted: workflow '{plan.workflow}' ({plan.config})"
+                                       + (" — MALGRÉ un problème retenu (essai forcé)" if force
+                                          else ", no known problem"))
         if plan.ignored:
             self._store.append_log(
                 job.id, "non appliqué — ce workflow n'expose pas : " + ", ".join(plan.ignored))

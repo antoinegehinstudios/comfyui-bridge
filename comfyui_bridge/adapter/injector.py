@@ -16,14 +16,26 @@ from ..core.errors import UnknownWorkflowInputError, WorkflowMappingError
 from .mapping import Binding
 
 
+# Ce paramètre nomme la sortie du RUN, pas celle d'un nœud : un workflow qui
+# délivre une image ET une mesure a deux nœuds de sauvegarde, et n'en piloter
+# qu'un laissait la moitié des livrables hors du nom demandé — donc introuvable
+# pour l'appelant qui les cherche.
+_APPLIQUE_A_TOUS = frozenset({"filename_prefix"})
+
+
 def inject(
     workflow: dict[str, Any],
     bindings: dict[str, Binding],
     params: dict[str, Any],
 ) -> dict[str, Any]:
     graph = copy.deepcopy(workflow)
+    for key in _APPLIQUE_A_TOUS & set(params):
+        for node in graph.values():
+            inputs = node.get("inputs") if isinstance(node, dict) else None
+            if isinstance(inputs, dict) and isinstance(inputs.get(key), str):
+                inputs[key] = params[key]
     for key, binding in bindings.items():
-        if key not in params:
+        if key not in params or key in _APPLIQUE_A_TOUS:
             continue
         node = graph.get(binding.node)
         if node is None:

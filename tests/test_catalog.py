@@ -71,3 +71,33 @@ def test_workflow_kind_drives_frame_count(tmp_path):
     assert plan.kind == "video"
     assert plan.params["latent_batch"] == 24   # 2 s x 12 fps
     assert plan.config.endswith("x24")
+
+
+def test_a_registered_graph_shadowed_by_a_declaration_is_named(tmp_path):
+    """Une entrée déclarée l'emporte sur un graphe enregistré du même nom. Le
+    masquage était silencieux : l'enregistrement semblait réussir, puis cédait
+    la place au redémarrage."""
+    import json
+
+    from comfyui_bridge.adapter.catalog import load_catalog
+
+    graphe = {"3": {"class_type": "KSampler",
+                    "inputs": {"seed": 1, "steps": 20, "cfg": 7.0, "denoise": 1.0}},
+              "9": {"class_type": "SaveImage",
+                    "inputs": {"filename_prefix": "x", "images": ["3", 0]}}}
+    dossier = tmp_path / "workflows"
+    dossier.mkdir()
+    (dossier / "collision.json").write_text(json.dumps(graphe), encoding="utf-8")
+    (tmp_path / "libre.json").write_text(json.dumps(graphe), encoding="utf-8")
+    (dossier / "libre.json").write_text(json.dumps(graphe), encoding="utf-8")
+
+    declare = tmp_path / "reconciliation.json"
+    declare.write_text(json.dumps({
+        "default": "collision",
+        "workflows": {"collision": {"kind": "image", "workflow": "libre.json",
+                                    "bindings": {"seed": {"node": "3", "input": "seed"}}}},
+    }), encoding="utf-8")
+
+    cat = load_catalog(declare, dossier)
+    assert cat.shadowed == ("collision",)          # nommé…
+    assert "libre" in cat.names()                  # …et le reste est bien découvert

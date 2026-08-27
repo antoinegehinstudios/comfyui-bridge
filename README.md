@@ -488,6 +488,31 @@ dixièmes de seconde : sa durée est journalisée mais n'entre jamais dans
 l'ajustement. Le barème de charge est **versionné** : le changer
 n'autorise pas à mélanger deux échelles dans le même ajustement.
 
+## Ce qu'un run livre
+
+Un workflow ne produit pas que du média : certains **mesurent** et rendent des
+nombres, une légende, une liste de régions. ComfyUI rapporte ces fichiers sous
+la clé `files` de son historique, à côté de `images`, `videos` et `audio` — les
+ignorer livrait l'illustration d'une analyse sans jamais livrer son résultat.
+Les deux backends lisent la même définition (`adapter/media.py`), et ne
+ramassent jamais les fichiers de travail du service lui-même.
+
+Le nom de sortie (`label`) atteint **tous** les nœuds de sauvegarde : un
+workflow qui délivre une image et une mesure a deux nœuds, et n'en piloter qu'un
+laissait la moitié des livrables hors du nom demandé.
+
+## Quel workflow fait autorité ?
+
+Un même nom peut venir de deux sources : une entrée **déclarée** dans le fichier
+de réconciliation, ou un graphe **enregistré** par `POST /v1/workflows` (stocké
+dans le dossier des workflows). **L'entrée déclarée l'emporte** — ses liaisons
+sont écrites à la main, donc voulues.
+
+Ce masquage était silencieux : un enregistrement semblait réussir puis cédait la
+place au redémarrage. Désormais l'ingestion sous un nom déclaré est **refusée**
+avec la raison, et `GET /v1/workflows` liste les masquages déjà en place sous
+`shadowed_by_declaration`.
+
 ## Hermes — réconciliation contre les problèmes CONNUS
 
 Hermes est un **rôle de réconciliation** appelé en **mode local**. Sa valeur est
@@ -495,6 +520,14 @@ la mémoire, pas la ruse : avant un run, il consulte ce qui a **déjà mal tourn
 ici** et ce qui est **vérifiable d'avance**. Rien n'est inventé — aucune
 heuristique de VRAM, aucun seuil deviné. Un registre vide signifie honnêtement
 « aucun problème connu », et le run passe.
+
+Un souvenir ne refuse un run que si **réessayer coûte cher** : refuser interdit
+aussi le seul run qui prouverait la réparation. Une dépendance absente est
+rejetée par le moteur avant tout calcul, donc la retenter ne coûte rien — elle
+**avertit** (`warnings`) sans bloquer. Un dépassement mémoire ou un blocage du
+système coûtent des minutes : ceux-là refusent, et `POST /v1/render?force=true`
+laisse essayer malgré tout. Réenregistrer un workflow avec un graphe **différent**
+oublie ce qu'on savait de l'ancien : ce souvenir ne parle plus de ce workflow.
 
 Il refuse un run quand :
 

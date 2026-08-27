@@ -48,12 +48,23 @@ def classify(text: str) -> str:
     return UNKNOWN
 
 
-# Kinds that a repeat run would hit again unless the environment changed. A
-# recorded problem of these kinds is a reason to warn/refuse up front.
-BLOCKING = frozenset({OOM, MISSING_MODEL, MISSING_NODE, BLOCKED_BY_OS})
+# Refuser d'avance n'a de sens que si RÉESSAYER COÛTE CHER. Un souvenir qui
+# refuse interdit aussi le seul run qui prouverait la réparation : il ne doit
+# donc barrer la route que lorsque l'essai se paie.
+#
+#   - une dépendance absente est refusée par le moteur AVANT tout calcul (il
+#     valide le graphe et répond en quelques millisecondes) : la retenter ne
+#     coûte rien, et l'interdire condamnait un workflow réparé à rester refusé
+#     pour une cause disparue ;
+#   - un dépassement mémoire ou un blocage du système coûtent des minutes, et
+#     peuvent emporter le moteur : ceux-là valent un refus, avec une porte
+#     explicite pour qui veut quand même essayer.
+BLOCKING = frozenset({OOM, BLOCKED_BY_OS})
 
-# Of those, the ones that owe nothing to the size of the job: an absent model
-# file stays absent at any resolution, whereas an out-of-memory depends on how
-# much was asked for. Only the size-dependent ones may be retried by changing
-# the configuration.
-INDEPENDENT_OF_CONFIG = frozenset({MISSING_MODEL, MISSING_NODE, BLOCKED_BY_OS})
+# Connus, mais sans frais à redécouvrir : on prévient, on ne refuse pas.
+CHEAP_TO_RETRY = frozenset({MISSING_MODEL, MISSING_NODE})
+
+# Parmi les bloquants, ceux qui ne doivent rien à la taille du travail : un
+# système qui bloque un composant le bloque à toute résolution, alors qu'un
+# dépassement mémoire dépend de ce qui a été demandé.
+INDEPENDENT_OF_CONFIG = frozenset({BLOCKED_BY_OS})

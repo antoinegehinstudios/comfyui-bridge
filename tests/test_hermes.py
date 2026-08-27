@@ -48,12 +48,25 @@ def test_non_blocking_problem_is_context_not_refusal(reg):
     assert v.accepted  # a timeout may not recur — do not refuse on it
 
 
-def test_remembers_comfyui_missing_model_verdict(reg):
-    """Hermes does not re-check dependencies — it remembers ComfyUI's own verdict."""
+def test_a_missing_dependency_warns_but_never_refuses(reg):
+    """Le moteur refuse lui-même une dépendance absente, avant tout calcul : la
+    retenter ne coûte rien. Refuser d'avance interdisait le seul run qui aurait
+    prouvé la réparation — un workflow réparé restait bloqué pour une cause
+    disparue."""
     reg.record("h", "wf", plan().params, status="failed", problem=P.MISSING_MODEL,
                detail="ComfyUI rejected the graph (HTTP 400): value_not_in_list ckpt_name")
     v = HermesReconciler(reg, host="h").reconcile(plan())
-    assert not v.accepted and v.problem == P.MISSING_MODEL
+    assert v.accepted                                   # on laisse essayer…
+    assert any(P.MISSING_MODEL in k for k in v.known_problems)   # …en le disant
+    assert reg.blocking_problems("h", "wf") == []
+    assert [w["problem"] for w in reg.known_warnings("h", "wf")] == [P.MISSING_MODEL]
+
+
+def test_an_out_of_memory_still_refuses(reg):
+    """Celui-là coûte des minutes et peut emporter le moteur."""
+    reg.record("h", "wf", plan().params, status="failed", problem=P.OOM, detail="out of memory")
+    v = HermesReconciler(reg, host="h").reconcile(plan())
+    assert not v.accepted and v.problem == P.OOM
 
 
 def test_scope_isolates_knowledge(tmp_path):
@@ -167,20 +180,23 @@ def test_readiness_and_the_reconciler_read_the_memory_the_same_way(tmp_path):
     assert reg.blocking_problems("h", "wf") == []
 
 
-def test_an_absent_model_blocks_every_configuration(tmp_path):
-    """Changing the resolution does not install a missing model: retrying at
-    another size only burns another rejection. An out-of-memory is different —
-    it is precisely about how much was asked for."""
+def test_a_refusal_applies_to_the_configuration_that_met_it(tmp_path):
+    """Un dépassement mémoire parle de la taille demandée : une autre taille
+    reste tentable. Un blocage du système, lui, vaut à toute résolution."""
     from comfyui_bridge.core.cost import config_fingerprint
     from comfyui_bridge.hermes.registry import ProblemRegistry
     reg = ProblemRegistry(tmp_path / "h.sqlite3")
-    big = {"width": 2048, "height": 2048}
-    small = {"width": 512, "height": 512}
-    reg.record("h", "wf", big, status="failed", problem="missing-model", detail="not in list")
-    assert [p["problem"] for p in reg.blocking_problems("h", "wf", config_fingerprint(small))] \
-        == ["missing-model"]
-    reg.record("h", "oomwf", big, status="failed", problem="oom", detail="out of memory")
-    assert reg.blocking_problems("h", "oomwf", config_fingerprint(small)) == []
+    grand = {"width": 2048, "height": 2048}
+    petit = {"width": 512, "height": 512}
+
+    reg.record("h", "oomwf", grand, status="failed", problem="oom", detail="out of memory")
+    assert reg.blocking_problems("h", "oomwf", config_fingerprint(grand)) != []
+    assert reg.blocking_problems("h", "oomwf", config_fingerprint(petit)) == []
+
+    reg.record("h", "oswf", grand, status="failed", problem="blocked-by-os",
+               detail="code integrity")
+    assert [p["problem"]
+            for p in reg.blocking_problems("h", "oswf", config_fingerprint(petit))]         == ["blocked-by-os"]
 
 
 def test_the_estimate_accounts_for_the_fixed_cost_of_a_run(tmp_path):
@@ -283,3 +299,56 @@ def test_a_pinned_duration_is_part_of_the_configuration():
     # A batch of 1 carries no quantity: the duration must still show.
     assert config_fingerprint({"duration_s": 6.0, "latent_batch": 1}) == "x1-6s"
     assert config_fingerprint({}) == "workflow-default"
+
+
+def test_a_standing_refusal_can_always_be_overridden():
+    """Un souvenir qui refuse interdit aussi le run qui prouverait la
+    réparation. Ce qui bloque encore coûte cher, donc le refus reste — mais une
+    porte explicite doit exister, sinon la mémoire ne peut jamais être démentie."""
+    from comfyui_bridge.core.errors import HardwareReconciliationError
+    from comfyui_bridge.core.intention import RenderIntent
+    from comfyui_bridge.core.orchestrator import Orchestrator
+    from comfyui_bridge.core.plan import Reconciliation
+    from comfyui_bridge.core.workflow import WorkflowProfile
+
+    class _Registre:
+        def get_profile(self, name): return WorkflowProfile("wf", "image", accepts=("prompt",))
+        def names(self): return ["wf"]
+        def default_name(self): return "wf"
+
+    class _Refuse:
+        def reconcile(self, plan):
+            return Reconciliation(False, plan, "oom déjà rencontré", plan.config, [], problem="oom")
+
+    orch = Orchestrator(backend=None, reconciler=_Refuse(), journal=None, store=None,
+                        host_id="h", registry=_Registre())
+    intention = RenderIntent(prompt="p")
+
+    import pytest
+    with pytest.raises(HardwareReconciliationError):
+        orch.plan_and_reconcile(intention)
+    assert orch.plan_and_reconcile(intention, force=True).workflow == "wf"
+
+
+def test_forgetting_problems_needs_the_definition_to_have_changed(tmp_path):
+    """Réenregistrer un workflow À L'IDENTIQUE n'apprend rien de neuf : effacer
+    la mémoire à chaque ingestion la viderait sans raison."""
+    from comfyui_bridge.adapter.comfyui_client import source_hash
+    graphe = {"1": {"class_type": "KSampler", "inputs": {"steps": 20}}}
+    identique = {"1": {"class_type": "KSampler", "inputs": {"steps": 20}}}
+    modifie = {"1": {"class_type": "KSampler", "inputs": {"steps": 8}}}
+    assert source_hash(graphe) == source_hash(identique)
+    assert source_hash(graphe) != source_hash(modifie)
+
+
+def test_forget_problems_only_removes_failures(tmp_path):
+    """Les mesures de durée servent l'estimation : les effacer avec les
+    problèmes ferait tout réapprendre à chaque ingestion."""
+    from comfyui_bridge.hermes.registry import ProblemRegistry
+    reg = ProblemRegistry(tmp_path / "h.sqlite3")
+    reg.record("h", "wf", {"width": 512}, status="succeeded", duration_s=30.0,
+               work=5.0, work_model=2)
+    reg.record("h", "wf", {"width": 512}, status="failed", problem="oom", detail="oom")
+    assert reg.forget_problems("h", "wf") == 1
+    assert reg.problems_for("h", "wf") == []
+    assert reg.recent("h")[0]["status"] == "succeeded"      # la mesure survit

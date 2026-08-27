@@ -17,9 +17,12 @@ from comfyui_bridge.config import Settings  # noqa: E402
 @pytest.fixture()
 def client():
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="comfybridge_api_"))
+    # workflows_dir isolé : sans lui, un test qui importe un workflow l'écrit
+    # dans le catalogue réel du poste et le laisse là.
     settings = Settings(comfy_backend="cli", dry_run=True, comfyui_base_url="http://127.0.0.1:9",
                         comfyui_request_timeout_s=1, hermes_db=tmp / "h.sqlite3",
-                        comfy_output_dir=tmp / "out", hermes_mode="local")
+                        comfy_output_dir=tmp / "out", hermes_mode="local",
+                        workflows_dir=tmp / "workflows")
     app = create_app(settings)
     with TestClient(app) as c:
         yield c
@@ -338,3 +341,53 @@ def test_a_source_deleted_from_comfyui_is_not_passed_over_in_silence():
     state = source_state(_Absent(), _Spec(), now=0.0)
     assert state["fresh"] is False and state["missing"] is True
     forget()
+
+
+GRAPHE_MINIMAL = {
+    "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "modele.safetensors"}},
+    "2": {"class_type": "CLIPTextEncode", "inputs": {"text": "", "clip": ["1", 1]}},
+    "3": {"class_type": "EmptyLatentImage", "inputs": {"width": 512, "height": 512,
+                                                       "batch_size": 1}},
+    "4": {"class_type": "KSampler", "inputs": {"seed": 1, "steps": 20, "cfg": 7.0,
+                                               "model": ["1", 0], "positive": ["2", 0],
+                                               "negative": ["2", 0], "latent_image": ["3", 0]}},
+    "5": {"class_type": "SaveImage", "inputs": {"filename_prefix": "x", "images": ["4", 0]}},
+}
+
+
+def test_importing_a_workflow_actually_works(client):
+    """La route n'était couverte par aucun test : elle référençait deux noms
+    inexistants et échouait donc à CHAQUE appel — après avoir enregistré. Un
+    appelant recevait une erreur pour un import qui avait eu lieu."""
+    r = client.post("/v1/workflows", json={"name": "importe", "workflow": GRAPHE_MINIMAL})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["name"] == "importe"
+    assert "prompt" in body["intent_fields"]
+    # …et il est réellement appelable ensuite.
+    assert "importe" in client.get("/v1/workflows").json()["workflows"]
+    assert client.post("/v1/preview", json={"workflow": "importe", "prompt": "x"}).status_code == 200
+
+
+def test_re_importing_reports_what_changed(client):
+    """Une ré-ingestion doit dire ce qu'elle a re-câblé, comme l'extraction."""
+    client.post("/v1/workflows", json={"name": "reimporte", "workflow": GRAPHE_MINIMAL})
+    assert client.post("/v1/workflows",
+                       json={"name": "reimporte", "workflow": GRAPHE_MINIMAL}
+                       ).json()["changes"]["first_analysis"] is False
+
+    sans_negatif = {k: dict(v, inputs=dict(v["inputs"])) for k, v in GRAPHE_MINIMAL.items()}
+    del sans_negatif["3"]["inputs"]["batch_size"]
+    diff = client.post("/v1/workflows",
+                       json={"name": "reimporte", "workflow": sans_negatif}).json()["changes"]
+    assert "batch" in diff["removed"]
+
+
+def test_both_ingestion_doors_answer_the_same_shape(client):
+    """Les deux routes d'ingestion ont divergé jusqu'à ce que l'une référence des
+    variables propres à l'autre : leur réponse doit rester de même forme."""
+    posted = client.post("/v1/workflows",
+                         json={"name": "forme", "workflow": GRAPHE_MINIMAL}).json()
+    for cle in ("name", "kind", "intent_fields", "bindings", "dependencies",
+                "analysis", "delivers", "changes"):
+        assert cle in posted, cle

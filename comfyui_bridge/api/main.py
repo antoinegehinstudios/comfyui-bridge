@@ -217,6 +217,77 @@ def _freshness(container, spec) -> dict:
     return out
 
 
+def _est_declare(container, name: str) -> bool:
+    """Ce nom vient-il du fichier de réconciliation (et non d'une ingestion) ?
+
+    Un spec déclaré n'a pas de ``source`` et son graphe vit hors du dossier des
+    workflows enregistrés.
+    """
+    try:
+        spec = container.catalog.get_spec(name)
+    except Exception:
+        return False
+    dossier = container.settings.workflows_dir.resolve()
+    try:
+        spec.workflow_path.resolve().relative_to(dossier)
+        return False                     # il vit dans le dossier : c'est un enregistré
+    except ValueError:
+        return True
+
+
+async def _ingest(container, name: str, graph: dict, source: str | None,
+                  source_hash: str | None, titles: dict) -> dict:
+    """Ingérer un graphe et rendre compte de ce que cela change.
+
+    Deux portes mènent ici — un graphe posté, ou un graphe extrait du moteur —
+    et elles doivent produire le MÊME résultat. Écrites deux fois, elles avaient
+    divergé au point que l'une référençait des variables qui n'existaient que
+    dans l'autre.
+    """
+    from ..adapter.freshness import forget
+
+    # La photo d'AVANT, prise avant de remplacer : sans elle, une ré-ingestion
+    # répond « c'est fait » sans dire ce qu'elle a re-câblé.
+    from ..adapter.comfyui_client import source_hash as _empreinte
+
+    # Un nom déjà DÉCLARÉ dans le fichier de réconciliation reprendrait la main
+    # au prochain démarrage : l'ingestion semblerait réussir, puis serait
+    # annulée sans un mot. Autant le refuser tout de suite.
+    if name in getattr(container.catalog, "shadowed", ()) or _est_declare(container, name):
+        raise UnknownWorkflowInputError(
+            f"{name!r} est déclaré dans le fichier de réconciliation : une entrée déclarée "
+            f"reprend la main au redémarrage et annulerait cet enregistrement. Choisis un "
+            f"autre nom, ou retire l'entrée déclarée.", workflow=name)
+
+    avant, empreinte_avant = None, None
+    try:
+        ancien = container.catalog.get_spec(name)
+        empreinte_avant = _empreinte(container.catalog.load_template(ancien))
+        avant = {"kind": ancien.kind,
+                 "bindings": {k: (b.node, b.input) for k, b in ancien.bindings.items()},
+                 "outputs": await run_in_threadpool(_delivery, container, ancien)}
+    except Exception:
+        pass
+
+    spec = container.catalog.register(name, graph, source=source,
+                                      source_hash=source_hash, titles=titles)
+    analysis = await run_in_threadpool(_analyse_workflow, container, spec)
+    forget(name)                      # la question « est-ce à jour ? » a changé de réponse
+
+    # Un souvenir de problème parle d'UNE définition. Quand le graphe change,
+    # il ne dit plus rien de ce qui vient d'être enregistré : le garder laissait
+    # un workflow réparé refusé pour une cause disparue. Un ré-enregistrement à
+    # l'identique, lui, n'efface rien.
+    oublies = 0
+    if empreinte_avant is not None and empreinte_avant != _empreinte(graph):
+        oublies = container.registry.forget_problems(container.settings.host_id, name)
+
+    apres = await run_in_threadpool(_delivery, container, spec)
+    return {**_spec_dict(spec), "analysis": analysis, "delivers": apres,
+            "changes": _rewiring(avant, spec, apres),
+            "forgotten_problems": oublies}
+
+
 def _spec_dict(spec) -> dict:
     return {
         "name": spec.name,
@@ -295,12 +366,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request,
         response: Response,
         background: BackgroundTasks,
+        force: bool = False,
     ) -> JobOut:
         orch = get_orchestrator(request)
         # accept() plans + reconciles synchronously; a strict rejection raises
         # HardwareReconciliationError here and leaves as a 422 problem+json.
         c = request.app.state.container
-        job, plan = orch.accept(intent_in.to_domain())
+        job, plan = orch.accept(intent_in.to_domain(), force=force)
         _with_work(c, plan)
         # Ce qui tourne, c'est l'ANALYSE stockée. Si la source a bougé depuis,
         # le run exécute l'ancienne version : mesuré, il a rendu un .flac là où
@@ -386,6 +458,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {
             "default": cat.default_name(),
             "workflows": items,
+            # Des graphes enregistrés qu'une entrée déclarée du fichier de
+            # réconciliation recouvre : ce qui est masqué doit se voir.
+            "shadowed_by_declaration": list(getattr(cat, "shadowed", ())),
             # Vocabulary comes from the domain enums — the UI must not keep a copy.
             "vocabulary": {
                 "kinds": [k.value for k in MediaKind],
@@ -407,29 +482,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """
         from ..adapter.comfyui_client import source_hash as _hash
         c = request.app.state.container
-        src_hash = None
+        src_hash, titles = None, {}
         if body.source:
+            # La source rend possible la détection de mise à jour, et porte les
+            # noms de nœuds de l'auteur. Injoignable, on importe sans elle.
             try:
-                src_hash = _hash(c.comfyui.get_saved_workflow(body.source))
-            except Exception:
-                src_hash = None  # source unreachable → import without update tracking
-        titles = {}
-        if body.source:
-            try:
+                saved = await run_in_threadpool(c.comfyui.get_saved_workflow, body.source)
+                src_hash = _hash(saved)
                 from ..adapter.labels import titles_from_ui_workflow
-                titles = titles_from_ui_workflow(
-                    await run_in_threadpool(c.comfyui.get_saved_workflow, body.source))
+                titles = titles_from_ui_workflow(saved)
             except Exception:
                 pass
-        spec = c.catalog.register(body.name, body.workflow, source=body.source,
-                                  source_hash=src_hash, titles=titles)
-        analysis = await run_in_threadpool(_analyse_workflow, c, spec)
-        from ..adapter.freshness import forget
-        forget(reg_name)                 # la question « est-ce à jour ? » a changé de réponse
-        apres_out = await run_in_threadpool(_delivery, c, spec)
-        return {**_spec_dict(spec), "analysis": analysis,
-                "delivers": apres_out,
-                "changes": _rewiring(avant, spec, apres_out)}
+        return await _ingest(c, body.name, body.workflow, body.source, src_hash, titles)
 
     # Déclarée AVANT "/v1/workflows/{name}" : sinon "updates" est lu comme
     # un nom de workflow et la route répond 400.
@@ -475,9 +539,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Same reading of the memory as the reconciler: a problem the host has
         # since overcome no longer stands, and one met on another configuration
         # is named as such instead of condemning the workflow as a whole.
+        avertissements = [
+            {"problem": w.get("problem"), "detail": (w.get("detail") or "")[:300],
+             "config": w.get("config"), "since": w.get("ts")}
+            for w in c.registry.known_warnings(c.settings.host_id, spec.name)
+        ]
         blocking = c.registry.blocking_problems(c.settings.host_id, spec.name)
         if not blocking:
-            return {"workflow": spec.name, "runnable": True}
+            # Un problème sans frais à redécouvrir n'empêche pas d'essayer : le
+            # moteur tranchera lui-même, en quelques millisecondes s'il refuse.
+            return {"workflow": spec.name, "runnable": True, "warnings": avertissements}
         first = blocking[0]
         return {
             "workflow": spec.name,
@@ -486,6 +557,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "detail": (first.get("detail") or "")[:300],
             "config": first.get("config"),
             "since": first.get("ts"),
+            "warnings": avertissements,
+            "retry_hint": "POST /v1/render?force=true pour essayer malgré ce souvenir",
             # What it needs, so the gap is actionable rather than mysterious.
             "dependencies": spec.dependencies,
         }
@@ -577,32 +650,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             src_hash = None
         reg_name = name[:-5] if name.endswith(".json") else name
-        # Ce que l'analyse PRÉCÉDENTE avait câblé, avant de la remplacer : sans
-        # cette photo, une ré-extraction ne dit pas ce qu'elle a changé.
-        avant = None
-        try:
-            ancien = c.catalog.get_spec(reg_name)
-            avant = {"kind": ancien.kind,
-                     "bindings": {k: (b.node, b.input) for k, b in ancien.bindings.items()},
-                     "outputs": await run_in_threadpool(_delivery, c, ancien)}
-        except Exception:
-            pass
         titles = {}
         try:
             from ..adapter.labels import titles_from_ui_workflow
-            titles = titles_from_ui_workflow(await run_in_threadpool(c.comfyui.get_saved_workflow, name))
+            titles = titles_from_ui_workflow(
+                await run_in_threadpool(c.comfyui.get_saved_workflow, name))
         except Exception:
             pass
-        spec = c.catalog.register(reg_name, graph, source=name, source_hash=src_hash, titles=titles)
-        # A new workflow (or an updated one) is ANALYSED here, using ComfyUI's own
-        # node schemas. The UI and the API then derive from that analysis.
-        analysis = await run_in_threadpool(_analyse_workflow, c, spec)
-        from ..adapter.freshness import forget
-        forget(reg_name)                 # la question « est-ce à jour ? » a changé de réponse
-        apres_out = await run_in_threadpool(_delivery, c, spec)
-        return {**_spec_dict(spec), "analysis": analysis,
-                "delivers": apres_out,
-                "changes": _rewiring(avant, spec, apres_out)}
+        return await _ingest(c, reg_name, graph, name, src_hash, titles)
 
     @app.get("/v1/jobs/{job_id}", tags=["render"])
     async def get_job(job_id: str, request: Request) -> dict:
@@ -689,11 +744,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         The output folder is the single source: whatever a pipeline wrote there
         is what exists, whether this bridge process created it or not.
         """
-        from ..adapter.media import MEDIA_EXT, artifact_url, media_kind
+        from ..adapter.media import DELIVERABLE_EXT, artifact_url, is_working_file, media_kind
         c = request.app.state.container
         out_dir = c.settings.comfy_output_dir.resolve()
         files = [f for f in out_dir.rglob("*")
-                 if f.is_file() and f.suffix.lower() in MEDIA_EXT]
+                 if f.is_file() and f.suffix.lower() in DELIVERABLE_EXT
+                 and not is_working_file(f)]
         files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
         items = []
         for f in files[: max(1, min(limit, 200))]:

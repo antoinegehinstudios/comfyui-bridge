@@ -199,6 +199,27 @@ class ProblemRegistry:
         with self._connect() as conn:
             return [dict(r) for r in conn.execute(sql, args).fetchall()]
 
+    def forget_problems(self, host: str, workflow: str) -> int:
+        """Oublie les problèmes retenus pour ce workflow. Rend le nombre effacé.
+
+        POURQUOI CE TROU EXISTAIT, et pourquoi il ne pouvait pas se refermer seul.
+        Un problème n'était levé que par une RÉUSSITE ultérieure de la même configuration. Or un
+        problème bloquant refuse précisément le run qui prouverait qu'il est réparé : la seule
+        sortie était condamnée par la mémoire elle-même. Mesuré : un workflow dont le fichier
+        manquait a été réenregistré avec son fichier, et resta refusé — la cause avait disparu,
+        le souvenir non.
+
+        Une mémoire qui ne se re-teste jamais devient un mensonge. On ne l'efface pas à la
+        légère pour autant : ce qui autorise l'oubli, c'est que l'OBJET du souvenir a changé.
+        Réenregistrer un workflow change sa définition ; ce qu'on savait de l'ancien ne dit plus
+        rien du nouveau.
+        """
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM runs WHERE scope=? AND host=? AND workflow=? AND status='failed'",
+                [self._scope, host, workflow])
+            return cur.rowcount or 0
+
     def blocking_problems(self, host: str, workflow: str,
                           config: str | None = None) -> list[dict[str, Any]]:
         """Remembered problems that would still stand today.
@@ -226,6 +247,23 @@ class ProblemRegistry:
                 continue
             standing.append(past)
         return standing
+
+    def known_warnings(self, host: str, workflow: str,
+                       config: str | None = None) -> list[dict[str, Any]]:
+        """Problèmes déjà rencontrés qui ne justifient PAS de refuser.
+
+        Une dépendance absente est de ceux-là : le moteur la refuse lui-même en
+        quelques millisecondes, donc autant laisser essayer — et le dire.
+        """
+        from ..core import problems as P
+        vus = []
+        for past in self.problems_for(host, workflow, config):
+            if past.get("problem") not in P.CHEAP_TO_RETRY:
+                continue
+            if self.succeeded_before(host, workflow, past.get("config", "")):
+                continue
+            vus.append(past)
+        return vus
 
     def succeeded_before(self, host: str, workflow: str, config: str) -> bool:
         with self._connect() as conn:
