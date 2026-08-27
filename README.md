@@ -335,6 +335,15 @@ et `ignored` : ce que ce workflow ne recevra pas.
 (`succeeded` / `failed` / `cancelled`), avec la position en file quand le moteur
 est occupé. `POST /v1/jobs/{id}/cancel` arrête.
 
+**Vérifier ce qui a été livré** — le média produit est **mesuré** (dimensions,
+durée, nombre d'images) et comparé à ce qui a été demandé. Un workflow peut
+recalculer ce qu'on lui donne : mesuré ici, 352×224 pour 1 s ont donné 320×192
+pour 0,75 s, et rien ne le disait. Chaque artefact porte `measured` et `gaps`, et
+le journal du run l'écrit. Ce qu'on ne sait pas lire (WEBM, MKV, OGG) ne produit
+aucune mesure — donc aucun écart : une mesure absente vaut mieux qu'une mesure
+inventée. Un arrondi de conteneur (48 images à 24 i/s tiennent en 2,042 s) n'est
+pas un écart.
+
 **Récupérer le OUT** — le job terminé porte `artifacts` : `kind`, `path`
 **absolu sur l'hôte**, `url` téléchargeable, `bytes` ; plus `duration_s`, la
 durée mesurée par le moteur. Le champ `label` de l'intention nomme la sortie

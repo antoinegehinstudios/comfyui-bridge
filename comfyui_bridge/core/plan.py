@@ -61,6 +61,13 @@ class Artifact:
     path: str
     url: str | None = None
     bytes: int | None = None
+    # Ce que le fichier contient VRAIMENT (dimensions, durée), lu par
+    # l'adaptateur. Vide quand le format n'est pas lisible ici : une mesure
+    # absente vaut mieux qu'une mesure inventée.
+    measured: dict[str, Any] | None = None
+    # Les écarts entre ce qui a été demandé et ce qui est là, attachés au
+    # livrable lui-même : c'est de LUI qu'on parle.
+    gaps: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)

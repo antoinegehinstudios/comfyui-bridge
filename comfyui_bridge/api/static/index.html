@@ -515,8 +515,19 @@ async function poll(id){
 function artView(a){
   const u=a.url||"", size=a.bytes?` · ${a.bytes} o`:"";
   const open=u?` · <a class="open" href="${u}" target="_blank" rel="noopener">Ouvrir ↗</a>`:"";
+  // Ce que le fichier contient VRAIMENT, mesuré sur lui — et l'écart avec la
+  // demande quand le workflow a recalculé les dimensions.
+  const m=a.measured||{};
+  const contenu=[m.width&&m.height?`${m.width}×${m.height}`:"",
+                 m.duration_s?`${m.duration_s} s`:"",
+                 m.frames?`${m.frames} image(s)`:""].filter(Boolean).join(" · ");
+  const ecart=(a.gaps||[]).length
+    ? `<div class="hint" style="flex-basis:100%;color:var(--warn)">⚠ écart avec la demande : `
+      + escapeHtml(a.gaps.map(g=>`${g.field} demandé ${g.asked}, livré ${g.delivered}`).join(" · "))
+      + `</div>` : "";
   return `<div class="art"><span class="badge">${a.kind}</span><span class="k">${size}</span>${open}`+
-    `<div class="path">${escapeHtml(a.path)}</div></div>`;
+    (contenu?`<span class="k">· ${escapeHtml(contenu)}</span>`:"")+
+    `<div class="path">${escapeHtml(a.path)}</div>${ecart}</div>`;
 }
 
 // The engine reports its own progress; we only display it. No fake percentage.

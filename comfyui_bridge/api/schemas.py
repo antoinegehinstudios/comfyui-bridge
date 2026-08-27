@@ -90,6 +90,8 @@ class ArtifactOut(BaseModel):
     path: str
     url: str | None = None
     bytes: int | None = None
+    measured: dict[str, Any] | None = None   # ce que le fichier contient vraiment
+    gaps: list[dict[str, Any]] = []          # écarts avec ce qui a été demandé
 
 
 class JobOut(BaseModel):
@@ -119,7 +121,8 @@ class JobOut(BaseModel):
             simulated=job.simulated,
             engine_ref=job.engine_ref,
             progress=job.progress,
-            artifacts=[ArtifactOut(**a.__dict__) for a in job.artifacts],
+            artifacts=[ArtifactOut(**{**a.__dict__, "gaps": list(a.gaps)})
+                       for a in job.artifacts],
             duration_s=job.duration_s,
             problem=job.problem,
             logs=job.logs,

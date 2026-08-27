@@ -32,6 +32,7 @@ from .catalog import WorkflowCatalog, build_injection
 from .comfyui_client import ComfyUIClient
 from .inflight import InflightLog
 from .injector import apply_overrides, inject
+from .measure import measure
 from .media import artifact_url, media_kind
 
 
@@ -452,5 +453,6 @@ class ComfyUIHttpBackend:
                 path=str(dest.resolve()),
                 url=artifact_url(out_dir, dest),
                 bytes=len(data),
+                measured=measure(dest) or None,
             ))
         return artifacts

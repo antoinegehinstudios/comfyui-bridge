@@ -14,8 +14,10 @@ engine-specific is reached through ``RenderBackend`` / ``Reconciler`` /
 
 from __future__ import annotations
 
+from dataclasses import replace as _replace
 from typing import Any
 
+from .delivery import compare, describe
 from .errors import BridgeError, HardwareReconciliationError, to_problem
 from .problems import OOM as P_OOM, UNKNOWN as P_UNKNOWN, classify as classify_problem
 from .intention import Constraint, ConstraintOp, RenderIntent, intent_field_of, intent_fields
@@ -313,7 +315,16 @@ class Orchestrator:
                 self._store.append_log(job_id, f"simulated (plan only, no media): {a.path}")
         else:
             # End of chain on success: the produced MEDIA is the deliverable.
+            delivered = []
             for a in result.artifacts:
                 self._store.append_log(job_id, f"delivered media: {a.path}")
+                # Ce qui a été demandé n'est pas toujours ce qui sort : un
+                # workflow peut recalculer les dimensions. Le constater sur le
+                # fichier, et le dire — au journal comme au livrable.
+                gaps = compare(plan.params, a.measured or {})
+                if gaps:
+                    self._store.append_log(job_id, describe(gaps))
+                delivered.append(_replace(a, gaps=tuple(gaps)))
+            result = _replace(result, artifacts=delivered)
         self._store.mark_succeeded(job_id, result.artifacts, simulated=result.simulated,
                                    duration_s=measured)
