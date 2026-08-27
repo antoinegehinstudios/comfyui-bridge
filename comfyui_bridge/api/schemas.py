@@ -80,7 +80,7 @@ class IntentIn(BaseModel):
 
 
 class WorkflowImportIn(BaseModel):
-    name: str = Field(..., min_length=1, examples=["ltx-2.3-t2v"])
+    name: str = Field(..., min_length=1, examples=["mon-workflow-video"])
     workflow: dict[str, Any] = Field(..., description="A ComfyUI API-format graph (Export (API) in ComfyUI).")
     source: str | None = Field(None, description="ComfyUI saved-workflow name this was extracted from (enables update detection).")
 
