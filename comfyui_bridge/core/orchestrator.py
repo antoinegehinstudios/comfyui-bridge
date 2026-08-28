@@ -93,9 +93,12 @@ class Orchestrator:
         params: dict[str, Any] = {}
         if intent.prompt:
             params["prompt"] = intent.prompt
-        for media in ("image", "video"):
-            if getattr(intent, media, None):
-                params[media] = getattr(intent, media)
+        # Les pièces jointes, telles que l'appelant les a nommées. Rien n'est
+        # supposé ici sur leur nombre ni sur leur catégorie : le workflow est
+        # seul à dire combien d'entrées média il a, et sous quels noms.
+        for param, nom in (intent.media or {}).items():
+            if nom:
+                params[param] = nom
         for field, cast in (("negative_prompt", str), ("width", int), ("height", int),
                             ("steps", int), ("cfg", float), ("seed", int), ("fps", int),
                             ("duration_s", float)):

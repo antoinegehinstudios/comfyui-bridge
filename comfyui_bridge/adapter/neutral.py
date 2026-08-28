@@ -17,7 +17,9 @@ import mimetypes
 import urllib.request
 import uuid
 
-# One stable name per category: uploading again simply overwrites it.
+# One stable name per CATEGORY: uploading again simply overwrites it. Un
+# workflow peut avoir plusieurs entrées de la même catégorie (image, image_2…) :
+# elles partagent le même élément neutre, c'est la même catégorie.
 NEUTRAL_NAMES = {"image": "cortex-neutral-white.png"}
 
 _WHITE_SIZE = (1024, 1024)
@@ -49,14 +51,23 @@ def _multipart(fields: dict[str, str], filename: str, payload: bytes) -> tuple[b
 
 
 def upload_image(base_url: str, filename: str, payload: bytes,
-                 overwrite: bool = True, timeout: float = 60.0) -> str:
-    """Hand an image to ComfyUI through its own ``/api/upload/image``.
+                 overwrite: bool = True, timeout: float = 60.0,
+                 subfolder: str = "") -> str:
+    """Hand a file to ComfyUI through its own ``/api/upload/image``.
 
     Returns the name ComfyUI knows it by — the only name a graph can reference.
     One implementation for the neutral asset and for a file a user brings.
+
+    Le moteur RÉPOND où il l'a rangé, et c'est cette réponse qui fait la
+    référence : une image reste à la racine du dossier d'entrée et se cite par
+    son nom, tandis qu'un modèle 3D vit dans « 3d/ » et se cite « 3d/<nom> »
+    (c'est exactement ce que Load3D liste). Ignorer le sous-dossier rendait un
+    nom que le graphe ne pouvait pas résoudre.
     """
-    body, content_type = _multipart(
-        {"type": "input", "overwrite": "true" if overwrite else "false"}, filename, payload)
+    champs = {"type": "input", "overwrite": "true" if overwrite else "false"}
+    if subfolder:
+        champs["subfolder"] = subfolder
+    body, content_type = _multipart(champs, filename, payload)
     req = urllib.request.Request(
         base_url.rstrip("/") + "/api/upload/image",
         data=body, headers={"Content-Type": content_type}, method="POST",
@@ -64,11 +75,40 @@ def upload_image(base_url: str, filename: str, payload: bytes,
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         try:
             import json
-            return json.loads(resp.read().decode("utf-8")).get("name") or filename
+            reponse = json.loads(resp.read().decode("utf-8"))
         except Exception:
             return filename
+    nom = reponse.get("name") or filename
+    range_dans = reponse.get("subfolder") or ""
+    return f"{range_dans}/{nom}" if range_dans else nom
 
 
 def ensure_neutral_image(base_url: str, timeout: float = 30.0) -> str:
     """Upload the neutral white image to ComfyUI and return the name it knows."""
     return upload_image(base_url, NEUTRAL_NAMES["image"], build_white_png(), timeout=timeout)
+
+
+# Comment fabriquer l'élément neutre de chaque catégorie. Une catégorie absente
+# d'ici n'en a pas : le workflow tournera sur son propre contenu, et le run le
+# DIT plutôt que de laisser croire à un neutre qui n'existe pas.
+_FABRIQUES = {"image": build_white_png}
+
+
+def has_neutral(param: str) -> bool:
+    from ..core.intention import media_category
+    return (media_category(param) or "") in _FABRIQUES
+
+
+def ensure_neutral(base_url: str, param: str, timeout: float = 30.0) -> str | None:
+    """L'élément neutre de la catégorie de ``param``, déposé chez ComfyUI.
+
+    Rend le nom sous lequel le moteur le connaît — le seul qu'un graphe peut
+    citer — ou None quand la catégorie n'a pas de neutre.
+    """
+    from ..core.intention import media_category
+    categorie = media_category(param) or ""
+    fabrique = _FABRIQUES.get(categorie)
+    nom = NEUTRAL_NAMES.get(categorie)
+    if fabrique is None or not nom:
+        return None
+    return upload_image(base_url, nom, fabrique(), timeout=timeout)

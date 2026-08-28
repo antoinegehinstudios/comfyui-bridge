@@ -257,8 +257,10 @@ let WF = {}, VOCAB = {};
 const SEMANTIC = [
   {key:"prompt",          label:"Prompt",              kind:"textarea"},
   {key:"negative_prompt", label:"Prompt négatif",      kind:"text"},
-  {key:"image",           label:"Image d'entrée",      kind:"media"},
-  {key:"video",           label:"Vidéo d'entrée",      kind:"media"},
+  // Les pièces jointes s'insèrent ICI, mais elles ne sont PAS une liste figée :
+  // le workflow déclare les siennes (media_inputs) — une image, quatre, une
+  // voix — et le formulaire les rend toutes.
+  {key:"__medias__",      label:"",                    kind:"medias"},
   {key:"seed",            label:"Seed",                kind:"number"},
   {key:"steps",           label:"Steps",               kind:"number"},
   {key:"cfg",             label:"CFG",                 kind:"number", step:"0.5"},
@@ -292,25 +294,12 @@ function buildWorkflowForm(name){
     box.innerHTML = `<div class="hint" style="color:var(--warn)">Ce workflow n’expose aucune entrée reconnue — il tournera tel quel.</div>`;
     return;
   }
-  box.innerHTML = SEMANTIC.filter(f=>accepts.includes(f.key)).map(f=>{
+  const medias = w.media_inputs || [];
+  box.innerHTML = SEMANTIC.filter(f=>f.kind==="medias" || accepts.includes(f.key)).map(f=>{
+    if(f.kind==="medias") return medias.map(mediaField).join("");
     const val = (d[f.key]!==undefined && d[f.key]!==null) ? String(d[f.key]) : "";
     if(f.kind==="textarea")
       return `<label>${f.label}</label><textarea id="p_${f.key}"></textarea>`;
-    if(f.kind==="media"){
-      const c = carried[f.key];
-      const neutral = (w.neutral_for||[]).includes(f.key);
-      const accept = f.key === "video" ? "video/*" : "image/*";
-      const note = neutral
-        ? (c ? `Sans choix, une image NEUTRE (blanche) est envoyée — le contenu embarqué (${escapeHtml(c)}) n'est pas réutilisé.`
-             : "Sans choix, une image neutre (blanche) est envoyée.")
-        : (c ? `Aucun élément neutre pour cette catégorie : sans choix, le workflow tourne sur son propre contenu (${escapeHtml(c)}).`
-             : "Aucun élément neutre pour cette catégorie : sans choix, le workflow garde le sien.");
-      return `<label>${f.label}</label><select id="p_${f.key}"></select>`+
-             `<div class="grow" style="margin-top:6px"><input type="file" id="up_${f.key}" accept="${accept}" style="padding:4px">`+
-             `<button type="button" class="ghost" id="upBtn_${f.key}">Envoyer</button></div>`+
-             `<div class="hint" id="upNote_${f.key}"></div>`+
-             `<div class="hint" style="color:var(--warn)">${note}</div>`;
-    }
     const step = f.step?` step="${f.step}"`:"";
     const note = (w.derived||[]).includes(f.key)
       ? `<div class="hint">Converti en nombre d’images (durée × FPS) — ce workflow n’a pas de champ de durée.</div>`
@@ -318,12 +307,13 @@ function buildWorkflowForm(name){
     return `<label>${f.label}</label><input id="p_${f.key}" type="${f.kind}"${step} value="${escapeHtml(val)}" placeholder="valeur du workflow">${note}`;
   }).join("");
 
-  const missing = SEMANTIC.filter(f=>!accepts.includes(f.key)).map(f=>f.label);
+  const missing = SEMANTIC.filter(f=>f.kind!=="medias" && !accepts.includes(f.key)).map(f=>f.label);
   if(missing.length)
     box.innerHTML += `<div class="hint">Non exposé par ce workflow : ${escapeHtml(missing.join(", "))}</div>`;
+  if(!medias.length)
+    box.innerHTML += `<div class="hint">Aucune pièce jointe : ce workflow ne charge ni image, ni vidéo, ni son.</div>`;
 
-  for(const media of ["image","video"])
-    if(accepts.includes(media)){ fillMediaOptions(name, media); wireMediaUpload(name, media); }
+  for(const m of medias){ fillMediaOptions(name, m); wireMediaUpload(name, m); }
   // Une source qui a bougé depuis l'extraction : c'est l'ANCIENNE analyse qui
   // tournera. Le taire, c'est livrer un résultat d'une version qu'on ne voit plus.
   if(w.source_changed){
@@ -337,9 +327,30 @@ function buildWorkflowForm(name){
   scheduleEstimate();
 }
 
-// Supplying an image is ComfyUI's own upload: the console must not ask the user
+// Le champ d'UNE pièce jointe. Son intitulé est le nom que l'auteur a donné au
+// nœud dans ComfyUI (« Load Last Frame ») : c'est lui qui distingue deux images
+// d'un même workflow — « image_2 » ne dit rien à personne.
+const MEDIA_LABEL = {image:"Image", video:"Vidéo", audio:"Son", model3d:"Modèle 3D"};
+function mediaField(m){
+  const titre = (m.label ? escapeHtml(m.label) : ((MEDIA_LABEL[m.category]||"Média") + " d'entrée"))
+              + ` <span class="hint">(${escapeHtml(m.param)})</span>`;
+  const c = m.carried;
+  const note = m.neutral
+    ? (c ? `Sans choix, un élément NEUTRE est envoyé — le contenu embarqué (${escapeHtml(c)}) n'est pas réutilisé.`
+         : "Sans choix, un élément neutre est envoyé.")
+    : (c ? `Aucun élément neutre pour cette catégorie : sans choix, le workflow tourne sur son propre contenu (${escapeHtml(c)}).`
+         : "Aucun élément neutre pour cette catégorie : sans choix, le workflow garde le sien.");
+  return `<label>${titre}</label><select id="p_${m.param}"></select>`+
+         `<div class="grow" style="margin-top:6px"><input type="file" id="up_${m.param}" accept="${escapeHtml(m.accept||"*/*")}" style="padding:4px">`+
+         `<button type="button" class="ghost" id="upBtn_${m.param}">Envoyer</button></div>`+
+         `<div class="hint" id="upNote_${m.param}">#${escapeHtml(m.node)} · ${escapeHtml(m.class_type||"?")}.${escapeHtml(m.input)}</div>`+
+         `<div class="hint" style="color:var(--warn)">${note}</div>`;
+}
+
+// Supplying a file is ComfyUI's own upload: the console must not ask the user
 // to go and copy a file into the engine's input folder by hand.
-function wireMediaUpload(name, param){
+function wireMediaUpload(name, m){
+  const param = m.param;
   const btn=$("upBtn_"+param), input=$("up_"+param), note=$("upNote_"+param), sel=$("p_"+param);
   if(!btn||!input||!sel) return;
   btn.onclick = async ()=>{
@@ -347,7 +358,9 @@ function wireMediaUpload(name, param){
     if(!f){ note.textContent="Choisis un fichier."; return; }
     btn.disabled=true; note.textContent="envoi…";
     try{
-      const fd = new FormData(); fd.append("file", f);
+      // L'entrée visée part avec le fichier : elle dit au moteur OÙ ranger
+      // cette catégorie, et donc sous quel nom le graphe pourra la citer.
+      const fd = new FormData(); fd.append("file", f); fd.append("param", param);
       const r = await fetch("/v1/inputs/media", {method:"POST", body:fd});
       const d = await r.json();
       if(!r.ok){ note.textContent = d.detail || "envoi refusé"; return; }
@@ -360,18 +373,15 @@ function wireMediaUpload(name, param){
   };
 }
 
-function fillMediaOptions(name, param){
-  const sel=$("p_"+param); if(!sel) return;
-  const w = WF[name]||{}, carried = w.carried||{};
-  const neutral = (w.neutral_for||[]).includes(param);
-  sel.innerHTML = `<option value="">${neutral ? "— élément neutre —" : "— celui du workflow —"}</option>`
-    + (carried[param]?`<option value="${escapeHtml(carried[param])}">garder celui du workflow (${escapeHtml(carried[param])})</option>`:"");
-  const bind = (w.bindings||{})[param];
+function fillMediaOptions(name, m){
+  const param = m.param, sel=$("p_"+param); if(!sel) return;
+  sel.innerHTML = `<option value="">${m.neutral ? "— élément neutre —" : "— celui du workflow —"}</option>`
+    + (m.carried?`<option value="${escapeHtml(m.carried)}">garder celui du workflow (${escapeHtml(m.carried)})</option>`:"");
   fetch(`/v1/workflows/${encodeURIComponent(name)}/io`).then(r=>r.json()).then(io=>{
     if(!io.described) return;
     // The choices are the ones the engine declares FOR THAT NODE.
-    const e=(io.inputs||[]).find(x=>Array.isArray(x.options) && bind
-              && x.node===bind.node && x.input===bind.input);
+    const e=(io.inputs||[]).find(x=>Array.isArray(x.options)
+              && x.node===m.node && x.input===m.input);
     for(const o of (e?e.options:[])){
       const opt=document.createElement("option"); opt.value=o; opt.textContent=o; sel.appendChild(opt);
     }
@@ -701,12 +711,20 @@ function problemHtml(p){
 }
 
 function buildBody(){
-  const body = {workflow:$("workflow").value||null, inputs:collectIO(), constraints:collectConstraints()};
+  const nom = $("workflow").value;
+  const body = {workflow:nom||null, inputs:collectIO(), constraints:collectConstraints()};
   for(const f of SEMANTIC){
+    if(f.kind==="medias") continue;
     const v = pval(f.key);
     if(v!==null) body[f.key] = v;
   }
-  if(body.prompt===undefined) body.prompt = "(sans prompt)";   // required by the API
+  // Les pièces jointes telles que le workflow les nomme : autant que d'entrées.
+  const media = {};
+  for(const m of ((WF[nom]||{}).media_inputs||[])){
+    const v = pval(m.param);
+    if(v!==null && v!=="") media[m.param] = v;
+  }
+  if(Object.keys(media).length) body.media = media;
   return body;
 }
 

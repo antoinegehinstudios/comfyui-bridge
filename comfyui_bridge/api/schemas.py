@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..core.intention import Constraint, ConstraintOp, MediaKind, RenderIntent
+from ..core.intention import (Constraint, ConstraintOp, MediaKind, RenderIntent,
+                              is_media_param)
 from ..core.jobs import Job
 
 
@@ -43,8 +44,14 @@ class IntentIn(BaseModel):
     fps: int | None = Field(None, ge=1)
     duration_s: float | None = Field(None, ge=0.0)
     seed: int | None = None
-    image: str | None = Field(None, description="Input media name as ComfyUI knows it")
-    video: str | None = Field(None, description="Input clip name as ComfyUI knows it")
+    # Les pièces jointes. Un workflow n'en a pas un nombre fixe : il annonce les
+    # siennes dans `accepts` / `intent_fields` (« image », « image_2 », « audio »
+    # …). Elles s'envoient au choix ici, ou directement à la racine du corps sous
+    # le nom annoncé — « image »: "x.png" marche comme avant. Valeur = le nom que
+    # ComfyUI donne au fichier (celui rendu par POST /v1/inputs/media).
+    media: dict[str, str] = Field(default_factory=dict,
+        examples=[{"image": "premiere.png", "image_2": "derniere.png", "audio": "voix.wav"}],
+        description="Pièces jointes par entrée du workflow : {nom annoncé -> nom ComfyUI}")
     steps: int | None = Field(None, ge=1)
     cfg: float | None = Field(None, ge=0.0)
     batch: int | None = Field(None, ge=1)
@@ -54,6 +61,31 @@ class IntentIn(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict,
         description="Entrées propres au workflow, clé 'noeud.entree' (découvertes via /v1/workflows/{name}/io)")
     constraints: list[ConstraintIn] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _pieces_jointes_a_la_racine(cls, data: Any) -> Any:
+        """Accepter une pièce jointe sous le nom que le workflow ANNONCE.
+
+        `/v1/workflows` publie « image_2 », « audio »… comme champs à remplir ;
+        les refuser ensuite parce qu'ils ne sont pas des champs fixes de ce
+        modèle ferait mentir l'annonce. Ils sont repliés dans `media`, et tout
+        autre nom inconnu reste refusé — c'est bien une erreur d'appelant.
+        """
+        if not isinstance(data, dict):
+            return data
+        declares = set(cls.model_fields)
+        media = dict(data.get("media") or {})
+        reste: dict[str, Any] = {}
+        for cle, valeur in data.items():
+            if cle not in declares and is_media_param(str(cle)):
+                if valeur is not None:
+                    media[str(cle)] = valeur
+            else:
+                reste[cle] = valeur
+        if media:
+            reste["media"] = media
+        return reste
 
     def to_domain(self) -> RenderIntent:
         return RenderIntent(
@@ -67,8 +99,7 @@ class IntentIn(BaseModel):
             duration_s=self.duration_s,
             seed=self.seed,
             label=self.label,
-            image=self.image,
-            video=self.video,
+            media={k: str(v) for k, v in (self.media or {}).items() if v},
             steps=self.steps,
             cfg=self.cfg,
             batch=self.batch,

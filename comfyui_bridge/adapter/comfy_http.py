@@ -82,7 +82,6 @@ class ComfyUIHttpBackend:
         self._base = settings.comfyui_base_url.rstrip("/")
         # One implementation of "is the server up" — the client owns it.
         self._client = ComfyUIClient(self._base, settings.comfyui_request_timeout_s)
-        self._client_id = uuid.uuid4().hex
 
     def preview(self, plan: ExecutionPlan) -> dict[str, Any]:
         """Show the ComfyUI graph the named workflow WOULD run — no HTTP call."""
@@ -151,9 +150,15 @@ class ComfyUIHttpBackend:
             if on_progress is not None:
                 on_progress(value, maximum, node)
 
-        ws, ws_reason = self._open_ws()
+        # UN identifiant de client PAR RUN. ComfyUI n'garde qu'une socket par
+        # clientId (« Reusing existing session, remove old ») : deux runs lancés
+        # coup sur coup avec le même identifiant faisaient remplacer la socket du
+        # premier par celle du second. Mesuré : le premier run, terminé en 1 s
+        # d'après l'historique du moteur, restait « en cours » côté passerelle.
+        client_id = uuid.uuid4().hex
+        ws, ws_reason = self._open_ws(client_id)
         try:
-            prompt_id = self._enqueue(graph, req_t)
+            prompt_id = self._enqueue(graph, req_t, client_id)
             self._note_inflight(prompt_id, plan)
             if on_enqueued is not None:
                 on_enqueued(prompt_id, ws_reason)
@@ -237,18 +242,25 @@ class ComfyUIHttpBackend:
         content the workflow happens to carry."""
         if not self._settings.neutral_media:
             return params
-        from .neutral import NEUTRAL_NAMES, ensure_neutral_image
-        for param, _name in NEUTRAL_NAMES.items():
-            if param in spec.bindings and not params.get(param):
-                try:
-                    params[param] = ensure_neutral_image(self._base)
-                except Exception:
-                    pass        # engine refused the upload: leave the graph as-is
+        from ..core.intention import media_category
+        from .neutral import ensure_neutral, has_neutral
+        deposes: dict[str, str] = {}        # une catégorie, un seul dépôt
+        for param in sorted(spec.bindings):
+            if params.get(param) or not has_neutral(param):
+                continue
+            categorie = media_category(param) or ""
+            try:
+                nom = deposes.get(categorie) or ensure_neutral(self._base, param)
+            except Exception:
+                continue        # engine refused the upload: leave the graph as-is
+            if nom:
+                deposes[categorie] = nom
+                params[param] = nom
         return params
 
-    def _enqueue(self, graph: dict, req_t: float) -> str:
+    def _enqueue(self, graph: dict, req_t: float, client_id: str) -> str:
         try:
-            resp = self._post_json("/prompt", {"prompt": graph, "client_id": self._client_id}, req_t)
+            resp = self._post_json("/prompt", {"prompt": graph, "client_id": client_id}, req_t)
         except urllib.error.HTTPError as e:
             detail = ""
             try:
@@ -272,7 +284,7 @@ class ComfyUIHttpBackend:
             raise BackendExecutionError("ComfyUI returned no prompt_id", response=str(resp)[:200])
         return str(prompt_id)
 
-    def _open_ws(self):
+    def _open_ws(self, client_id: str):
         """ComfyUI's own progress channel (see its script_examples).
 
         Returns ``(socket_or_None, reason)``. The reason is reported to the
@@ -286,7 +298,7 @@ class ComfyUIHttpBackend:
         url = self._base.replace("http://", "ws://").replace("https://", "wss://")
         try:
             ws = websocket.WebSocket()
-            ws.connect(f"{url}/ws?clientId={self._client_id}", timeout=10)
+            ws.connect(f"{url}/ws?clientId={client_id}", timeout=10)
             return ws, "attached"
         except Exception as e:
             return None, f"indisponible: {e}"
@@ -309,10 +321,12 @@ class ComfyUIHttpBackend:
                 # must not be mistaken for the end of the run.
                 if type(e).__name__.endswith("TimeoutException"):
                     quiet += 1
-                    # …but a run cancelled from the console is silent forever.
-                    # Every ~30 s, make sure the engine still knows it; if not,
-                    # hand over to the history poll, which says so properly.
-                    if quiet % 6 == 0 and self.vanished(prompt_id):
+                    # …but a run cancelled from the console is silent forever,
+                    # et une socket que le moteur a remplacée l'est tout autant.
+                    # Toutes les ~30 s, on demande au moteur s'il a encore
+                    # quelque chose à dire sur ce run ; sinon on passe la main à
+                    # l'interrogation de l'historique, qui, elle, conclut.
+                    if quiet % 6 == 0 and self._plus_rien_a_dire(prompt_id):
                         return
                     continue
                 return  # socket closed/broken: the history poll takes over
@@ -332,6 +346,27 @@ class ComfyUIHttpBackend:
                             str(data.get("node") or ""))
             elif msg.get("type") == "executing" and data.get("node") is None                     and data.get("prompt_id") == prompt_id:
                 return  # ComfyUI says this prompt is done
+
+    def _plus_rien_a_dire(self, prompt_id: str) -> bool:
+        """Le moteur n'a plus rien à annoncer sur ce run : fini, ou disparu.
+
+        Une socket devenue muette ressemble trait pour trait à un moteur qui
+        charge un modèle : seul l'historique tranche. Sans cette lecture, un run
+        dont la socket avait été remplacée restait « en cours » jusqu'à
+        l'expiration du budget (une heure) alors que le moteur l'avait terminé
+        en une seconde — mesuré.
+        """
+        try:
+            q = self._client.queue()
+            if prompt_id in q.get("running", []) + q.get("pending", []):
+                return False
+            entry = self._get_json("/history/" + urllib.parse.quote(prompt_id),
+                                   self._settings.comfyui_request_timeout_s).get(prompt_id)
+            if entry is None:
+                return True         # ni en file, ni connu : disparu
+            return bool(entry.get("outputs")) or bool((entry.get("status") or {}).get("completed"))
+        except Exception:
+            return False        # unsure: never conclude on a silent engine
 
     def vanished(self, prompt_id: str) -> bool:
         """True when the engine knows this prompt neither in its queue nor in

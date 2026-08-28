@@ -22,7 +22,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..core.intention import media_param
 from .mapping import Binding
+from .media_inputs import media_nodes
 
 _SAMPLERS = ("KSampler", "SamplerCustom", "SamplerCustomAdvanced")
 
@@ -37,7 +39,15 @@ def _inputs(node: Any) -> dict[str, Any]:
 
 def infer_kind(graph: dict[str, Any]) -> str:
     types = {n.get("class_type", "") for n in graph.values() if isinstance(n, dict)}
-    if any("Save" in t and "Audio" in t for t in types):
+    sauvegardes = tuple(t for t in types if "Save" in t)
+    # Ce qu'un workflow LIVRE décide de son genre. Une vidéo qui porte sa propre
+    # bande son enregistre les deux (SaveVideo ET SaveAudioMP3) : le contenant
+    # l'emporte. Lire l'audio d'abord faisait passer un workflow vidéo pour de
+    # l'audio — mesuré sur `template_image_speech_to_video` — et son nombre
+    # d'images repartait alors sur `batch_size`, c'est-à-dire un nombre de CLIPS.
+    if any("Video" in t for t in sauvegardes):
+        return "video"
+    if any("Audio" in t for t in sauvegardes):
         return "audio"
     video_markers = ("SaveVideo", "CreateVideo", "VideoCombine", "LTXV", "SVD", "EmptyLTXVLatentVideo")
     if any(any(m in t for m in video_markers) for t in types):
@@ -196,14 +206,17 @@ def derive_bindings(graph: dict[str, Any], titles: dict[str, str] | None = None)
             b["negative_prompt"] = Binding(nid, key)
             break
 
-    # Input MEDIA are inputs like any other: name them so a caller can set them.
-    # A workflow that starts from a video was offering nothing at all to drive.
-    for param, class_type, key in (("image", "LoadImage", "image"),
-                                   ("video", "LoadVideo", "file")):
-        for nid, node in graph.items():
-            if node.get("class_type") == class_type and isinstance(_inputs(node).get(key), str):
-                b.setdefault(param, Binding(nid, key))
-                break
+    # Input MEDIA are inputs like any other: name them ALL so a caller can set
+    # them. N'en nommer qu'une par catégorie laissait sans preneur la dernière
+    # image d'un flf2v, les vues d'un assemblage et toute entrée audio — mesuré :
+    # 3 des 4 LoadImage de `utility_image_stitch` injoignables, « Load Last
+    # Frame » de `video_ltx2_3_flf2v` aussi, l'audio de `video_wan2_2_14B_s2v`
+    # aussi. Le rang suit l'ordre des nœuds, donc il ne bouge pas d'un appel à
+    # l'autre, et la première de chaque catégorie garde son nom nu.
+    rangs: dict[str, int] = {}
+    for nid, _class_type, categorie, entree in media_nodes(graph):
+        rangs[categorie] = rangs.get(categorie, 0) + 1
+        b.setdefault(media_param(categorie, rangs[categorie]), Binding(nid, entree))
     return _complete_bindings(graph, b, negatives,
                               need_prompt="prompt" not in b, is_video=is_video)
 

@@ -14,7 +14,8 @@ from typing import Any
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, File, Request, Response, UploadFile
+from fastapi import (BackgroundTasks, FastAPI, File, Form, Request, Response,
+                     UploadFile)
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -127,16 +128,21 @@ def _analyse_workflow(container, spec) -> dict:
     Run at ingestion and on every update: the wiring of the UI and of the API
     is derived from it, never from a generic assumption.
     """
+    from ..adapter import media_inputs
     from ..adapter.workflow_io import describe_io
+    graph = container.catalog.load_template(spec)
+    # Les pièces jointes se lisent dans le GRAPHE : les annoncer ne demande pas
+    # que le moteur réponde, et une ingestion moteur éteint doit dire pareil.
+    pieces = media_inputs.describe(spec.bindings, spec.titles, spec.carried, graph)
     probe = container.comfyui.probe()
     if not probe.get("available"):
         return {"described": False, "reason": probe.get("reason", "moteur injoignable"),
-                "accepts": sorted(spec.bindings)}
-    graph = container.catalog.load_template(spec)
+                "accepts": sorted(spec.bindings), "media_inputs": pieces}
     io = describe_io(graph, container.comfyui.get_object_info(), spec.titles)
     return {
         "described": True,
         "accepts": sorted(spec.bindings),          # semantic inputs we can drive
+        "media_inputs": pieces,                    # les pièces jointes, une par entrée
         "intent_fields": sorted(set(intent_fields(spec.bindings))
                                 | set(derivable_params(spec.kind, spec.bindings))),
         "derived": derivable_params(spec.kind, spec.bindings),  # drivable via conversion
@@ -421,6 +427,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/v1/workflows", tags=["render"])
     async def list_workflows(request: Request) -> dict:
         """The reconciliation file: workflows a pipeline can call, by name."""
+        from ..adapter import media_inputs
         c = request.app.state.container
         cat = c.catalog
         items = {}
@@ -450,6 +457,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "carried": spec.carried,
                 # …and those a neutral element can stand in for.
                 "neutral_for": list(spec.profile.neutral_for),
+                # Les pièces jointes, une par entrée média du workflow, avec le
+                # nom que l'auteur a donné au nœud. Un workflow à quatre images
+                # en déclare quatre : c'est CE contrat qu'un formulaire suit.
+                "media_inputs": media_inputs.describe(
+                    spec.bindings, spec.titles, spec.carried, cat.load_template(spec)),
                 "defaults": spec.defaults,
                 "limits": spec.limits,
                 "dependencies": spec.dependencies,
@@ -457,7 +469,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "workflow_source": str(spec.workflow_path),
                 "bindings": {k: {"node": b.node, "input": b.input} for k, b in spec.bindings.items()},
             }
-        from ..core.intention import ConstraintOp, MediaKind
+        from ..core.intention import MEDIA_CATEGORIES, ConstraintOp, MediaKind
         return {
             "default": cat.default_name(),
             "workflows": items,
@@ -469,8 +481,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "kinds": [k.value for k in MediaKind],
                 "constraint_ops": [o.value for o in ConstraintOp],
                 # Fields a caller may leave unset to inherit the workflow default.
+                # Les pièces jointes n'y figurent pas : elles ne sont pas une
+                # liste fixe, chaque workflow déclare les siennes (media_inputs).
                 "params": ["width", "height", "batch", "steps", "cfg", "fps",
-                           "duration_s", "seed", "negative_prompt", "image"],
+                           "duration_s", "seed", "negative_prompt"],
+                "media_categories": list(MEDIA_CATEGORIES),
             },
         }
 
@@ -594,12 +609,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         probe = c.comfyui.probe()
         if not probe.get("available"):
             return {"name": spec.name, "engine": probe, "described": False}
-        io = describe_io(graph, await run_in_threadpool(c.comfyui.get_object_info), spec.titles)
+        object_info = await run_in_threadpool(c.comfyui.get_object_info)
+        io = describe_io(graph, object_info, spec.titles)
+        from ..adapter import media_inputs
         from ..adapter.workflow_io import intent_inputs
         return {"name": spec.name, "engine": probe, "described": True,
                 # The contract to program against: field name, bounds, current
                 # value — the join done once, server side.
                 "intent_inputs": intent_inputs(io["inputs"], spec.bindings, spec.kind),
+                # Les pièces jointes pilotables…
+                "media_inputs": media_inputs.describe(spec.bindings, spec.titles,
+                                                      spec.carried, graph),
+                # …et celles que le MOTEUR déclare téléversables sans que rien
+                # ici ne les pilote (un custom node absent de la table). Vide
+                # en temps normal ; ce qui manque doit se voir.
+                "media_inputs_unbound": media_inputs.unbound(graph, spec.bindings, object_info),
                 **io}
 
     @app.get("/v1/comfyui/workflows", tags=["workflows"])
@@ -708,21 +732,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/v1/inputs/media", status_code=201, tags=["render"])
     @app.post("/v1/inputs/image", status_code=201, tags=["render"])
-    async def upload_input_image(request: Request, file: UploadFile = File(...)) -> dict:
-        """Hand a local image to ComfyUI so a workflow can use it as input.
+    async def upload_input_image(request: Request, file: UploadFile = File(...),
+                                 param: str = Form("")) -> dict:
+        """Hand a local file to ComfyUI so a workflow can use it as input.
 
         Relays ComfyUI's own ``/api/upload/image``: the engine keeps its input
         folder wherever it likes, and the name it returns is the only one a
         graph can reference. Without this the console offered an image field
-        with no way to supply an image."""
+        with no way to supply an image.
+
+        ``param`` est l'entrée visée telle que le workflow l'annonce (« image »,
+        « image_2 », « model3d »…). Elle ne sert qu'à une chose : savoir OÙ le
+        moteur range cette catégorie — un modèle 3D va dans « 3d/ » et se cite
+        « 3d/<nom> ». Omise, le fichier va à la racine du dossier d'entrée,
+        comme une image."""
+        from ..adapter.media_inputs import upload_subfolder
         from ..adapter.neutral import upload_image
         c = request.app.state.container
         payload = await file.read()
         if not payload:
             raise UnknownWorkflowInputError("fichier vide", field="file")
+        subfolder = upload_subfolder(param or "")
         name = await run_in_threadpool(
-            upload_image, c.settings.comfyui_base_url, file.filename or "image.png", payload)
-        return {"name": name, "bytes": len(payload)}
+            upload_image, c.settings.comfyui_base_url, file.filename or "image.png", payload,
+            True, 60.0, subfolder)
+        return {"name": name, "bytes": len(payload), "subfolder": subfolder}
 
     @app.get("/v1/recovered", tags=["render"])
     async def recovered(request: Request) -> dict:

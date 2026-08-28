@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 _RESUME = ("prompt", "negative_prompt", "width", "height", "latent_batch",
-           "duration_s", "fps", "steps", "cfg", "seed", "image", "video")
+           "duration_s", "fps", "steps", "cfg", "seed")
 
 
 def _png_text_chunks(data: bytes) -> dict[str, str]:
@@ -142,7 +142,10 @@ def summarize(graph: dict[str, Any]) -> dict[str, Any]:
 
     bindings = autobind.derive_bindings(graph, {})
     resume: dict[str, Any] = {}
-    for param in _RESUME:
+    from ..core.intention import is_media_param
+    # Les pièces jointes en font partie, toutes : dire avec quelle image un
+    # rendu a été fait n'a de sens que si on les nomme toutes, pas la première.
+    for param in list(_RESUME) + sorted(p for p in bindings if is_media_param(p)):
         b = bindings.get(param)
         if not b:
             continue

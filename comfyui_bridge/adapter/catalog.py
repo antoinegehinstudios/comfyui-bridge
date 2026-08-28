@@ -60,14 +60,16 @@ class WorkflowSpec:
 
     @property
     def profile(self) -> WorkflowProfile:
-        from .neutral import NEUTRAL_NAMES
+        from .neutral import has_neutral
         return WorkflowProfile(self.name, self.kind, dict(self.defaults),
                                dict(self.limits), dict(self.carried),
                                tuple(sorted(self.bindings)),
                                # Media inputs for which a neutral element exists:
                                # for the others, saying "neutral was sent" would
                                # be false and the workflow's own content is used.
-                               tuple(sorted(set(NEUTRAL_NAMES) & set(self.bindings))))
+                               # Par CATÉGORIE : `image_2` a le même neutre que
+                               # `image`, et une entrée audio n'en a aucun.
+                               tuple(sorted(p for p in self.bindings if has_neutral(p))))
 
 
 class WorkflowCatalog:
@@ -159,14 +161,18 @@ class WorkflowCatalog:
         spec = self._specs.get(name)
         if spec is None:
             raise IntentValidationError(f"unknown workflow {name!r}", available=self.names())
-        if self._workflows_dir is None or not spec.source:
+        # Ce qui est à nous, c'est le graphe que NOUS avons écrit dans le dossier
+        # d'ingestion. La provenance ComfyUI ne dit pas ça : un graphe importé
+        # par `POST /v1/workflows` n'en a pas, et refusait donc de se retirer
+        # alors qu'il avait bien été ingéré ici.
+        fichier = (self._workflows_dir / f"{name}.json") if self._workflows_dir else None
+        if fichier is None or spec.workflow_path.resolve() != fichier.resolve():
             raise WorkflowMappingError(
                 f"{name!r} n'a pas été ingéré ici : il vient du fichier de "
                 f"réconciliation et ne peut pas être retiré par l'API", workflow=name)
         index = self._read_index()
         index.pop(name, None)
         self._write_index(index)
-        fichier = self._workflows_dir / f"{name}.json"
         fichier.unlink(missing_ok=True)
         self._specs.pop(name, None)
         self._templates.pop(name, None)
@@ -205,15 +211,17 @@ class WorkflowCatalog:
         return self._templates[spec.name]
 
 
-_MEDIA_PARAMS = ("image", "audio", "video")
-
-
 def _carried_media(graph: dict[str, Any], bindings: dict[str, Binding]) -> dict[str, Any]:
-    """Media values already sitting in the graph, per bound media param."""
+    """Media values already sitting in the graph, per bound media param.
+
+    Toutes les entrées média, pas une liste figée de trois noms : un workflow à
+    quatre images en porte quatre, et taire les trois dernières laissait leur
+    contenu partir dans le résultat sans que rien ne le dise.
+    """
+    from ..core.intention import is_media_param
     out: dict[str, Any] = {}
-    for param in _MEDIA_PARAMS:
-        b = bindings.get(param)
-        if not b:
+    for param, b in bindings.items():
+        if not is_media_param(param):
             continue
         val = ((graph.get(b.node) or {}).get("inputs") or {}).get(b.input)
         if isinstance(val, str) and val:

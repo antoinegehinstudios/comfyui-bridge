@@ -277,10 +277,67 @@ coup. Sauve ton workflow dans ComfyUI en **Export (API)**, puis :
 Le service **déduit les bindings du graphe** (`adapter/autobind.py`) : `prompt` =
 le `CLIPTextEncode` qui alimente le positif du sampler (tracé), `width`/`height` =
 le nœud de latent, `latent_batch` = `length` (vidéo) ou `batch_size` (image),
-`seed`/`steps`/`cfg`, `filename_prefix`. Ce qui n'est pas identifié reste non lié
+`seed`/`steps`/`cfg`, `filename_prefix`, et **chaque entrée média** du graphe
+(voir plus bas). Ce qui n'est pas identifié reste non lié
 (le workflow garde sa valeur). **Vérifie le mapping déduit** avec `POST /v1/preview`
 ou `GET /v1/workflows/<nom>` avant de t'en servir ; pour un contrôle fin, déclare
 une entrée explicite dans `reconciliation.json` (elle a priorité).
+
+### Les pièces jointes : autant que le workflow en a
+
+Un workflow n'a pas *une* image d'entrée. Il en a parfois deux (une première et
+une dernière image), quatre (les vues d'un assemblage, les angles d'un
+photogrammétrique), ou une image **et** une voix. La découverte les nomme
+**toutes**, dans l'ordre des nœuds :
+
+| ce que le graphe porte | ce que la passerelle annonce |
+|---|---|
+| 1 `LoadImage` | `image` |
+| 4 `LoadImage` | `image`, `image_2`, `image_3`, `image_4` |
+| `LoadImage` + `LoadAudio` | `image`, `audio` |
+| `LoadImage` + `LoadVideo` | `image`, `video` |
+| `Load3D` | `model3d` |
+
+La première de chaque catégorie garde son nom nu — un workflow à une seule image
+s'appelle exactement comme avant. Les nœuds reconnus sont ceux que ComfyUI
+déclare lui-même téléversables (drapeaux `image_upload` / `video_upload` /
+`audio_upload` / `file_upload` dans `/object_info`) ; la table est dans
+[`adapter/media_inputs.py`](comfyui_bridge/adapter/media_inputs.py), et
+`GET /v1/workflows/<nom>/io` liste sous `media_inputs_unbound` toute entrée que
+le moteur déclare téléversable et que cette table ne connaît pas encore — ce qui
+manque se dit plutôt que de disparaître.
+
+Le nom du nœud écrit par l'auteur dans ComfyUI (« Load Last Frame ») accompagne
+chaque entrée : c'est lui qui distingue deux images, pas `image_2`.
+
+**Déposer un fichier**, puis le citer :
+
+```bash
+# 1. le fichier part chez ComfyUI ; le moteur répond sous quel nom il le connaît
+curl -X POST http://127.0.0.1:8077/v1/inputs/media -F 'file=@fin.png' -F 'param=image_2'
+# {"name":"fin.png","bytes":51234,"subfolder":""}
+
+# 2. l'intention cite ce nom, sous l'entrée que le workflow annonce
+curl -X POST http://127.0.0.1:8077/v1/render -H 'content-type: application/json' -d '{
+  "workflow": "ltx-flf2v",
+  "prompt": "la voiture se retourne",
+  "media": { "image": "debut.png", "image_2": "fin.png" }
+}'
+```
+
+`param` ne sert qu'à savoir **où** le moteur range cette catégorie : images,
+vidéos et sons vivent à la racine du dossier d'entrée, un modèle 3D vit dans
+`3d/` et se cite `3d/<nom>` — c'est le seul nom que `Load3D` accepte. La
+passerelle rend toujours le nom **citable par un graphe**, sous-dossier compris.
+
+Les noms annoncés sont aussi acceptés **à la racine** du corps
+(`{"image_2": "fin.png"}`) : ce que `/v1/workflows` annonce, `/v1/render` le
+prend. Un nom qui n'est pas une entrée média reste refusé en `422` — une faute
+de frappe est une erreur d'appelant, elle se dit.
+
+Une entrée laissée vide reçoit un **élément neutre** quand sa catégorie en a un
+(une image blanche), sinon le workflow tourne sur son propre contenu — et le
+journal du run le dit, entrée par entrée, avec le nom du fichier concerné.
 
 ### Extraction un-clic (headless) et extension ComfyUI
 
