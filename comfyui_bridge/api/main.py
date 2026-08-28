@@ -737,6 +737,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                          if getattr(request.app.state.container, "inflight", None)
                                          else {}).keys())}
 
+    @app.get("/v1/artifacts/origin", tags=["render"])
+    async def artifact_origin(request: Request, name: str) -> dict:
+        """Avec quoi ce fichier a-t-il été produit ?
+
+        Le moteur inscrit le graphe dans ce qu'il produit (PNG, MP4, FLAC) : on
+        le LIT, on ne le recopie pas. Un livrable qui ne sait pas le porter a
+        reçu un fichier compagnon, lu de la même façon. À la demande, car ouvrir
+        chaque fichier pour lister un dossier serait payer cher pour rien.
+        """
+        from ..adapter.media import SIDECAR_SUFFIX
+        from ..adapter.provenance import read_embedded, summarize
+        c = request.app.state.container
+        out_dir = c.settings.comfy_output_dir.resolve()
+        cible = (out_dir / name).resolve()
+        try:
+            cible.relative_to(out_dir)          # jamais hors du dossier de sortie
+        except ValueError:
+            raise UnknownWorkflowInputError(f"{name!r} n'est pas dans le dossier de sortie",
+                                            artifact=name)
+        if not cible.is_file():
+            raise UnknownWorkflowInputError(f"{name!r} introuvable", artifact=name)
+
+        graphe = await run_in_threadpool(read_embedded, cible)
+        source = "embarquée"
+        if graphe is None:
+            compagnon = cible.with_name(cible.name + SIDECAR_SUFFIX)
+            if compagnon.exists():
+                try:
+                    graphe = json.loads(compagnon.read_text(encoding="utf-8")).get("prompt")
+                    source = "fichier compagnon"
+                except Exception:
+                    graphe = None
+        if not isinstance(graphe, dict):
+            return {"artifact": name, "origin": None,
+                    "reason": "ce format ne porte pas son origine et aucun fichier "
+                              "compagnon ne l'accompagne"}
+        return {"artifact": name, "source": source,
+                "inputs": summarize(graphe), "nodes": len(graphe)}
+
     @app.get("/v1/artifacts", tags=["render"])
     async def list_artifacts(request: Request, limit: int = 20) -> dict:
         """The media actually produced, newest first, with WHERE they are.

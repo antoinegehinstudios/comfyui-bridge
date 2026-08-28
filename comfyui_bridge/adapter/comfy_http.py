@@ -230,6 +230,31 @@ class ComfyUIHttpBackend:
         out_dir.mkdir(parents=True, exist_ok=True)
         return self._download(entry, out_dir, req_t), _execution_seconds(entry)
 
+    @staticmethod
+    def _ecrire_origine_si_absente(fichier: Path, entry: dict) -> None:
+        """Poser l'origine à côté d'un livrable qui ne sait pas la porter.
+
+        Le moteur inscrit déjà le graphe dans un PNG, un MP4 ou un FLAC : le
+        recopier à côté ferait une seconde vérité qui peut mentir. Un .txt, un
+        .csv ou un .webp n'ont nulle part où le mettre — ceux-là seulement
+        reçoivent un fichier compagnon, de même contenu que ce que le moteur
+        aurait embarqué.
+        """
+        from .media import SIDECAR_SUFFIX
+        from .provenance import read_embedded
+
+        try:
+            if read_embedded(fichier) is not None:
+                return
+            graphe = entry.get("prompt")
+            graphe = graphe[2] if isinstance(graphe, list) and len(graphe) > 2 else None
+            if not isinstance(graphe, dict):
+                return
+            fichier.with_name(fichier.name + SIDECAR_SUFFIX).write_text(
+                json.dumps({"prompt": graphe}, ensure_ascii=False, indent=1), encoding="utf-8")
+        except Exception:
+            pass          # une origine manquante ne doit pas coûter le livrable
+
     def _with_neutral_media(self, spec, params: dict[str, Any]) -> dict[str, Any]:
         """A media input the caller left empty gets a neutral element, never the
         content the workflow happens to carry."""
@@ -448,6 +473,7 @@ class ComfyUIHttpBackend:
             dest = out_dir / (ref.get("subfolder") or "") / ref["filename"]
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(data)
+            self._ecrire_origine_si_absente(dest, entry)
             artifacts.append(Artifact(
                 kind=media_kind(dest),
                 path=str(dest.resolve()),

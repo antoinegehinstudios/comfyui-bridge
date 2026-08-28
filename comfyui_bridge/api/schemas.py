@@ -100,6 +100,7 @@ class JobOut(BaseModel):
     workflow: str
     status: str
     config: str
+    params: dict[str, Any] = {}          # ce qui a été demandé pour ce run
     simulated: bool
     engine_ref: str | None
     progress: dict[str, Any] | None
@@ -118,6 +119,7 @@ class JobOut(BaseModel):
             workflow=job.workflow,
             status=job.status.value,
             config=job.config,
+            params=job.params,
             simulated=job.simulated,
             engine_ref=job.engine_ref,
             progress=job.progress,

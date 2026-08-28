@@ -38,6 +38,9 @@ class Job:
     workflow: str = ""
     status: JobStatus = JobStatus.ACCEPTED
     config: str = ""
+    # Les paramètres résolus pour ce run : ce qu'on a demandé, à relire à côté
+    # de ce qui a été livré.
+    params: dict[str, Any] = field(default_factory=dict)
     # Reported by the backend that ran it — never re-derived from settings.
     simulated: bool = False
     # The engine's OWN reference for this run (ComfyUI prompt_id): the run is
@@ -66,8 +69,10 @@ class JobStore:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
 
-    def create(self, kind: str, config: str = "", workflow: str = "") -> Job:
-        job = Job(id=uuid.uuid4().hex, kind=kind, workflow=workflow, config=config)
+    def create(self, kind: str, config: str = "", workflow: str = "",
+               params: dict[str, Any] | None = None) -> Job:
+        job = Job(id=uuid.uuid4().hex, kind=kind, workflow=workflow, config=config,
+                  params=dict(params or {}))
         with self._lock:
             self._jobs[job.id] = job
         return job

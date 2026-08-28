@@ -512,6 +512,31 @@ async function poll(id){
   stopLive();
 }
 
+// Ce qui a été demandé pour ce run, relisible à côté de ce qui en est sorti.
+const ORDRE_PARAMS = ["prompt","negative_prompt","image","video","width","height",
+                      "duration_s","fps","latent_batch","steps","cfg","seed","filename_prefix"];
+function demandeView(params){
+  const cles = ORDRE_PARAMS.filter(k=>params[k]!==undefined && params[k]!=="")
+    .concat(Object.keys(params).filter(k=>!ORDRE_PARAMS.includes(k)));
+  return cles.map(k=>{
+    const v = String(params[k]);
+    return `<span class="chip" title="${escapeHtml(v)}">${escapeHtml(k)} · `
+      + `${escapeHtml(v.length>48 ? v.slice(0,48)+"…" : v)}</span>`;
+  }).join("");
+}
+
+// L'origine d'un fichier est LUE dans le fichier (le moteur l'y inscrit), à la
+// demande : ouvrir chaque fichier pour afficher une liste serait payer cher.
+async function montrerOrigine(nom, hote){
+  hote.textContent = "lecture de l'origine…";
+  try{
+    const d = await (await fetch(`/v1/artifacts/origin?name=${encodeURIComponent(nom)}`)).json();
+    if(!d.inputs){ hote.innerHTML = `<span class="hint">${escapeHtml(d.reason||d.detail||"origine illisible")}</span>`; return; }
+    hote.innerHTML = `<span class="hint">origine ${escapeHtml(d.source)} · ${d.nodes} nœud(s)</span>`
+      + `<div>${demandeView(d.inputs)}</div>`;
+  }catch(e){ hote.innerHTML = `<span class="hint">origine illisible : ${escapeHtml(String(e))}</span>`; }
+}
+
 function artView(a){
   const u=a.url||"", size=a.bytes?` · ${a.bytes} o`:"";
   const open=u?` · <a class="open" href="${u}" target="_blank" rel="noopener">Ouvrir ↗</a>`:"";
@@ -525,9 +550,13 @@ function artView(a){
     ? `<div class="hint" style="flex-basis:100%;color:var(--warn)">⚠ écart avec la demande : `
       + escapeHtml(a.gaps.map(g=>`${g.field} demandé ${g.asked}, livré ${g.delivered}`).join(" · "))
       + `</div>` : "";
+  // Le nom relatif au dossier de sortie : c'est ainsi que l'origine se demande.
+  const relatif = (a.url||"").replace(/^\/artifacts\//, "");
   return `<div class="art"><span class="badge">${a.kind}</span><span class="k">${size}</span>${open}`+
     (contenu?`<span class="k">· ${escapeHtml(contenu)}</span>`:"")+
-    `<div class="path">${escapeHtml(a.path)}</div>${ecart}</div>`;
+    (relatif?`<button type="button" class="ghost origineBtn" data-nom="${escapeHtml(relatif)}">D'où vient-il ?</button>`:"")+
+    `<div class="path">${escapeHtml(a.path)}</div>${ecart}`+
+    `<div class="path origineBox"></div></div>`;
 }
 
 // The engine reports its own progress; we only display it. No fake percentage.
@@ -576,6 +605,8 @@ function render(job){
       `<span class="k">type</span><span>${job.kind}</span>`+
       `<span class="k">workflow</span><span>${escapeHtml(job.workflow||"—")}</span>`+
       `<span class="k">configuration</span><span>${escapeHtml(job.config||"—")}</span>`+
+      (Object.keys(job.params||{}).length
+        ? `<span class="k">demandé</span><span>${demandeView(job.params)}</span>` : ``)+
       (job.engine_ref?`<span class="k">file d'attente ComfyUI</span><span title="ouvre ComfyUI pour suivre ou annuler">${escapeHtml(job.engine_ref)}</span>`:``)+
     `</div>`+
     (logs?`<div class="k" style="font-size:12px;color:var(--muted)">journal</div><div class="logs">${logs}</div>`:``)+
@@ -585,6 +616,9 @@ function render(job){
   $("result").innerHTML=html;
   const stop = $("cancelJob");
   if(stop) stop.onclick = ()=>cancelJob(job.id, stop);
+  document.querySelectorAll("#result .origineBtn").forEach(b=>{
+    b.onclick = ()=> montrerOrigine(b.dataset.nom, b.closest(".art").querySelector(".origineBox"));
+  });
 }
 
 function problem(p){ $("result").innerHTML = problemHtml(p) + `<details><summary>JSON brut</summary><pre class="raw">${JSON.stringify(p,null,2)}</pre></details>`; }
@@ -877,8 +911,15 @@ async function loadOut(){
         `<span class="nm">${escapeHtml(a.name)}</span>`+
         `<span class="sub">${when} · ${mo} Mo</span>`+
         `<a class="open" href="${a.url}" target="_blank" rel="noopener">Ouvrir ↗</a>`+
-        `<div class="sub" style="font-family:ui-monospace,Consolas,monospace">${escapeHtml(a.path)}</div></div>`;
+        // Le chemin RELATIF au dossier de sortie, pas le seul nom : les livrables
+        // vivent dans des sous-dossiers, et un nom seul n'y désigne rien.
+        `<button type="button" class="ghost origineBtn" data-nom="${escapeHtml((a.url||"").replace(/^\/artifacts\//, ""))}">D'où vient-il ?</button>`+
+        `<div class="sub" style="font-family:ui-monospace,Consolas,monospace">${escapeHtml(a.path)}</div>`+
+        `<div class="sub origineBox" style="flex-basis:100%"></div></div>`;
     }).join("");
+    document.querySelectorAll(".origineBtn").forEach(b=>{
+      b.onclick = ()=> montrerOrigine(b.dataset.nom, b.closest(".wfrow").querySelector(".origineBox"));
+    });
   }catch(e){ $("outList").innerHTML=`<span class="hint">erreur: ${escapeHtml(String(e))}</span>`; }
 }
 

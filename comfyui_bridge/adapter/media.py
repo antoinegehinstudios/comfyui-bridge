@@ -35,9 +35,17 @@ OUTPUT_KEYS = ("images", "gifs", "videos", "audio", "files")
 # Ce que ce service écrit lui-même dans le dossier de sortie pour travailler :
 # un backend qui ramasse « tout fichier nouveau » se livrerait ses propres
 # brouillons comme s'ils étaient le résultat demandé.
+# Suffixe du fichier d'origine, écrit à côté des livrables qui ne savent pas
+# embarquer la leur.
+SIDECAR_SUFFIX = ".origine.json"
+
+
 def is_working_file(path: Path | str) -> bool:
     nom = Path(path).name
-    return nom.startswith("_workflow_") or nom.endswith(".manifest.json")
+    return (nom.startswith("_workflow_") or nom.endswith(".manifest.json")
+            # L'origine écrite à côté d'un livrable qui ne sait pas la porter
+            # accompagne ce livrable : elle n'en est pas un elle-même.
+            or nom.endswith(SIDECAR_SUFFIX))
 
 
 def media_kind(path: Path | str) -> str:

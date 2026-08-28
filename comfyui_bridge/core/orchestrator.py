@@ -207,6 +207,7 @@ class Orchestrator:
             kind=plan.kind,
             config=plan.config,
             workflow=plan.workflow,
+            params=plan.params,
         )
         self._store.append_log(job.id, f"accepted: workflow '{plan.workflow}' ({plan.config})"
                                        + (" — MALGRÉ un problème retenu (essai forcé)" if force

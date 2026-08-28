@@ -488,6 +488,32 @@ dixièmes de seconde : sa durée est journalisée mais n'entre jamais dans
 l'ajustement. Le barème de charge est **versionné** : le changer
 n'autorise pas à mélanger deux échelles dans le même ajustement.
 
+## Retrouver avec quoi un fichier a été produit
+
+Le moteur **inscrit déjà** le graphe dans ce qu'il produit — c'est ce qui permet
+de glisser une image dans ComfyUI et d'y retrouver le workflow :
+
+| format | où | lu par |
+|---|---|---|
+| PNG | chunk `tEXt` `prompt` (et `workflow`) | `adapter/provenance.py` |
+| MP4 / MOV | boîte `moov/udta/meta`, clé `prompt` | idem |
+| FLAC | `VORBIS_COMMENT`, champ `prompt=` | idem |
+
+Rien n'est donc recopié pour ces formats : `GET /v1/artifacts/origin?name=<chemin
+relatif>` **lit** le fichier et rend un résumé — prompt, dimensions, images,
+étapes, cfg, graine — nommé comme dans le contrat d'entrée, parce qu'il est tiré
+par la même analyse (`autobind`). Un fichier reste ainsi explicable seul, des
+mois plus tard, sans ce service et sans l'historique du moteur, qui est purgé à
+chaque redémarrage.
+
+Un livrable qui ne sait rien porter (`.txt`, `.csv`, `.webp`) reçoit un fichier
+compagnon `<nom>.origine.json` de même contenu — écrit **uniquement** dans ce
+cas, et jamais listé comme livrable.
+
+Enfin, un job porte `params` : ce qui a été **demandé**. C'est complémentaire de
+ce que le fichier dit — celui-ci rend les valeurs **effectives**, y compris
+celles que l'appelant n'a pas fournies et que le workflow portait.
+
 ## Ce qu'un run livre
 
 Un workflow ne produit pas que du média : certains **mesurent** et rendent des
