@@ -36,10 +36,14 @@ class InflightLog:
 
     def add(self, prompt_id: str, *, workflow: str, config: str,
             work: float | None, params: dict[str, Any], at: str,
-            work_model: int | None = None) -> None:
+            work_model: int | None = None, kind: str = "") -> None:
         data = self._read()
+        # `kind` est noté : sans lui, le plan refait à la reprise retombe sur
+        # son défaut ("image") et fait dire à un livrable vidéo qu'il est une
+        # image. Le relire ici, c'est le tenir de la source, pas le redéduire.
         data[prompt_id] = {"workflow": workflow, "config": config, "work": work,
-                           "work_model": work_model, "params": params, "at": at}
+                           "work_model": work_model, "params": params, "at": at,
+                           "kind": kind}
         self._write(data)
 
     def remove(self, prompt_id: str) -> None:
@@ -60,10 +64,21 @@ def _load_of(backend, meta: dict[str, Any]) -> tuple[Any, Any]:
         return None, None
     try:
         from ..core.plan import ExecutionPlan
-        return weigh(ExecutionPlan(intent=None, params=meta.get("params") or {},
-                                   workflow=meta.get("workflow", "")))
+        return weigh(_plan_from(meta))
     except Exception:
         return None, None
+
+
+def _plan_from(meta: dict[str, Any]):
+    """Le plan tel qu'il a été noté — pas un plan appauvri reconstruit de mémoire.
+
+    Ce qu'on avait noté du run sert au poids ET au fichier compagnon : le nom du
+    workflow et sa nature n'existent que de ce côté-ci.
+    """
+    from ..core.plan import ExecutionPlan
+    return ExecutionPlan(intent=None, params=meta.get("params") or {},
+                         workflow=meta.get("workflow", ""),
+                         kind=meta.get("kind") or "image")
 
 
 def recover(backend, log: InflightLog, registry, host: str) -> list[dict[str, Any]]:
@@ -77,7 +92,7 @@ def recover(backend, log: InflightLog, registry, host: str) -> list[dict[str, An
     recovered: list[dict[str, Any]] = []
     for prompt_id, meta in list(log.entries().items()):
         try:
-            result = backend.collect(prompt_id)
+            result = backend.collect(prompt_id, _plan_from(meta))
         except Exception as exc:                     # engine down, or history gone
             recovered.append({"prompt_id": prompt_id, "state": "unknown", "detail": str(exc)[:200]})
             continue

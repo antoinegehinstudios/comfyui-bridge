@@ -160,7 +160,7 @@ def test_a_run_left_in_flight_is_collected_after_a_restart(tmp_path):
     produced = Artifact(kind="video", path=str(tmp_path / "v.mp4"), url="/artifacts/v.mp4", bytes=10)
 
     class _Backend:
-        def collect(self, prompt_id):
+        def collect(self, prompt_id, plan=None):
             return ([produced], 42.0) if prompt_id == "p-1" else None   # p-2 still running
 
     class _Registry:

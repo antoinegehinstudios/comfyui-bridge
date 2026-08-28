@@ -438,6 +438,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # Same memory as /readiness and as the reconciler: a workflow
                 # known to fail here must not be the one the console opens on.
                 "runnable": not c.registry.blocking_problems(c.settings.host_id, name),
+                # Rien ne l'empêche de tourner, mais quelque chose s'est déjà mal
+                # passé ici : à dire, et à ne pas proposer d'emblée.
+                "warned": bool(c.registry.known_warnings(c.settings.host_id, name)),
                 # L'extrait est-il encore fidèle à sa source ? Sans cette ligne,
                 # un appelant pilotait une analyse périmée sans le savoir.
                 **_freshness(c, spec),
@@ -759,22 +762,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not cible.is_file():
             raise UnknownWorkflowInputError(f"{name!r} introuvable", artifact=name)
 
+        # Deux moitiés, jamais la même : le fichier porte le graphe qui l'a
+        # produit, le compagnon porte ce que le graphe ignore — le nom du
+        # workflow appelé et ce que l'appelant avait demandé.
         graphe = await run_in_threadpool(read_embedded, cible)
-        source = "embarquée"
-        if graphe is None:
-            compagnon = cible.with_name(cible.name + SIDECAR_SUFFIX)
-            if compagnon.exists():
-                try:
-                    graphe = json.loads(compagnon.read_text(encoding="utf-8")).get("prompt")
-                    source = "fichier compagnon"
-                except Exception:
-                    graphe = None
-        if not isinstance(graphe, dict):
-            return {"artifact": name, "origin": None,
-                    "reason": "ce format ne porte pas son origine et aucun fichier "
-                              "compagnon ne l'accompagne"}
-        return {"artifact": name, "source": source,
-                "inputs": summarize(graphe), "nodes": len(graphe)}
+        source = "embarquée" if graphe is not None else None
+
+        annexe: dict = {}
+        compagnon = cible.with_name(cible.name + SIDECAR_SUFFIX)
+        if compagnon.exists():
+            try:
+                annexe = json.loads(compagnon.read_text(encoding="utf-8"))
+            except Exception:
+                annexe = {}
+        if graphe is None and isinstance(annexe.get("prompt"), dict):
+            graphe, source = annexe["prompt"], "fichier compagnon"
+
+        reponse = {"artifact": name, "source": source,
+                   "workflow": annexe.get("workflow"),
+                   "requested": annexe.get("demande") or {},
+                   "produced_at": annexe.get("produit_le"),
+                   "config": annexe.get("empreinte_config")}
+        if isinstance(graphe, dict):
+            reponse["inputs"] = summarize(graphe)
+            reponse["nodes"] = len(graphe)
+        elif not annexe:
+            reponse["reason"] = ("ce format ne porte pas son origine et aucun fichier "
+                                 "compagnon ne l'accompagne")
+        return reponse
 
     @app.get("/v1/artifacts", tags=["render"])
     async def list_artifacts(request: Request, limit: int = 20) -> dict:

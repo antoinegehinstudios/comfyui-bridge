@@ -87,6 +87,17 @@
   a.open:hover{filter:brightness(1.1)}
   button.copy{background:var(--panel);border:1px solid var(--line);color:var(--muted);
     border-radius:6px;padding:3px 10px;font-size:12px}
+  details.origine{margin:6px 0}
+  details.origine > summary{color:var(--accent);font-size:12px;padding:2px 0}
+  details.origine .corps{padding:6px 0 2px}
+  .champ{margin:6px 0}
+  .champ .k{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px;margin-bottom:2px}
+  pre.texte{margin:0;background:#0b0d11;border:1px solid var(--line);border-radius:8px;
+    padding:8px 10px;font-size:12px;white-space:pre-wrap;word-break:break-word;
+    max-height:220px;overflow:auto;user-select:text}
+  button.copie{background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:6px;padding:1px 8px;font-size:11px;font-weight:500}
+  .kv.petit{grid-template-columns:auto 1fr;gap:2px 14px;margin:6px 0;font-size:12px}
   .loc{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);
     border-radius:8px;padding:8px 12px;margin:10px 0;font-size:12px}
   .loc code{color:var(--accent);word-break:break-all}
@@ -382,14 +393,19 @@ fetch("/v1/workflows").then(r=>r.json()).then(cat=>{
   for(const name of Object.keys(WF)){
     const o=document.createElement("option"); o.value=name;
     // A workflow a past run proved impossible here is said so in the list.
-    o.textContent = `${name} (${WF[name].kind})` + (WF[name].runnable===false ? " — problème connu ici" : "");
+    o.textContent = `${name} (${WF[name].kind})`
+      + (WF[name].runnable===false ? " — problème connu ici"
+         : WF[name].warned ? " — a déjà échoué ici" : "");
     sel.appendChild(o);
   }
   // Open on something that can actually run: the shipped default references a
   // model this host does not have, and the console opened on a dead workflow.
-  const openOn = (WF[cat.default] && WF[cat.default].runnable !== false)
-    ? cat.default
-    : (Object.keys(WF).find(n=>WF[n].runnable!==false) || cat.default);
+  // On ouvre sur un workflow que rien ne bloque ET dont rien n'a déjà échoué :
+  // proposer d'emblée celui dont le modèle manque n'est qu'une surprise différée.
+  const sain = n => WF[n].runnable !== false && !WF[n].warned;
+  const openOn = (WF[cat.default] && sain(cat.default)) ? cat.default
+    : (Object.keys(WF).find(sain)
+       || Object.keys(WF).find(n=>WF[n].runnable!==false) || cat.default);
   if(openOn) sel.value = openOn;
   majBadge(WF);
   sel.addEventListener("change", ()=>buildWorkflowForm(sel.value));
@@ -516,26 +532,84 @@ async function poll(id){
 const ORDRE_PARAMS = ["prompt","negative_prompt","image","video","width","height",
                       "duration_s","fps","latent_batch","steps","cfg","seed","filename_prefix"];
 function demandeView(params){
+  // Les textes ne sont PAS tronqués : un prompt qu'on ne peut pas relire en
+  // entier, ni copier, ne sert à rien. Ils vont dans un bloc sélectionnable ;
+  // le reste tient dans un tableau clé/valeur.
   const cles = ORDRE_PARAMS.filter(k=>params[k]!==undefined && params[k]!=="")
     .concat(Object.keys(params).filter(k=>!ORDRE_PARAMS.includes(k)));
-  return cles.map(k=>{
-    const v = String(params[k]);
-    return `<span class="chip" title="${escapeHtml(v)}">${escapeHtml(k)} · `
-      + `${escapeHtml(v.length>48 ? v.slice(0,48)+"…" : v)}</span>`;
-  }).join("");
+  // Un texte demandé se recolle ailleurs : prompt et négatif vont TOUJOURS
+  // dans un bloc copiable, même courts. Le seuil ne vaut que pour le reste.
+  const TOUJOURS = ["prompt", "negative_prompt"];
+  const longs = cles.filter(k=>typeof params[k]==="string"
+                            && (TOUJOURS.includes(k) || String(params[k]).length>40));
+  const courts = cles.filter(k=>!longs.includes(k));
+  const blocs = longs.map(k=>
+    `<div class="champ"><div class="k">${escapeHtml(k)}`
+    + `<button type="button" class="copie" data-copie="${escapeHtml(String(params[k]))}">copier</button></div>`
+    + `<pre class="texte">${escapeHtml(String(params[k]))}</pre></div>`).join("");
+  const table = courts.length
+    ? `<div class="kv petit">` + courts.map(k=>
+        `<span class="k">${escapeHtml(k)}</span><span>${escapeHtml(String(params[k]))}</span>`
+      ).join("") + `</div>`
+    : "";
+  return blocs + table;
 }
+
+// Copier sans que l'utilisateur ait à sélectionner : un prompt se recolle
+// ailleurs, c'est tout l'intérêt de l'afficher.
+document.addEventListener("click", async e=>{
+  const b = e.target.closest(".copie");
+  if(!b) return;
+  const avant = b.textContent;
+  try{ await navigator.clipboard.writeText(b.dataset.copie); b.textContent = "copié ✓"; }
+  catch(err){ b.textContent = "copie refusée"; }
+  setTimeout(()=>{ b.textContent = avant; }, 1600);
+});
 
 // L'origine d'un fichier est LUE dans le fichier (le moteur l'y inscrit), à la
 // demande : ouvrir chaque fichier pour afficher une liste serait payer cher.
 async function montrerOrigine(nom, hote){
-  hote.textContent = "lecture de l'origine…";
+  if(hote.dataset.charge) return;          // une seule lecture par livrable
+  hote.dataset.charge = "1";
+  hote.innerHTML = `<span class="hint">lecture de l\u2019origine…</span>`;
   try{
     const d = await (await fetch(`/v1/artifacts/origin?name=${encodeURIComponent(nom)}`)).json();
-    if(!d.inputs){ hote.innerHTML = `<span class="hint">${escapeHtml(d.reason||d.detail||"origine illisible")}</span>`; return; }
-    hote.innerHTML = `<span class="hint">origine ${escapeHtml(d.source)} · ${d.nodes} nœud(s)</span>`
-      + `<div>${demandeView(d.inputs)}</div>`;
-  }catch(e){ hote.innerHTML = `<span class="hint">origine illisible : ${escapeHtml(String(e))}</span>`; }
+    if(!d.inputs && !d.workflow){
+      hote.innerHTML = `<span class="hint">${escapeHtml(d.reason||d.detail||"origine illisible")}</span>`;
+      return;
+    }
+    let html = "";
+    if(d.workflow){
+      html += `<div class="hint">workflow <b>${escapeHtml(d.workflow)}</b>`
+        + (d.config?` · configuration ${escapeHtml(d.config)}`:"")
+        + (d.produced_at?` · ${escapeHtml(String(d.produced_at).replace("T"," ").slice(0,16))}`:"")
+        + `</div>`;
+    }
+    if(Object.keys(d.requested||{}).length)
+      html += `<div class="hint" style="margin-top:6px">ce qui a été demandé</div>`
+        + demandeView(d.requested);
+    if(d.inputs)
+      html += `<div class="hint" style="margin-top:8px">ce que le fichier porte`
+        + ` (origine ${escapeHtml(d.source)}, ${d.nodes} nœud(s))</div>` + demandeView(d.inputs);
+    hote.innerHTML = html;
+  }catch(e){
+    hote.dataset.charge = "";              // réessayable après un échec réseau
+    hote.innerHTML = `<span class="hint">origine illisible : ${escapeHtml(String(e))}</span>`;
+  }
 }
+
+// Un dépliant par livrable : il ne lit le fichier que si on l'ouvre.
+function origineDetails(nom){
+  if(!nom) return "";
+  return `<details class="origine" data-nom="${escapeHtml(nom)}">`
+    + `<summary>Entrées de ce livrable</summary><div class="corps"></div></details>`;
+}
+
+document.addEventListener("toggle", e=>{
+  const d = e.target;
+  if(d.tagName === "DETAILS" && d.classList.contains("origine") && d.open)
+    montrerOrigine(d.dataset.nom, d.querySelector(".corps"));
+}, true);
 
 function artView(a){
   const u=a.url||"", size=a.bytes?` · ${a.bytes} o`:"";
@@ -554,9 +628,8 @@ function artView(a){
   const relatif = (a.url||"").replace(/^\/artifacts\//, "");
   return `<div class="art"><span class="badge">${a.kind}</span><span class="k">${size}</span>${open}`+
     (contenu?`<span class="k">· ${escapeHtml(contenu)}</span>`:"")+
-    (relatif?`<button type="button" class="ghost origineBtn" data-nom="${escapeHtml(relatif)}">D'où vient-il ?</button>`:"")+
     `<div class="path">${escapeHtml(a.path)}</div>${ecart}`+
-    `<div class="path origineBox"></div></div>`;
+    `<div style="flex-basis:100%">${origineDetails(relatif)}</div></div>`;
 }
 
 // The engine reports its own progress; we only display it. No fake percentage.
@@ -606,7 +679,9 @@ function render(job){
       `<span class="k">workflow</span><span>${escapeHtml(job.workflow||"—")}</span>`+
       `<span class="k">configuration</span><span>${escapeHtml(job.config||"—")}</span>`+
       (Object.keys(job.params||{}).length
-        ? `<span class="k">demandé</span><span>${demandeView(job.params)}</span>` : ``)+
+        ? `<span class="k">demandé</span><span><details class="origine"><summary>`
+          + `${Object.keys(job.params).length} paramètre(s) envoyés</summary>`
+          + `<div class="corps">${demandeView(job.params)}</div></details></span>` : ``)+
       (job.engine_ref?`<span class="k">file d'attente ComfyUI</span><span title="ouvre ComfyUI pour suivre ou annuler">${escapeHtml(job.engine_ref)}</span>`:``)+
     `</div>`+
     (logs?`<div class="k" style="font-size:12px;color:var(--muted)">journal</div><div class="logs">${logs}</div>`:``)+
@@ -616,9 +691,6 @@ function render(job){
   $("result").innerHTML=html;
   const stop = $("cancelJob");
   if(stop) stop.onclick = ()=>cancelJob(job.id, stop);
-  document.querySelectorAll("#result .origineBtn").forEach(b=>{
-    b.onclick = ()=> montrerOrigine(b.dataset.nom, b.closest(".art").querySelector(".origineBox"));
-  });
 }
 
 function problem(p){ $("result").innerHTML = problemHtml(p) + `<details><summary>JSON brut</summary><pre class="raw">${JSON.stringify(p,null,2)}</pre></details>`; }
@@ -680,7 +752,17 @@ async function loadReadiness(name){
   const el=$("readiness"); el.style.display="none"; el.textContent="";
   try{
     const d=await (await fetch(`/v1/workflows/${encodeURIComponent(name)}/readiness`)).json();
-    if(d.runnable) return;
+    if(d.runnable){
+      // Rien ne bloque, mais un échec passé se dit : le moteur le refusera
+      // peut-être encore, et mieux vaut le savoir avant de lancer.
+      const w = d.warnings || [];
+      if(!w.length) return;
+      el.innerHTML = `⚠ <b>Déjà échoué ici</b> — ${escapeHtml(w[0].problem||"")}`
+        + (w[0].detail?`<br><span class="hint">${escapeHtml(w[0].detail.slice(0,220))}</span>`:"")
+        + `<br><span class="hint">Le lancement n'est pas refusé : le moteur tranchera lui-même.</span>`;
+      el.style.display="block";
+      return;
+    }
     const miss=(d.dependencies&&d.dependencies.models)||[];
     // The memory is per CONFIGURATION: saying otherwise condemned a workflow
     // that another size would have run.
@@ -796,7 +878,15 @@ function annotateSemanticBounds(contract){
   for(const i of contract||[]) byField[i.field] = i;
   for(const f of SEMANTIC){
     const d = byField[f.key], el = $("p_"+f.key);
-    if(!d || !el || el.type!=="number") continue;
+    if(!d || !el) continue;
+    // La VRAIE valeur que le workflow porte, en grisé : « valeur du workflow »
+    // n'apprenait rien et laissait découvrir après coup ce qui allait tourner.
+    if(d.value !== undefined && d.value !== null && d.value !== ""){
+      const brut = String(d.value);
+      el.placeholder = brut.length > 90 ? brut.slice(0, 90) + "…" : brut;
+      el.title = brut;                      // le texte entier reste consultable
+    }
+    if(el.type !== "number") continue;
     if(d.min!==undefined) el.min = d.min;
     if(d.max!==undefined) el.max = d.max;
     if(d.step!==undefined) el.step = d.step;
@@ -911,15 +1001,12 @@ async function loadOut(){
         `<span class="nm">${escapeHtml(a.name)}</span>`+
         `<span class="sub">${when} · ${mo} Mo</span>`+
         `<a class="open" href="${a.url}" target="_blank" rel="noopener">Ouvrir ↗</a>`+
-        // Le chemin RELATIF au dossier de sortie, pas le seul nom : les livrables
-        // vivent dans des sous-dossiers, et un nom seul n'y désigne rien.
-        `<button type="button" class="ghost origineBtn" data-nom="${escapeHtml((a.url||"").replace(/^\/artifacts\//, ""))}">D'où vient-il ?</button>`+
         `<div class="sub" style="font-family:ui-monospace,Consolas,monospace">${escapeHtml(a.path)}</div>`+
-        `<div class="sub origineBox" style="flex-basis:100%"></div></div>`;
+        // Le chemin RELATIF au dossier de sortie : les livrables vivent dans
+        // des sous-dossiers, un nom seul n'y désigne rien.
+        `<div style="flex-basis:100%">${origineDetails((a.url||"").replace(/^\/artifacts\//, ""))}</div>`+
+        `</div>`;
     }).join("");
-    document.querySelectorAll(".origineBtn").forEach(b=>{
-      b.onclick = ()=> montrerOrigine(b.dataset.nom, b.closest(".wfrow").querySelector(".origineBox"));
-    });
   }catch(e){ $("outList").innerHTML=`<span class="hint">erreur: ${escapeHtml(String(e))}</span>`; }
 }
 

@@ -70,3 +70,98 @@ def test_the_companion_file_is_not_itself_a_deliverable():
     from comfyui_bridge.adapter.media import SIDECAR_SUFFIX, is_working_file
     assert is_working_file("mesures.txt" + SIDECAR_SUFFIX)
     assert not is_working_file("mesures.txt")
+
+
+def test_companion_carries_workflow_name_and_request(tmp_path):
+    """Le compagnon dit ce qu'aucun format de fichier ne porte."""
+    from comfyui_bridge.adapter.sidecar import write_companion
+    from comfyui_bridge.core.plan import ExecutionPlan, RenderIntent
+
+    livrable = tmp_path / "sortie_00001_.txt"
+    livrable.write_text("resultat", encoding="utf-8")
+    # Un VRAI plan : c'est sa forme réelle qu'on veut voir tenir, `config` y
+    # étant une propriété calculée et non un champ.
+    plan = ExecutionPlan(intent=RenderIntent(prompt="un chat"), kind="image",
+                         workflow="scene-render-analysis",
+                         params={"prompt": "un chat", "seed": 7})
+
+    ecrit = write_companion(livrable, plan, graph={"1": {"class_type": "LoadImage"}})
+    assert ecrit == tmp_path / "sortie_00001_.txt.origine.json"
+
+    d = json.loads(ecrit.read_text(encoding="utf-8"))
+    assert d["workflow"] == "scene-render-analysis"
+    assert d["fichier"] == "sortie_00001_.txt"
+    # Le plan disait "image" ; le fichier est un .txt, et c'est lui qui tranche.
+    assert d["kind"] == "text"
+    assert d["demande"] == {"prompt": "un chat", "seed": 7}
+    assert d["empreinte_config"] == plan.config
+    assert d["prompt"] == {"1": {"class_type": "LoadImage"}}   # .txt ne sait pas le porter
+
+
+def test_companion_is_not_a_deliverable(tmp_path):
+    """Sinon le backend CLI livrerait le compagnon qu'il vient d'écrire."""
+    from comfyui_bridge.adapter.media import DELIVERABLE_EXT, is_working_file
+    from comfyui_bridge.adapter.sidecar import write_companion
+
+    livrable = tmp_path / "a.png"
+    livrable.write_bytes(b"\x89PNG\r\n\x1a\n")
+    ecrit = write_companion(livrable, None)
+    assert ecrit.suffix.lower() in DELIVERABLE_EXT and is_working_file(ecrit)
+
+
+def test_companion_failure_never_costs_the_artifact(tmp_path):
+    """Un dossier disparu ne doit pas faire perdre le livrable."""
+    from comfyui_bridge.adapter.sidecar import write_companion
+    assert write_companion(tmp_path / "absent" / "x.png", None) is None
+
+
+def test_any_backend_delivers_with_its_origin(tmp_path):
+    """La règle tient sur le PORT : un backend qui l'ignore la reçoit quand même."""
+    from comfyui_bridge.adapter.sidecar import WithOrigin
+    from comfyui_bridge.core.plan import Artifact, BackendResult, ExecutionPlan, RenderIntent
+    from comfyui_bridge.adapter.media import SIDECAR_SUFFIX
+
+    livrable = tmp_path / "sortie.txt"
+    livrable.write_text("resultat", encoding="utf-8")
+
+    class BackendMuet:
+        """N'écrit aucune origine, et n'a pas à le savoir."""
+        def preview(self, plan): return {"9": {"class_type": "SaveText"}}
+        def submit(self, plan, *a, **k):
+            return BackendResult(artifacts=[Artifact(kind="text", path=str(livrable),
+                                                     url="/artifacts/sortie.txt", bytes=8)])
+
+    plan = ExecutionPlan(intent=RenderIntent(prompt="p"), params={"seed": 3},
+                         workflow="un-workflow", kind="text")
+    WithOrigin(BackendMuet()).submit(plan)
+
+    compagnon = livrable.with_name(livrable.name + SIDECAR_SUFFIX)
+    d = json.loads(compagnon.read_text(encoding="utf-8"))
+    assert d["workflow"] == "un-workflow"
+    assert d["demande"] == {"seed": 3}
+    assert d["prompt"] == {"9": {"class_type": "SaveText"}}   # .txt ne le porte pas
+
+
+def test_port_wrapper_stays_transparent(tmp_path):
+    """Envelopper ne doit rien retirer : le reste du backend passe au travers."""
+    from comfyui_bridge.adapter.sidecar import WithOrigin
+
+    class Backend:
+        def load_of(self, plan): return 4.0, 2
+        def health(self): return {"ok": True}
+    enveloppe = WithOrigin(Backend())
+    assert enveloppe.load_of(None) == (4.0, 2)
+    assert enveloppe.health() == {"ok": True}
+
+
+def test_recovered_run_keeps_the_kind_it_was_launched_with(tmp_path):
+    """Un livrable vidéo repris ne doit pas se déclarer image."""
+    from comfyui_bridge.adapter.inflight import InflightLog, _plan_from
+
+    log = InflightLog(tmp_path / "inflight.json")
+    log.add("p1", workflow="minimax-h3-court", config="x240", work=1.0,
+            params={"fps": 24}, at="2026-08-28T00:00:00+00:00", kind="video")
+
+    plan = _plan_from(log.entries()["p1"])
+    assert plan.kind == "video"
+    assert plan.workflow == "minimax-h3-court"

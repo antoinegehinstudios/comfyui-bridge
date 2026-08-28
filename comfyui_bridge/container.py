@@ -15,9 +15,11 @@ from .adapter.comfy_http import ComfyUIHttpBackend
 from .adapter.comfyui_client import ComfyUIClient
 from .adapter.engines import EngineProfile, ensure_engine, load_engines
 from .adapter.inflight import InflightLog
+from .adapter.sidecar import WithOrigin
 from .config import Settings
 from .core.jobs import JobStore
 from .core.orchestrator import Orchestrator
+from .core.ports import RenderBackend
 from .hermes.reconciler import HermesReconciler
 from .hermes.registry import ProblemRegistry
 
@@ -31,7 +33,7 @@ class Container:
     reconciler: HermesReconciler
     catalog: WorkflowCatalog
     comfyui: ComfyUIClient
-    backend: ComfyCliBackend | ComfyUIHttpBackend
+    backend: RenderBackend            # le concret, enveloppé par WithOrigin
     store: JobStore
     orchestrator: Orchestrator
     inflight: InflightLog
@@ -57,10 +59,14 @@ def build_container(settings: Settings | None = None) -> Container:
     reconciler = HermesReconciler(registry, host=settings.host_id, mode=settings.hermes_mode)
     inflight = InflightLog(settings.hermes_db.parent / "inflight.json")
     if settings.comfy_backend == "http":
-        backend: ComfyCliBackend | ComfyUIHttpBackend = ComfyUIHttpBackend(
+        backend: RenderBackend = ComfyUIHttpBackend(
             settings, catalog, inflight=inflight)
     else:
         backend = ComfyCliBackend(settings, catalog)  # honours dry_run (manifest vs subprocess)
+
+    # Un livrable part avec son origine, quel que soit le backend qui l'a
+    # produit : la règle est posée ici, une fois, sur le port.
+    backend = WithOrigin(backend)
     store = JobStore()
     orchestrator = Orchestrator(
         backend=backend,
