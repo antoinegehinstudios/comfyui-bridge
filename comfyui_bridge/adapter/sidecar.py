@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .media import SIDECAR_SUFFIX, media_kind
+from .media import SIDECAR_SUFFIX
 from .provenance import read_embedded
 
 
@@ -32,18 +32,10 @@ def write_companion(fichier: Path, plan: Any = None, graph: dict | None = None) 
     try:
         compagnon: dict[str, Any] = {
             "fichier": fichier.name,
-            # La nature se LIT sur le fichier produit. La prendre du plan, c'est
-            # rapporter une intention : un run repris sans nature notée faisait
-            # dire "image" à un .mp4. Le fichier, lui, ne se trompe pas.
-            "kind": media_kind(fichier),
             "produit_le": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
         if plan is not None:
             compagnon["workflow"] = getattr(plan, "workflow", None)
-            # Nommée : c'est l'empreinte sous laquelle l'expérience de ce run
-            # est rangée, pas une résolution lisible ("x240" = 240 images).
-            compagnon["empreinte_config"] = getattr(plan, "config", None)
-            compagnon["demande"] = dict(getattr(plan, "params", {}) or {})
         if isinstance(graph, dict) and read_embedded(fichier) is None:
             compagnon["prompt"] = graph      # le fichier ne sait pas le porter
         cible = fichier.with_name(fichier.name + SIDECAR_SUFFIX)

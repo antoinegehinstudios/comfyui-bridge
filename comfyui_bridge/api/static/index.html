@@ -581,15 +581,13 @@ async function montrerOrigine(nom, hote){
     let html = "";
     if(d.workflow){
       html += `<div class="hint">workflow <b>${escapeHtml(d.workflow)}</b>`
-        + (d.config?` · configuration ${escapeHtml(d.config)}`:"")
         + (d.produced_at?` · ${escapeHtml(String(d.produced_at).replace("T"," ").slice(0,16))}`:"")
         + `</div>`;
     }
-    if(Object.keys(d.requested||{}).length)
-      html += `<div class="hint" style="margin-top:6px">ce qui a été demandé</div>`
-        + demandeView(d.requested);
+    // Ce que porte le fichier, et rien d'autre : une demande affichée à côté
+    // de l'exécuté donnerait deux versions à départager au lieu d'une preuve.
     if(d.inputs)
-      html += `<div class="hint" style="margin-top:8px">ce que le fichier porte`
+      html += `<div class="hint" style="margin-top:6px">valeurs exécutées`
         + ` (origine ${escapeHtml(d.source)}, ${d.nodes} nœud(s))</div>` + demandeView(d.inputs);
     hote.innerHTML = html;
   }catch(e){

@@ -72,8 +72,8 @@ def test_the_companion_file_is_not_itself_a_deliverable():
     assert not is_working_file("mesures.txt")
 
 
-def test_companion_carries_workflow_name_and_request(tmp_path):
-    """Le compagnon dit ce qu'aucun format de fichier ne porte."""
+def test_companion_carries_only_what_no_file_can(tmp_path):
+    """Le compagnon dit le nom du workflow, et NE REDIT PAS le reste."""
     from comfyui_bridge.adapter.sidecar import write_companion
     from comfyui_bridge.core.plan import ExecutionPlan, RenderIntent
 
@@ -91,11 +91,10 @@ def test_companion_carries_workflow_name_and_request(tmp_path):
     d = json.loads(ecrit.read_text(encoding="utf-8"))
     assert d["workflow"] == "scene-render-analysis"
     assert d["fichier"] == "sortie_00001_.txt"
-    # Le plan disait "image" ; le fichier est un .txt, et c'est lui qui tranche.
-    assert d["kind"] == "text"
-    assert d["demande"] == {"prompt": "un chat", "seed": 7}
-    assert d["empreinte_config"] == plan.config
     assert d["prompt"] == {"1": {"class_type": "LoadImage"}}   # .txt ne sait pas le porter
+    # Rien de ce que le fichier sait dire de lui-même : deux versions d'une même
+    # valeur ne font pas deux preuves, seulement un doute à départager.
+    assert "demande" not in d and "kind" not in d and "empreinte_config" not in d
 
 
 def test_companion_is_not_a_deliverable(tmp_path):
@@ -138,7 +137,6 @@ def test_any_backend_delivers_with_its_origin(tmp_path):
     compagnon = livrable.with_name(livrable.name + SIDECAR_SUFFIX)
     d = json.loads(compagnon.read_text(encoding="utf-8"))
     assert d["workflow"] == "un-workflow"
-    assert d["demande"] == {"seed": 3}
     assert d["prompt"] == {"9": {"class_type": "SaveText"}}   # .txt ne le porte pas
 
 

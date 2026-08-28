@@ -778,11 +778,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if graphe is None and isinstance(annexe.get("prompt"), dict):
             graphe, source = annexe["prompt"], "fichier compagnon"
 
+        # Une seule source : ce que le fichier porte. Le compagnon n'ajoute que
+        # le nom du workflow, qu'aucun format de média ne sait garder.
         reponse = {"artifact": name, "source": source,
                    "workflow": annexe.get("workflow"),
-                   "requested": annexe.get("demande") or {},
-                   "produced_at": annexe.get("produit_le"),
-                   "config": annexe.get("empreinte_config")}
+                   "produced_at": annexe.get("produit_le")}
         if isinstance(graphe, dict):
             reponse["inputs"] = summarize(graphe)
             reponse["nodes"] = len(graphe)
