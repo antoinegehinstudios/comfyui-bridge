@@ -122,6 +122,13 @@
   .wfrow button.g{background:var(--panel);color:var(--txt);border:1px solid var(--line);font-weight:500}
   .dep{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;margin:2px 4px 2px 0;font-family:ui-monospace,Consolas,monospace}
   .dep.ok{background:rgba(63,185,80,.12);color:var(--ok)} .dep.miss{background:rgba(248,81,73,.14);color:var(--err)}
+  /* méta-workflows (maestro en iframe) */
+  #view-meta{display:flex;flex-direction:column;height:calc(100vh - 118px)}
+  #view-meta .metaTop{display:flex;align-items:center;gap:12px;padding:6px 22px;font-size:11px;color:var(--muted)}
+  #view-meta .metaTop a{color:var(--accent);text-decoration:none}
+  #view-meta .metaTop a:hover{text-decoration:underline}
+  #metaFrame{flex:1;width:100%;border:0;background:var(--bg)}
+  #metaDown{margin:14px 22px;align-self:flex-start}
 </style>
 </head>
 <body>
@@ -138,6 +145,7 @@
   <button data-tab="gen" class="active">Générer</button>
   <button data-tab="mgmt">Workflows <span id="majDot" style="display:none"></span></button>
   <button data-tab="out">Livrables</button>
+  <button data-tab="meta">Méta-workflows</button>
 </nav>
 
 <main id="view-gen">
@@ -207,6 +215,20 @@
   <h3>Mémoire d'Hermès — ce qui s'est réellement passé ici</h3>
   <div id="hermesList"><span class="hint">…</span></div>
   <input type="file" id="extractFile" accept=".json" style="display:none">
+</section>
+
+<section id="view-meta" style="display:none">
+  <div class="metaTop">
+    <span>maestro — orchestrateur de méta-workflows (port 7895)</span>
+    <a href="http://127.0.0.1:7895/" target="_blank" rel="noopener">ouvrir dans une fenêtre ↗</a>
+  </div>
+  <div class="loc" id="metaDown" style="display:none;border-color:var(--err)">
+    <span>maestro n'est pas lancé — démarrer : <code>node E:/Programmes/maestro/server.js</code> (port 7895)</span>
+    <button class="ghost" id="metaRetry" type="button">Réessayer</button>
+  </div>
+  <!-- L'iframe reste sans src jusqu'à la première activation de l'onglet :
+       au chargement de la page, aucune requête ne part vers maestro. -->
+  <iframe id="metaFrame" title="maestro" style="display:none"></iframe>
 </section>
 
 <script>
@@ -997,10 +1019,31 @@ document.querySelectorAll("nav.tabs button").forEach(b=>{
     $("view-gen").style.display = t==="gen"?"":"none";
     $("view-mgmt").style.display = t==="mgmt"?"":"none";
     $("view-out").style.display = t==="out"?"":"none";
+    $("view-meta").style.display = t==="meta"?"flex":"none";
     if(t==="mgmt"){ loadMgmt(); loadHermes(); }
     if(t==="out"){ loadOut(); loadQueue(); loadRecovered(); }
+    if(t==="meta") loadMeta();
   };
 });
+
+// ---- Onglet Méta-workflows : maestro (orchestrateur, port 7895) en iframe ----
+// Sonde de vie avant d'afficher l'iframe : une iframe sur un serveur mort est
+// une page blanche qui n'explique rien. `no-cors` : on ne lit pas la réponse,
+// on veut juste savoir si quelque chose répond sur le port.
+const MAESTRO_URL = "http://127.0.0.1:7895/";
+async function loadMeta(){
+  const frame=$("metaFrame"), down=$("metaDown");
+  try{
+    await fetch(MAESTRO_URL+"api/v1/health", {mode:"no-cors", signal: AbortSignal.timeout(1500)});
+    down.style.display="none";
+    if(!frame.src) frame.src = MAESTRO_URL;   // chargée à la première activation seulement
+    frame.style.display="";
+  }catch(e){
+    frame.style.display="none";
+    down.style.display="flex";
+  }
+}
+$("metaRetry").onclick = loadMeta;
 $("mgmtRefresh").onclick = ()=>{ loadMgmt(); loadHermes(); };
 $("outRefresh").onclick = ()=>{ loadOut(); loadQueue(); loadRecovered(); };
 $("queueClear").onclick = async ()=>{
