@@ -97,6 +97,20 @@ def test_a_workflow_that_delivers_a_mesh_delivers_it():
     assert media_kind("verif-3d_00001_.glb") == "3d"
 
 
+def test_a_graph_without_a_preview_still_delivers_its_mesh():
+    """MESURÉ sur `zz3d_load3d_passthrough` (Load3D -> SaveGLB, sans aperçu) :
+    le moteur écrivait bien `load3d_00001_.obj` et la passerelle répondait
+    « ComfyUI finished but produced no media » — puis Hermes retenait ce faux
+    problème contre un workflow qui marche. Sans aperçu, rien ne masquait le
+    manque ; avec aperçu, le repli livrait les aperçus à sa place."""
+    from comfyui_bridge.adapter.media import media_kind, output_refs
+
+    entree = {"outputs": {"3": {"3d": [{"filename": "load3d_00001_.obj",
+                                        "subfolder": "cortex", "type": "output"}]}}}
+    assert [r["filename"] for r in output_refs(entree)] == ["load3d_00001_.obj"]
+    assert media_kind("load3d_00001_.obj") == "3d"
+
+
 def test_a_mesh_is_a_deliverable_named_for_what_it_is():
     """Sans extension 3D dans la table, `GET /v1/artifacts` ne listait jamais un
     maillage produit, et `media_kind` le disait « image » par défaut."""
