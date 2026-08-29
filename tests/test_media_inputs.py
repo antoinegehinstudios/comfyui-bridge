@@ -333,3 +333,27 @@ def test_un_modele_3d_joint_est_pilotable():
     assert spec.carried == {"3d": "3d/cube.obj"}
     # Aucun élément neutre pour un maillage : on ne prétend pas en fabriquer un.
     assert spec.profile.neutral_for == ()
+
+
+def test_un_run_echoue_ne_reste_pas_en_vol(tmp_path):
+    """Le journal des runs en vol dit ce qui NOUS EST DÛ. Un run que le moteur a
+    terminé par une erreur reste dans son historique, donc il n'a jamais l'air
+    disparu : il y restait pour toujours, repassé en revue à chaque reprise
+    (mesuré — une entrée d'un workflow retiré depuis longtemps traînait encore)."""
+    from comfyui_bridge.adapter.inflight import InflightLog, recover
+
+    log = InflightLog(tmp_path / "inflight.json")
+    log.add("p-echec", workflow="wf", config="c", work=None, params={}, at="t", kind="image")
+    log.add("p-encours", workflow="wf", config="c", work=None, params={}, at="t", kind="image")
+
+    class _Moteur:
+        def collect(self, prompt_id, plan=None):
+            return None                       # rien de définitif à ramasser
+        def settled(self, prompt_id):
+            return prompt_id == "p-echec"     # le moteur a tranché celui-là
+        def vanished(self, prompt_id):
+            return False                      # …et il le connaît encore
+
+    etats = {r["prompt_id"]: r["state"] for r in recover(_Moteur(), log, None, "h")}
+    assert etats == {"p-echec": "failed"}
+    assert list(log.entries()) == ["p-encours"]

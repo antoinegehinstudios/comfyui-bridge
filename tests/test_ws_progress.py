@@ -98,7 +98,7 @@ def test_un_run_encore_en_file_continue_d_etre_attendu(tmp_path):
     """Le silence d'un moteur qui charge un modèle de 20 Go n'est pas une fin."""
     b = _backend(tmp_path)
     b._client.queue = lambda: {"running": ["p1"], "pending": []}
-    assert b._plus_rien_a_dire("p1") is False
+    assert b.settled("p1") is False
 
 
 def test_chaque_run_a_son_propre_identifiant_de_client(tmp_path):
@@ -129,3 +129,16 @@ def test_chaque_run_a_son_propre_identifiant_de_client(tmp_path):
     ws1, pr1, ws2, pr2 = [v for _, v in vus]
     assert ws1 == pr1 and ws2 == pr2      # une socket et son run partagent l'id
     assert ws1 != ws2                     # deux runs ne le partagent jamais
+
+
+def test_un_run_termine_par_une_erreur_ne_fait_plus_attendre(tmp_path):
+    """Mesuré sur un vrai échec de nœud : status_str « error », completed faux,
+    outputs vide, plus rien en file. Ne lire que completed faisait passer
+    l'échec pour une attente."""
+    b = _backend(tmp_path)
+    b._client.queue = lambda: {"running": [], "pending": []}
+    b._get_json = lambda path, timeout: {"p1": {"status": {"status_str": "error",
+                                                           "completed": False},
+                                                "outputs": {}}}
+    assert b.settled("p1") is True
+    b._watch_ws(FakeWS([]), "p1", lambda v, m, n: None)      # rend la main
