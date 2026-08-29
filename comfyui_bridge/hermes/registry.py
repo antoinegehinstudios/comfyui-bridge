@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS runs (
     work       REAL,           -- pixels x frames x steps (millions) for that run
     work_model INTEGER,        -- HOW that work was counted: two barèmes never mix
     setup_s    REAL,           -- time before the first step: loading, not work
+    mechanism  INTEGER,        -- QUEL mécanisme de livraison a produit cette issue
+    revised_ts TEXT,           -- QUAND ce souvenir a cessé d'être vrai (NULL = il tient)
+    revised_by TEXT,           -- CE QUI l'a changé : le processus nouveau, nommé
     ts        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_runs_lookup ON runs(scope, host, workflow, config);
@@ -78,6 +81,11 @@ class ProblemRegistry:
                 conn.execute("ALTER TABLE runs ADD COLUMN work_model INTEGER")
             if "setup_s" not in cols:         # …and before loading was timed apart
                 conn.execute("ALTER TABLE runs ADD COLUMN setup_s REAL")
+            if "mechanism" not in cols:       # …and before the delivery had a version
+                conn.execute("ALTER TABLE runs ADD COLUMN mechanism INTEGER")
+            if "revised_ts" not in cols:      # …and before a memory could be revised
+                conn.execute("ALTER TABLE runs ADD COLUMN revised_ts TEXT")
+                conn.execute("ALTER TABLE runs ADD COLUMN revised_by TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path)
@@ -89,15 +97,96 @@ class ProblemRegistry:
     def record(self, host: str, workflow: str, params: dict[str, Any], status: str,
                problem: str | None = None, detail: str | None = None,
                duration_s: float | None = None, work: float | None = None,
-               work_model: int | None = None, setup_s: float | None = None) -> None:
+               work_model: int | None = None, setup_s: float | None = None,
+               mechanism: int | None = None) -> None:
+        """Consigner une issue RÉELLE — et ajuster ce que cette issue dément.
+
+        L'ajustement n'est pas laissé à la bonne volonté de l'appelant : il se
+        fait ICI, dans la même transaction que l'écriture, parce qu'un souvenir
+        qui survit à ce qui l'a démenti est un mensonge. Deux processus nouveaux
+        changent l'état décrit :
+
+          * ce run a RÉUSSI là où un souvenir disait que cette configuration
+            échoue ;
+          * ce run a été livré par un autre MÉCANISME que celui qui a retenu le
+            problème — le verdict d'un processus qui n'existe plus ne se
+            transmet pas au suivant.
+
+        Dans les deux cas le souvenir est marqué et DATÉ, jamais effacé : le
+        moment où il a cessé d'être vrai est lui-même un fait à garder.
+        """
+        from ..core import problems as P
+        config = config_fingerprint(params)
+        at = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO runs(scope,host,workflow,config,status,problem,detail,"
-                "duration_s,work,work_model,setup_s,ts) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (self._scope, host, workflow, config_fingerprint(params), status,
+                "duration_s,work,work_model,setup_s,mechanism,ts)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (self._scope, host, workflow, config, status,
                  problem, (detail or "")[:500], duration_s, work, work_model, setup_s,
-                 datetime.now(timezone.utc).isoformat()),
+                 mechanism, at),
             )
+            if status == "succeeded":
+                self._revise(conn, host, at, "réussite de la même configuration ici",
+                             workflow=workflow, config=config)
+            if mechanism is not None:
+                # Le mécanisme de livraison a changé : ce qu'il pouvait causer
+                # LUI-MÊME ne se retient plus contre le workflow. Le reste (une
+                # mémoire saturée, un composant bloqué par le système) ne lui
+                # doit rien et n'est pas touché.
+                self._revise(conn, host, at,
+                             f"livraison refaite par un autre mécanisme (v{mechanism})",
+                             mechanism_other_than=mechanism, kinds=P.MECHANISM_DEPENDENT)
+
+    def _revise(self, conn: sqlite3.Connection, host: str, at: str, cause: str, *,
+                workflow: str | None = None, config: str | None = None,
+                mechanism_other_than: int | None = None,
+                kinds: frozenset[str] | None = None) -> int:
+        """Marquer révisés les problèmes que `cause` vient de démentir. Rend le nombre."""
+        sql = ("UPDATE runs SET revised_ts=?, revised_by=? WHERE scope=? AND host=?"
+               " AND status='failed' AND revised_ts IS NULL")
+        args: list[Any] = [at, cause, self._scope, host]
+        if workflow is not None:
+            sql += " AND workflow=?"
+            args.append(workflow)
+        if config is not None:
+            sql += " AND config=?"
+            args.append(config)
+        if mechanism_other_than is not None:
+            # `IS NOT` et non `!=` : un souvenir écrit avant que le mécanisme
+            # soit noté porte NULL, et c'est justement un autre mécanisme.
+            sql += " AND mechanism IS NOT ?"
+            args.append(mechanism_other_than)
+        if kinds is not None:
+            sql += " AND problem IN (%s)" % ",".join("?" * len(kinds))
+            args.extend(sorted(kinds))
+        return conn.execute(sql, args).rowcount or 0
+
+    def revise(self, host: str, workflow: str, cause: str,
+               config: str | None = None) -> dict[str, Any]:
+        """Un processus nouveau a changé l'état décrit : le dire, et le dater.
+
+        POURQUOI CE TROU EXISTAIT, et pourquoi il ne pouvait pas se refermer seul.
+        Un problème n'était levé que par une RÉUSSITE ultérieure de la même configuration. Or un
+        problème bloquant refuse précisément le run qui prouverait qu'il est réparé : la seule
+        sortie était condamnée par la mémoire elle-même. Mesuré : un workflow dont le fichier
+        manquait a été réenregistré avec son fichier, et resta refusé — la cause avait disparu,
+        le souvenir non.
+
+        Une mémoire qui ne se re-teste jamais devient un mensonge. On ne la lève pas à la
+        légère pour autant : ce qui l'autorise, c'est que l'OBJET du souvenir a changé.
+        Réenregistrer un workflow change sa définition ; ce qu'on savait de l'ancien ne dit plus
+        rien du nouveau.
+
+        Ce qui a changé ici : on n'EFFACE plus. Effacer emportait avec le souvenir le moment
+        où il a cessé d'être vrai, et ce qui l'a changé — deux faits que plus personne ne
+        pouvait retrouver ensuite. La ligne reste, marquée et datée.
+        """
+        at = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            revises = self._revise(conn, host, at, cause, workflow=workflow, config=config)
+        return {"revised": revises, "at": at if revises else None, "cause": cause}
 
     # -- experience: how long does this usually take? -------------------------
 
@@ -190,7 +279,10 @@ class ProblemRegistry:
     def problems_for(self, host: str, workflow: str, config: str | None = None) -> list[dict[str, Any]]:
         """Past problems for this workflow (optionally this exact config), newest first."""
         sql = ("SELECT problem, detail, config, ts FROM runs"
-               " WHERE scope=? AND host=? AND workflow=? AND status='failed'")
+               " WHERE scope=? AND host=? AND workflow=? AND status='failed'"
+               # Révisé = démenti par un processus nouveau, à une date connue.
+               # Cela se lit dans `revisions()`, plus jamais comme un fait présent.
+               " AND revised_ts IS NULL")
         args: list[Any] = [self._scope, host, workflow]
         if config is not None:
             sql += " AND config=?"
@@ -198,27 +290,6 @@ class ProblemRegistry:
         sql += " ORDER BY id DESC LIMIT 20"
         with self._connect() as conn:
             return [dict(r) for r in conn.execute(sql, args).fetchall()]
-
-    def forget_problems(self, host: str, workflow: str) -> int:
-        """Oublie les problèmes retenus pour ce workflow. Rend le nombre effacé.
-
-        POURQUOI CE TROU EXISTAIT, et pourquoi il ne pouvait pas se refermer seul.
-        Un problème n'était levé que par une RÉUSSITE ultérieure de la même configuration. Or un
-        problème bloquant refuse précisément le run qui prouverait qu'il est réparé : la seule
-        sortie était condamnée par la mémoire elle-même. Mesuré : un workflow dont le fichier
-        manquait a été réenregistré avec son fichier, et resta refusé — la cause avait disparu,
-        le souvenir non.
-
-        Une mémoire qui ne se re-teste jamais devient un mensonge. On ne l'efface pas à la
-        légère pour autant : ce qui autorise l'oubli, c'est que l'OBJET du souvenir a changé.
-        Réenregistrer un workflow change sa définition ; ce qu'on savait de l'ancien ne dit plus
-        rien du nouveau.
-        """
-        with self._connect() as conn:
-            cur = conn.execute(
-                "DELETE FROM runs WHERE scope=? AND host=? AND workflow=? AND status='failed'",
-                [self._scope, host, workflow])
-            return cur.rowcount or 0
 
     def blocking_problems(self, host: str, workflow: str,
                           config: str | None = None) -> list[dict[str, Any]]:
@@ -273,6 +344,25 @@ class ProblemRegistry:
                 (self._scope, host, workflow, config),
             ).fetchone()
         return row is not None
+
+    def revisions(self, host: str, workflow: str | None = None,
+                  limit: int = 20) -> list[dict[str, Any]]:
+        """Les moments où un souvenir a cessé d'être vrai, le dernier d'abord.
+
+        C'est la réponse à « depuis quand est-ce réparé, et par quoi ». Une
+        moyenne ne répond pas à cette question : elle n'a pas de date.
+        """
+        sql = ("SELECT workflow, problem, detail, config, ts, revised_ts, revised_by"
+               " FROM runs WHERE scope=? AND host=? AND status='failed'"
+               " AND revised_ts IS NOT NULL")
+        args: list[Any] = [self._scope, host]
+        if workflow is not None:
+            sql += " AND workflow=?"
+            args.append(workflow)
+        sql += " ORDER BY revised_ts DESC, id DESC LIMIT ?"
+        args.append(limit)
+        with self._connect() as conn:
+            return [dict(r) for r in conn.execute(sql, args).fetchall()]
 
     def recent(self, host: str, limit: int = 20) -> list[dict[str, Any]]:
         with self._connect() as conn:

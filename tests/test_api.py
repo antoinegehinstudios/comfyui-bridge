@@ -55,6 +55,45 @@ def test_known_problem_refusal_is_problem_json(client):
     assert body["config"] == "1024x1024"   # only what the caller pinned
 
 
+def test_readiness_says_the_last_time_not_the_first(client):
+    """Un souvenir se juge sur la DERNIÈRE fois qu'il s'est vérifié. La console
+    n'affichait aucune date, et l'API annonçait la plus récente sous le nom
+    « since » : on ne pouvait pas savoir si le problème datait d'une minute ou
+    d'un mois, ni s'il avait été retenté depuis."""
+    from comfyui_bridge.core.problems import OOM
+    cont = client.app.state.container
+    params = {"width": 1024, "height": 1024}
+    for _ in range(3):
+        cont.registry.record(cont.settings.host_id, "sd15-txt2img", params,
+                             status="failed", problem=OOM, detail="CUDA out of memory")
+    d = client.get("/v1/workflows/sd15-txt2img/readiness").json()
+    assert d["runnable"] is False and d["problem"] == OOM
+    assert d["occurrences"] == 3
+    assert d["last_seen"] >= d["first_seen"]      # la dernière, pas la première
+    assert "since" not in d                      # le nom qui mentait a disparu
+    assert d["revisions"] == []                  # rien n'a encore été levé
+
+
+def test_readiness_shows_when_a_memory_was_lifted_and_by_what(client):
+    """Hermes n'efface plus : il révise et date. Taire ces moments dans l'API
+    reviendrait à les effacer pour le lecteur."""
+    from comfyui_bridge.core.problems import OOM
+    cont = client.app.state.container
+    params = {"width": 1024, "height": 1024}
+    cont.registry.record(cont.settings.host_id, "sd15-txt2img", params,
+                         status="failed", problem=OOM, detail="CUDA out of memory")
+    cont.registry.record(cont.settings.host_id, "sd15-txt2img", params,
+                         status="succeeded", duration_s=9.0)
+    d = client.get("/v1/workflows/sd15-txt2img/readiness").json()
+    assert d["runnable"] is True                       # le souvenir ne tient plus
+    levee = d["revisions"][0]
+    assert levee["problem"] == OOM and levee["revised_at"]
+    assert "réussite" in levee["revised_by"]
+    # …et la même mémoire, lue par son propre point d'entrée.
+    p = client.get("/v1/hermes/problems?workflow=sd15-txt2img").json()
+    assert p["problems"] == [] and p["revised"][0]["revised_by"] == levee["revised_by"]
+
+
 def test_validation_error_is_problem_json(client):
     r = client.post("/v1/render", json={"prompt": "x", "width": 0})   # ge=1
     assert r.status_code == 422

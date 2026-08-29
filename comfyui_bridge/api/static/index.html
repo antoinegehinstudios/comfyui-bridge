@@ -776,10 +776,28 @@ async function loadReadiness(name){
       // Rien ne bloque, mais un échec passé se dit : le moteur le refusera
       // peut-être encore, et mieux vaut le savoir avant de lancer.
       const w = d.warnings || [];
-      if(!w.length) return;
+      if(!w.length){
+        // Rien ne cloche — et c'est parfois RÉCENT. Ce workflow a pu être
+        // accusé, puis lavé par un run ou par un changement de la passerelle :
+        // le moment où c'est arrivé est justement ce que personne ne pouvait
+        // plus retrouver quand la mémoire s'effaçait.
+        const levee = leveesHtml(d.revisions);
+        if(levee){
+          el.style.borderColor = "var(--ok)";
+          el.innerHTML = levee.replace(/^<br>/, "");
+          el.style.display = "block";
+        }
+        return;
+      }
+      el.style.borderColor = "var(--err)";
       el.innerHTML = `⚠ <b>Déjà échoué ici</b> — ${escapeHtml(w[0].problem||"")}`
+        // La DERNIÈRE fois que c'est arrivé : c'est cette date qui dit si le
+        // souvenir parle d'aujourd'hui ou d'une vieille tentative. (Une durée
+        // estimée, elle, n'a pas de date : c'est une médiane de runs.)
+        + (w[0].last_seen?` · <b>dernière fois le ${escapeHtml(quand(w[0].last_seen))}</b>`:"")
         + (w[0].detail?`<br><span class="hint">${escapeHtml(w[0].detail.slice(0,220))}</span>`:"")
-        + `<br><span class="hint">Le lancement n'est pas refusé : le moteur tranchera lui-même.</span>`;
+        + `<br><span class="hint">Le lancement n'est pas refusé : le moteur tranchera lui-même.</span>`
+        + leveesHtml(d.revisions);
       el.style.display="block";
       return;
     }
@@ -787,13 +805,33 @@ async function loadReadiness(name){
     // The memory is per CONFIGURATION: saying otherwise condemned a workflow
     // that another size would have run.
     const cfg = d.config && d.config !== "workflow-default" ? d.config : null;
+    el.style.borderColor = "var(--err)";
+    // Ce qui compte pour juger un souvenir, c'est la DERNIÈRE fois qu'il s'est
+    // vérifié — et combien de fois. Sans date, « constaté lors d'un run
+    // précédent » ne disait pas si ce run datait d'une minute ou d'un mois.
+    const fois = d.occurrences > 1 ? ` (${d.occurrences} fois depuis le ${escapeHtml(quand(d.first_seen))})` : "";
     el.innerHTML = `⚠ <b>Problème connu sur ce workflow</b> — ${escapeHtml(d.problem||"problème connu")}`
       + (cfg?` en <code>${escapeHtml(cfg)}</code>`:"") + `.`
+      + (d.last_seen?` <b>Dernière fois le ${escapeHtml(quand(d.last_seen))}</b>${fois}.`:"")
       + (d.detail?`<br><span class="hint">${escapeHtml(d.detail.slice(0,220))}</span>`:"")
       + (miss.length?`<br>Modèles requis : <code>${miss.map(escapeHtml).join(", ")}</code>`:"")
-      + `<br><span class="hint">Constaté lors d'un run précédent ; ${cfg?"cette configuration sera refusée, une autre reste tentable":"le lancement sera refusé"}.</span>`;
+      + `<br><span class="hint">${cfg?"Cette configuration sera refusée, une autre reste tentable":"Le lancement sera refusé"}.</span>`
+      + leveesHtml(d.revisions);
     el.style.display="block";
   }catch(e){}
+}
+
+// Une date lisible, minute comprise : c'est un MOMENT, il se lit comme tel.
+function quand(iso){ return String(iso||"").replace("T"," ").slice(0,16); }
+
+// Les souvenirs qu'un processus nouveau a démentis, avec leur moment. Hermes
+// ne les efface plus : les taire ici reviendrait à les effacer pour le lecteur.
+function leveesHtml(revisions){
+  const r = (revisions||[])[0];
+  if(!r) return "";
+  return `<br><span class="hint">✓ souvenir levé le <b>${escapeHtml(quand(r.revised_at))}</b>`
+    + ` — ${escapeHtml(r.revised_by||"")}`
+    + ((revisions.length>1)?` (et ${revisions.length-1} autre(s))`:"") + `</span>`;
 }
 
 function humanDuration(sec){
@@ -1048,12 +1086,18 @@ async function loadHermes(){
       const when = (r.ts||"").replace("T"," ").slice(0,16);
       const what = r.status === "succeeded"
         ? `<span class="badge2 ok">réussi</span>`
-        : `<span class="badge2 warn">${escapeHtml(r.problem||"échec")}</span>`;
+        // Un échec démenti depuis reste écrit — c'est arrivé — mais il ne se
+        // lit plus comme un fait présent : le moment de la levée est dit.
+        : r.revised_ts
+          ? `<span class="badge2 none">${escapeHtml(r.problem||"échec")} · levé</span>`
+          : `<span class="badge2 warn">${escapeHtml(r.problem||"échec")}</span>`;
       const measured = r.duration_s ? `${humanDuration(Math.round(r.duration_s))}` : "—";
       const load = r.work ? ` · charge ${Math.round(r.work)}` : "";
+      const levee = r.revised_ts
+        ? ` · levé le ${escapeHtml(quand(r.revised_ts))} — ${escapeHtml(r.revised_by||"")}` : "";
       return `<div class="wfrow"><span class="nm">${escapeHtml(r.workflow)}</span>${what}`
         + `<span class="sub">${escapeHtml(when)} · ${escapeHtml(r.config||"")} · ${measured}${load}`
-        + (r.detail?` · ${escapeHtml(String(r.detail).slice(0,120))}`:"") + `</span></div>`;
+        + (r.detail?` · ${escapeHtml(String(r.detail).slice(0,120))}`:"") + levee + `</span></div>`;
     }).join("");
   }catch(e){ box.innerHTML = `<span class="hint">erreur: ${escapeHtml(String(e))}</span>`; }
 }

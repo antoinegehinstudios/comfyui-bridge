@@ -283,15 +283,19 @@ async def _ingest(container, name: str, graph: dict, source: str | None,
     # Un souvenir de problème parle d'UNE définition. Quand le graphe change,
     # il ne dit plus rien de ce qui vient d'être enregistré : le garder laissait
     # un workflow réparé refusé pour une cause disparue. Un ré-enregistrement à
-    # l'identique, lui, n'efface rien.
-    oublies = 0
+    # l'identique, lui, ne révise rien.
+    revision = {"revised": 0, "at": None, "cause": None}
     if empreinte_avant is not None and empreinte_avant != _empreinte(graph):
-        oublies = container.registry.forget_problems(container.settings.host_id, name)
+        revision = container.registry.revise(
+            container.settings.host_id, name,
+            "workflow réenregistré avec un graphe différent")
 
     apres = await run_in_threadpool(_delivery, container, spec)
     return {**_spec_dict(spec), "analysis": analysis, "delivers": apres,
             "changes": _rewiring(avant, spec, apres),
-            "forgotten_problems": oublies}
+            # Ce que l'ingestion a changé dans la mémoire, avec le MOMENT : une
+            # levée sans date ne se retrouve plus ensuite.
+            "revised_problems": revision}
 
 
 def _spec_dict(spec) -> dict:
@@ -559,23 +563,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # is named as such instead of condemning the workflow as a whole.
         avertissements = [
             {"problem": w.get("problem"), "detail": (w.get("detail") or "")[:300],
-             "config": w.get("config"), "since": w.get("ts")}
+             "config": w.get("config"), "last_seen": w.get("ts")}
             for w in c.registry.known_warnings(c.settings.host_id, spec.name)
+        ]
+        # Les moments où un souvenir a cessé d'être vrai, le dernier d'abord :
+        # « réparé depuis quand, et par quoi » est une date, pas une moyenne.
+        revisions = [
+            {"problem": r.get("problem"), "config": r.get("config"),
+             "seen": r.get("ts"), "revised_at": r.get("revised_ts"),
+             "revised_by": r.get("revised_by")}
+            for r in c.registry.revisions(c.settings.host_id, spec.name, limit=5)
         ]
         blocking = c.registry.blocking_problems(c.settings.host_id, spec.name)
         if not blocking:
             # Un problème sans frais à redécouvrir n'empêche pas d'essayer : le
             # moteur tranchera lui-même, en quelques millisecondes s'il refuse.
-            return {"workflow": spec.name, "runnable": True, "warnings": avertissements}
+            return {"workflow": spec.name, "runnable": True, "warnings": avertissements,
+                    "revisions": revisions}
         first = blocking[0]
+        # `blocking` vient du plus récent au plus ancien : ce qui compte pour
+        # décider, c'est la DERNIÈRE fois que c'est arrivé. Annoncer la première
+        # sous le nom « since » datait le souvenir d'une vieille tentative et
+        # laissait croire que rien n'avait été retenté depuis.
+        meme = [b for b in blocking if b.get("problem") == first.get("problem")]
         return {
             "workflow": spec.name,
             "runnable": False,
             "problem": first.get("problem"),
             "detail": (first.get("detail") or "")[:300],
             "config": first.get("config"),
-            "since": first.get("ts"),
+            "last_seen": first.get("ts"),
+            "first_seen": meme[-1].get("ts"),
+            "occurrences": len(meme),
             "warnings": avertissements,
+            "revisions": revisions,
             "retry_hint": "POST /v1/render?force=true pour essayer malgré ce souvenir",
             # What it needs, so the gap is actionable rather than mysterious.
             "dependencies": spec.dependencies,
@@ -1010,7 +1031,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Known problems for a workflow (optionally one config)."""
         c = request.app.state.container
         return {"workflow": workflow, "config": config,
-                "problems": c.registry.problems_for(c.settings.host_id, workflow, config)}
+                "problems": c.registry.problems_for(c.settings.host_id, workflow, config),
+                # Ce qui a été levé, quand, et par quoi. Sans cela, un souvenir
+                # révisé disparaissait sans laisser trace de sa correction.
+                "revised": c.registry.revisions(c.settings.host_id, workflow)}
 
     # Serve rendered artifacts (and dry-run manifests) so the delivery is
     # actually openable in a browser — Artifact.url points here.

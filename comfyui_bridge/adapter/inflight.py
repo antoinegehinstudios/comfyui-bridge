@@ -111,7 +111,8 @@ def recover(backend, log: InflightLog, registry, host: str) -> list[dict[str, An
             work, work_model = _load_of(backend, meta)
             registry.record(host, meta.get("workflow", "?"), meta.get("params") or {},
                             status="succeeded", duration_s=measured, work=work,
-                            work_model=work_model)
+                            work_model=work_model,
+                            mechanism=getattr(backend, "delivery_mechanism", None))
             recovered.append({"prompt_id": prompt_id, "state": "recovered",
                               "workflow": meta.get("workflow"),
                               "artifacts": [a.path for a in artifacts]})

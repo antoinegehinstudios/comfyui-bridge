@@ -160,19 +160,25 @@ def test_a_run_left_in_flight_is_collected_after_a_restart(tmp_path):
     produced = Artifact(kind="video", path=str(tmp_path / "v.mp4"), url="/artifacts/v.mp4", bytes=10)
 
     class _Backend:
+        # Ce que CE backend sait ramasser porte une version : la reprise doit
+        # noter celle du backend qui a repris, pas une constante recopiée.
+        delivery_mechanism = 7
+
         def collect(self, prompt_id, plan=None):
             return ([produced], 42.0) if prompt_id == "p-1" else None   # p-2 still running
 
     class _Registry:
         def __init__(self): self.rows = []
         def record(self, host, workflow, params, status, problem=None, detail=None,
-                   duration_s=None, work=None, work_model=None):
-            self.rows.append((workflow, status, duration_s, work))
+                   duration_s=None, work=None, work_model=None, mechanism=None):
+            self.rows.append((workflow, status, duration_s, work, mechanism))
 
     registry = _Registry()
     out = recover(_Backend(), log, registry, host="h")
     assert [o["state"] for o in out] == ["recovered"]
-    assert registry.rows == [("wf", "succeeded", 42.0, 2.0)]
+    # Le mécanisme de livraison est noté même à la reprise : un run repris par
+    # une passerelle d'une autre version ne doit pas être lu comme le sien.
+    assert registry.rows == [("wf", "succeeded", 42.0, 2.0, 7)]
     # The collected one is forgotten; the one still running stays written down.
     assert list(log.entries()) == ["p-2"]
 

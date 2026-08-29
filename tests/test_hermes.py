@@ -341,14 +341,103 @@ def test_forgetting_problems_needs_the_definition_to_have_changed(tmp_path):
     assert source_hash(graphe) != source_hash(modifie)
 
 
-def test_forget_problems_only_removes_failures(tmp_path):
+def test_re_registering_revises_the_memory_and_keeps_the_moment(tmp_path):
     """Les mesures de durée servent l'estimation : les effacer avec les
-    problèmes ferait tout réapprendre à chaque ingestion."""
+    problèmes ferait tout réapprendre à chaque ingestion.
+
+    Et le problème lui-même n'est plus effacé : effacer emportait avec lui le
+    moment où il a cessé d'être vrai, et ce qui l'a changé. La ligne reste,
+    marquée et datée."""
     from comfyui_bridge.hermes.registry import ProblemRegistry
     reg = ProblemRegistry(tmp_path / "h.sqlite3")
     reg.record("h", "wf", {"width": 512}, status="succeeded", duration_s=30.0,
                work=5.0, work_model=2)
     reg.record("h", "wf", {"width": 512}, status="failed", problem="oom", detail="oom")
-    assert reg.forget_problems("h", "wf") == 1
+    levee = reg.revise("h", "wf", "workflow réenregistré avec un graphe différent")
+    assert levee["revised"] == 1 and levee["at"]
+    assert reg.problems_for("h", "wf") == []           # ne parle plus au présent
+    lignes = reg.recent("h")
+    assert [l["status"] for l in lignes] == ["failed", "succeeded"]
+    assert lignes[0]["revised_ts"] == levee["at"]      # le moment est gardé
+    assert lignes[0]["revised_by"] == "workflow réenregistré avec un graphe différent"
+    assert lignes[1]["duration_s"] == 30.0             # la mesure survit
+
+
+def test_a_success_revises_what_it_denies_at_the_moment_it_happens(tmp_path):
+    """L'ajustement n'est pas laissé à la bonne volonté d'un appelant.
+
+    Il se fait dans l'écriture même de l'issue : un souvenir qui survit à ce qui
+    l'a démenti est un mensonge, et personne ne pense à le lever après coup."""
+    from comfyui_bridge.core import problems as P
+    from comfyui_bridge.hermes.registry import ProblemRegistry
+    reg = ProblemRegistry(tmp_path / "h.sqlite3")
+    grand = {"width": 2048, "height": 2048}
+    reg.record("h", "wf", grand, status="failed", problem=P.OOM, detail="out of memory")
+    assert [p["problem"] for p in reg.problems_for("h", "wf")] == [P.OOM]
+
+    reg.record("h", "wf", grand, status="succeeded", duration_s=12.0)
     assert reg.problems_for("h", "wf") == []
-    assert reg.recent("h")[0]["status"] == "succeeded"      # la mesure survit
+    levees = reg.revisions("h", "wf")
+    assert len(levees) == 1
+    assert levees[0]["problem"] == P.OOM
+    assert levees[0]["revised_ts"] >= levees[0]["ts"]        # le moment, daté
+    assert "réussite" in levees[0]["revised_by"]
+    # Ce qui est arrivé reste écrit : on révise un souvenir, on ne réécrit pas
+    # le passé.
+    assert [l["status"] for l in reg.recent("h")] == ["succeeded", "failed"]
+
+
+def test_a_new_delivery_mechanism_revises_what_only_it_could_have_caused(tmp_path):
+    """MESURÉ : un maillage écrit par le moteur mais non ramassé par la
+    passerelle (la clé `3d` n'était pas lue) a été retenu contre un workflow qui
+    marchait. Le mécanisme de livraison a changé — le verdict d'un processus qui
+    n'existe plus ne se transmet pas au suivant.
+
+    Ce qui ne doit RIEN à ce mécanisme n'est pas touché : une mémoire saturée
+    reste une mémoire saturée."""
+    from comfyui_bridge.core import problems as P
+    from comfyui_bridge.hermes.registry import ProblemRegistry
+    reg = ProblemRegistry(tmp_path / "h.sqlite3")
+    params = {"width": 512, "height": 512}
+    # Un souvenir d'avant que le mécanisme soit noté (il porte NULL)…
+    reg.record("h", "maillage", params, status="failed", problem=P.UNKNOWN,
+               detail="ComfyUI finished but produced no media")
+    # …et un souvenir écrit par le mécanisme précédent.
+    reg.record("h", "maillage2", params, status="failed", problem=P.UNKNOWN,
+               detail="ComfyUI finished but produced no media", mechanism=1)
+    reg.record("h", "gros", params, status="failed", problem=P.OOM,
+               detail="out of memory", mechanism=1)
+
+    # Le souvenir d'avant a déjà été revu au moment où un run est passé par le
+    # mécanisme 1 : c'était déjà un autre processus que celui qui l'avait écrit.
+    assert reg.problems_for("h", "maillage") == []
+    revu = reg.revisions("h", "maillage")[0]
+    assert "mécanisme" in revu["revised_by"] and "v1" in revu["revised_by"]
+
+    # Un run livré par le mécanisme suivant, sur un tout autre workflow : c'est
+    # LA LIVRAISON qui a changé, pas ce workflow-là.
+    reg.record("h", "autre", params, status="succeeded", duration_s=3.0, mechanism=2)
+
+    assert reg.problems_for("h", "maillage2") == []
+    levee = reg.revisions("h", "maillage2")[0]
+    assert "mécanisme" in levee["revised_by"] and "v2" in levee["revised_by"]
+    assert levee["revised_ts"] >= levee["ts"]
+    # Le premier souvenir garde SA date de levée : on ne révise qu'une fois, au
+    # moment où c'est arrivé.
+    assert reg.revisions("h", "maillage")[0]["revised_ts"] == revu["revised_ts"]
+    # Le dépassement mémoire ne doit rien au mécanisme de livraison : intact.
+    assert [p["problem"] for p in reg.problems_for("h", "gros")] == [P.OOM]
+
+
+def test_an_estimate_is_a_median_so_it_carries_no_date(tmp_path):
+    """La dernière date compte pour un ÉTAT — « ce problème s'est vérifié le… ».
+    Une durée estimée n'est pas un moment : c'est une médiane de runs. Lui
+    coller une date ferait passer un calcul pour un fait daté."""
+    from comfyui_bridge.hermes.registry import ProblemRegistry
+    reg = ProblemRegistry(tmp_path / "h.sqlite3")
+    for duree in (100.0, 200.0):
+        reg.record("h", "wf", {"width": 512}, status="succeeded", duration_s=duree)
+    estimation = reg.estimate_duration("h", "wf")
+    assert estimation["samples"] == 2 and estimation["basis"] == "same-config"
+    assert not [k for k in estimation
+                if k in ("ts", "at", "date", "last_seen", "revised_at", "since")]

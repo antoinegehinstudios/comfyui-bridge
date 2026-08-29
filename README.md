@@ -610,7 +610,35 @@ rejetée par le moteur avant tout calcul, donc la retenter ne coûte rien — el
 **avertit** (`warnings`) sans bloquer. Un dépassement mémoire ou un blocage du
 système coûtent des minutes : ceux-là refusent, et `POST /v1/render?force=true`
 laisse essayer malgré tout. Réenregistrer un workflow avec un graphe **différent**
-oublie ce qu'on savait de l'ancien : ce souvenir ne parle plus de ce workflow.
+**révise** ce qu'on savait de l'ancien : ce souvenir ne parle plus de ce workflow.
+
+### Un souvenir démenti est révisé, et le moment est gardé
+
+Une mémoire qui ne se re-teste jamais devient un mensonge. Hermes est donc
+**tenu d'ajuster** ce qu'il décrit dès qu'un **processus nouveau** change cet
+état — l'ajustement se fait dans l'écriture même de l'issue, pas au bon vouloir
+d'un appelant :
+
+* le run **a réussi** là où un souvenir disait que cette configuration échoue ;
+* le run a été livré par un autre **mécanisme de livraison** (`DELIVERY_MECHANISM`
+  dans `adapter/media.py`, versionné comme le barème de charge `WORK_MODEL`) que
+  celui qui avait retenu le problème. Seul ce que ce mécanisme peut avoir causé
+  lui-même est revu (un échec non classé) ; un dépassement mémoire ne lui doit
+  rien et reste debout. Mesuré : un maillage écrit par le moteur mais non
+  ramassé par la passerelle avait été retenu contre un workflow qui marchait ;
+* le workflow a été **réenregistré** avec un graphe différent.
+
+Rien n'est effacé : effacer emportait avec le souvenir **le moment où il a cessé
+d'être vrai** et **ce qui l'a changé**. La ligne reste, marquée et datée, et se
+lit sous `revisions` (readiness), `revised` (`/v1/hermes/problems`) et
+`revised_problems` (réponse d'ingestion).
+
+**La dernière date, quand c'est elle qui compte.** Un problème connu est annoncé
+avec `last_seen` (la dernière fois qu'il s'est vérifié), `first_seen` et
+`occurrences` — la console affiche cette dernière date. Une **durée estimée**,
+elle, n'a pas de date : c'est une médiane de runs, annoncée par son nombre de
+mesures (`samples`) et sa base (`basis`). Dater un calcul le ferait passer pour
+un fait daté.
 
 Il refuse un run quand :
 
@@ -619,7 +647,8 @@ Il refuse un run quand :
 2. cette **même configuration a déjà échoué ici** pour une cause qui se
    reproduirait (`oom`, `missing-model`, `missing-node`, `blocked-by-os`). Le
    refus **cite le problème passé**. Un succès ultérieur sur la même
-   configuration efface cette mémoire (l'hôte a changé).
+   configuration révise cette mémoire, à la date où c'est arrivé (l'hôte a
+   changé).
 
 Les causes non reproductibles (`timeout`, `unreachable`, `workflow-error`) sont
 remontées comme **contexte**, jamais comme refus.
@@ -633,8 +662,9 @@ d'observation est ainsi honnête : elle ne réduit plus toute panne à « OOM »
 chaque ligne porte un `scope` (`HERMES_SCOPE`, défaut `comfyui`) sur lequel
 toutes les lectures filtrent — pas de fuite ni de pollution entre pipelines.
 
-Consultation : `GET /v1/hermes/runs` (ce qu'il sait) et
-`GET /v1/hermes/problems?workflow=…` (problèmes d'un workflow).
+Consultation : `GET /v1/hermes/runs` (ce qu'il sait, avec la levée éventuelle de
+chaque échec) et `GET /v1/hermes/problems?workflow=…` (problèmes debout, plus
+les souvenirs `revised` avec leur moment et leur cause).
 
 ## Ajouter un workflow
 

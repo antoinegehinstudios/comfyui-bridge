@@ -19,7 +19,8 @@ from ..core.errors import BackendExecutionError
 from ..core.plan import Artifact, BackendResult, ExecutionPlan
 from .catalog import WorkflowCatalog, build_injection
 from .injector import apply_overrides, inject
-from .media import DELIVERABLE_EXT, artifact_url, is_working_file, media_kind
+from .media import (DELIVERABLE_EXT, DELIVERY_MECHANISM, artifact_url,
+                    is_working_file, media_kind)
 
 
 class ComfyCliBackend:
@@ -30,6 +31,10 @@ class ComfyCliBackend:
     def preview(self, plan: ExecutionPlan) -> dict[str, Any]:
         """Show the ComfyUI graph the named workflow WOULD run — no subprocess."""
         return build_injection(self._catalog, plan)
+
+    # Même mécanisme de livraison que l'autre backend : c'est le module
+    # partagé qui décide ce qu'un run livre, donc c'est lui qui le versionne.
+    delivery_mechanism = DELIVERY_MECHANISM
 
     def load_of(self, plan):
         """See ``RenderBackend.load_of`` — read from the graph, never assumed."""

@@ -33,7 +33,7 @@ from .comfyui_client import ComfyUIClient
 from .inflight import InflightLog
 from .injector import apply_overrides, inject
 from .measure import measure
-from .media import artifact_url, media_kind, output_refs
+from .media import DELIVERY_MECHANISM, artifact_url, media_kind, output_refs
 
 
 def _execution_seconds(entry: dict) -> float | None:
@@ -191,6 +191,11 @@ class ComfyUIHttpBackend:
         return BackendResult(artifacts=artifacts, raw_stdout=f"comfyui prompt {prompt_id}",
                              execution_s=measured, setup_s=setup,
                              cached=_served_from_cache(entry))
+
+    # Ce qui ramasse le résultat porte une version : un échec peut venir de
+    # LUI et non du moteur, et Hermes ne doit pas retenir contre un workflow le
+    # verdict d'un mécanisme qui n'existe plus.
+    delivery_mechanism = DELIVERY_MECHANISM
 
     def load_of(self, plan):
         """See ``RenderBackend.load_of`` — read from the graph, never assumed."""

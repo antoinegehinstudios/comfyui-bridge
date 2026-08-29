@@ -201,6 +201,16 @@ class Orchestrator:
         except Exception:
             pass            # a load we cannot read is left unknown, not invented
 
+    def _mechanism(self) -> int | None:
+        """AVEC QUOI ce run a été livré, à joindre à ce qu'on retient de lui.
+
+        Un souvenir écrit par un mécanisme de livraison qui n'existe plus ne dit
+        rien du suivant : sans cette note, personne ne pouvait faire la
+        différence, et un workflow réparé par un changement de la passerelle
+        elle-même restait accusé.
+        """
+        return getattr(self._backend, "delivery_mechanism", None)
+
     # -- job lifecycle --------------------------------------------------------
 
     def accept(self, intent: RenderIntent, force: bool = False) -> tuple[Job, ExecutionPlan]:
@@ -297,7 +307,8 @@ class Orchestrator:
                 })
                 return
             self._journal.record(self._host, plan.workflow, plan.params,
-                                 status="failed", problem=kind, detail=exc.detail)
+                                 status="failed", problem=kind, detail=exc.detail,
+                                 mechanism=self._mechanism())
             problem = to_problem(exc)
             problem["problem_kind"] = kind
             self._store.append_log(job_id, f"failed [{kind}]: {exc.detail}")
@@ -320,7 +331,8 @@ class Orchestrator:
                              duration_s=measured,
                              work=None if result.cached else plan.work,
                              work_model=None if result.cached else plan.work_model,
-                             setup_s=None if result.cached else result.setup_s)
+                             setup_s=None if result.cached else result.setup_s,
+                             mechanism=self._mechanism())
         # Surface the backend's own truthful note (e.g. "dry-run: no render").
         if result.raw_stdout:
             self._store.append_log(job_id, result.raw_stdout.strip()[:200])

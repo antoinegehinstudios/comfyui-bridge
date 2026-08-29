@@ -64,6 +64,14 @@ BLOCKING = frozenset({OOM, BLOCKED_BY_OS})
 # Connus, mais sans frais à redécouvrir : on prévient, on ne refuse pas.
 CHEAP_TO_RETRY = frozenset({MISSING_MODEL, MISSING_NODE})
 
+# Ce dont la PASSERELLE elle-même peut être la cause, et non le moteur. Un échec
+# non classé en fait partie : il peut venir de la façon dont elle ramasse le
+# résultat. Mesuré : un maillage écrit sur le disque par le moteur, non ramassé
+# parce que la clé `3d` n'était pas lue, a été retenu contre un workflow qui
+# marchait. Quand la livraison change de mécanisme, ces souvenirs-là parlent
+# d'un processus qui n'existe plus : ils doivent être revus, pas conservés.
+MECHANISM_DEPENDENT = frozenset({UNKNOWN})
+
 # Parmi les bloquants, ceux qui ne doivent rien à la taille du travail : un
 # système qui bloque un composant le bloque à toute résolution, alors qu'un
 # dépassement mémoire dépend de ce qui a été demandé.

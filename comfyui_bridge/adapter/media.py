@@ -42,6 +42,16 @@ DELIVERABLE_EXT = MEDIA_EXT | DATA_EXT
 # place les aperçus temporaires du graphe (ou rien, quand il n'y en a pas).
 OUTPUT_KEYS = ("images", "gifs", "videos", "audio", "3d", "files")
 
+# La VERSION de ce mécanisme de livraison : ce que ce module sait ramasser et
+# reconnaître. Elle est enregistrée avec chaque run, comme WORK_MODEL l'est pour
+# le barème de charge, parce qu'un échec peut venir du mécanisme et non du
+# moteur. Hermes s'en sert pour ne pas retenir contre un workflow le verdict
+# d'un processus qui n'existe plus. À incrémenter quand ce module change ce
+# qu'il ramasse ou comment il le nomme.
+#   1: images / gifs / videos / audio / files
+#   2: + la clé `3d` (géométrie) et les extensions de maillage
+DELIVERY_MECHANISM = 2
+
 # Ce que ce service écrit lui-même dans le dossier de sortie pour travailler :
 # un backend qui ramasse « tout fichier nouveau » se livrerait ses propres
 # brouillons comme s'ils étaient le résultat demandé.
