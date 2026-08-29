@@ -89,17 +89,58 @@ def _lock_path(profile: EngineProfile, lock_dir: Path) -> Path:
     return Path(lock_dir) / f"engine-{profile.name}.lock"
 
 
+def _pid_exists(pid: int) -> bool:
+    """Ce PID est-il vivant ? Sonde qui REGARDE, sans jamais toucher.
+
+    Sur Windows, os.kill(pid, 0) ne teste rien : CPython l'implémente par
+    TerminateProcess(handle, 0) pour tout signal autre que CTRL_C/CTRL_BREAK.
+    La « sonde » TUAIT donc le processus sondé — et comme le verrou garde le PID
+    d'un ancien processus du pont, un PID recyclé entre-temps faisait tomber un
+    innocent au simple démarrage du pont.
+    """
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+        SYNCHRONIZE = 0x00100000
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        WAIT_TIMEOUT = 0x102                       # non signalé == tourne encore
+        ERROR_ACCESS_DENIED = 5                    # existe, mais pas à nous
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        k32.OpenProcess.restype = wintypes.HANDLE
+        k32.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        k32.WaitForSingleObject.restype = wintypes.DWORD
+        k32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        handle = k32.OpenProcess(
+            SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return ctypes.get_last_error() == ERROR_ACCESS_DENIED
+        try:
+            # Un processus terminé dont on tient encore un handle s'ouvre
+            # toujours : c'est l'état signalé, pas l'ouverture, qui tranche.
+            return k32.WaitForSingleObject(handle, 0) == WAIT_TIMEOUT
+        finally:
+            k32.CloseHandle(handle)
+    try:  # POSIX : signal 0 == « ce processus existe-t-il ? », sans le toucher
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True                                # existe, mais pas à nous
+    except OSError:
+        return False
+    return True
+
+
 def _starter_alive(lock: Path) -> bool:
     """Is another bridge process already starting this engine?"""
     try:
         pid = int(lock.read_text(encoding="utf-8").split()[0])
     except Exception:
         return False
-    try:  # signal 0 == "does this process exist"
-        os.kill(pid, 0)
-        return True
-    except Exception:
-        return False
+    return _pid_exists(pid)
 
 
 def _pid_path(profile: EngineProfile, lock_dir: Path) -> Path:

@@ -141,3 +141,47 @@ def test_stop_uses_the_pid_we_recorded(tmp_path, monkeypatch):
     p = E.EngineProfile("local", "http://127.0.0.1:8188", manage=True, command=["x"])
     assert E.stop_engine(p, tmp_path)["stopped"] is True
     assert killed == [777]
+
+
+def test_the_liveness_probe_never_kills_what_it_probes():
+    """La sonde de vivacité REGARDE, elle ne touche pas. Sur Windows,
+    os.kill(pid, 0) appelle TerminateProcess : la sonde tuait le processus
+    sondé — et un PID recyclé faisait tomber un processus étranger."""
+    import subprocess
+    import sys
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import sys; sys.stdin.read()"],
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(3):                     # le bug tuait dès le premier appel
+            assert E._pid_exists(child.pid) is True
+            assert child.poll() is None, "la sonde a tué le processus sondé"
+    finally:
+        child.kill()
+        child.wait(timeout=10)
+    assert E._pid_exists(child.pid) is False   # une fois mort, elle le dit
+
+
+def test_the_lock_probe_reads_the_pid_without_touching_it(tmp_path):
+    """Le verrou garde le PID d'un AUTRE processus : le lire ne doit rien tuer."""
+    import subprocess
+    import sys
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import sys; sys.stdin.read()"],
+        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    lock = tmp_path / "engine-local.lock"
+    lock.write_text(f"{child.pid} http://127.0.0.1:8188", encoding="utf-8")
+    try:
+        assert E._starter_alive(lock) is True
+        assert child.poll() is None, "lire le verrou a tué le processus qu'il nomme"
+    finally:
+        child.kill()
+        child.wait(timeout=10)
+
+
+def test_an_unreadable_or_dead_lock_is_not_a_running_starter(tmp_path):
+    lock = tmp_path / "engine-local.lock"
+    assert E._starter_alive(lock) is False              # absent
+    lock.write_text("pas un pid", encoding="utf-8")
+    assert E._starter_alive(lock) is False              # illisible
+    assert E._pid_exists(0) is False and E._pid_exists(-1) is False
