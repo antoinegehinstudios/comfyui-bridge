@@ -118,20 +118,20 @@ def recover(backend, log: InflightLog, registry, host: str) -> list[dict[str, An
             # Sinon : soit ça tourne encore, soit le moteur n'en sait plus rien
             # (annulé depuis la console, moteur redémarré) — et l'attendre pour
             # toujours serait un mensonge.
-            # « Est-il encore en vol ? » et non « le moteur le connaît-il
-            # encore ? » : un run que le moteur a terminé PAR UNE ERREUR reste
-            # dans son historique, donc il n'a jamais l'air disparu — et il
-            # restait inscrit ici pour toujours, repassé en revue à chaque
-            # reprise (mesuré : une entrée d'un workflow depuis longtemps
-            # retiré). Ce que le moteur a tranché ne nous est plus dû.
-            fini = getattr(backend, "settled", None) or getattr(backend, "vanished", None)
-            if fini and fini(prompt_id):
+            #
+            # La question posée ici est « nous doit-on encore quelque chose ? »,
+            # et NON « le moteur a-t-il fini ? ». Les deux se confondent presque,
+            # et la nuance coûte un livrable : `settled()` — la bonne question
+            # pour la veille par socket — dit vrai dès qu'il y a des sorties,
+            # or ComfyUI les publie parfois AVANT d'estampiller la fin. Dans cet
+            # instant, `collect()` rend None faute de tampon alors que le média
+            # est là : sortir la ligne du journal le perdrait, et le marquerait
+            # « échoué » par-dessus le marché. Seule l'ignorance du moteur
+            # libère : ce qu'il ne connaît plus, il ne le rendra jamais.
+            perdu = getattr(backend, "vanished", None)
+            if perdu and perdu(prompt_id):
                 log.remove(prompt_id)
-                perdu = getattr(backend, "vanished", None)
-                recovered.append({"prompt_id": prompt_id,
-                                  # « perdu » = le moteur ne le connaît plus ;
-                                  # « échoué » = il le connaît et il a échoué.
-                                  "state": "lost" if (perdu and perdu(prompt_id)) else "failed",
+                recovered.append({"prompt_id": prompt_id, "state": "lost",
                                   "workflow": meta.get("workflow")})
             continue
         artifacts, measured = result

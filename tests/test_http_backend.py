@@ -242,3 +242,43 @@ def test_a_run_served_from_the_engine_cache_teaches_nothing_about_cost():
                 "outputs": {"75": {"images": [{"filename": "v.mp4"}]}}}
     assert _served_from_cache(reused) is True
     assert _served_from_cache(computed) is False
+
+
+def test_un_run_dont_les_sorties_arrivent_avant_le_tampon_reste_en_vol(tmp_path, monkeypatch):
+    """ComfyUI publie parfois les sorties AVANT d'estampiller la fin — le code
+    de `submit` compose déjà avec ce décalage. Dans cet instant, l'historique
+    porte des `outputs` et `completed: false` : `collect()` rend None faute de
+    tampon, alors que le média, lui, est bien là et n'a jamais été rapatrié.
+
+    La question du journal des runs en vol est « nous doit-on encore quelque
+    chose ? ». Un run qui a des sorties nous doit son média : sortir sa ligne
+    ici la perdrait, et la marquerait « échouée » par-dessus le marché.
+    """
+    from comfyui_bridge.adapter.inflight import InflightLog, recover
+
+    def fake_urlopen(req, timeout=None):
+        url = req.full_url if hasattr(req, "full_url") else req
+        if "/history/" in url:
+            return _Resp(json.dumps({"p-tot": {
+                "status": {"status_str": "success", "completed": False},
+                "outputs": {"9": {"images": [{"filename": "a.png", "subfolder": "",
+                                              "type": "output"}]}},
+            }}).encode())
+        if url.endswith("/queue"):
+            return _Resp(json.dumps({"queue_running": [], "queue_pending": []}).encode())
+        raise AssertionError(f"unexpected url {url}")
+
+    monkeypatch.setattr(H.urllib.request, "urlopen", fake_urlopen)
+    backend = _backend(tmp_path)
+    assert backend.collect("p-tot") is None       # pas de tampon : rien à conclure
+    assert backend.failure("p-tot") is None       # et aucune erreur à consigner
+    # `settled()` dit vrai (il y a des sorties) : c'est la bonne réponse pour la
+    # veille par socket, et la MAUVAISE pour le journal des runs en vol.
+    assert backend.settled("p-tot") is True
+    assert backend.vanished("p-tot") is False
+
+    log = InflightLog(tmp_path / "inflight.json")
+    log.add("p-tot", workflow="wf", config="c", work=None, params={}, at="t", kind="image")
+    out = recover(backend, log, None, host="h")
+    assert out == []                              # rien de conclu…
+    assert list(log.entries()) == ["p-tot"]       # …et la ligne attend son média
