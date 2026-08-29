@@ -27,6 +27,9 @@ from .mapping import Binding
 from .media_inputs import media_nodes
 
 _SAMPLERS = ("KSampler", "SamplerCustom", "SamplerCustomAdvanced")
+# Les nœuds par lesquels ComfyUI enregistre une géométrie (SaveGLB,
+# Save3DAdvanced, SaveGaussianSplat, SavePointCloud…).
+_MARQUEURS_3D = ("GLB", "GLTF", "3D", "Mesh", "Splat", "PointCloud")
 
 
 def _is_link(v: Any) -> bool:
@@ -47,6 +50,11 @@ def infer_kind(graph: dict[str, Any]) -> str:
     # d'images repartait alors sur `batch_size`, c'est-à-dire un nombre de CLIPS.
     if any("Video" in t for t in sauvegardes):
         return "video"
+    # Un workflow qui enregistre un maillage livre un maillage. Sans cette
+    # lecture il tombait sur « image » par DÉFAUT — pas par constat — et le
+    # catalogue annonçait « image » pour un GLB de 5,9 Mo.
+    if any(m in t for t in sauvegardes for m in _MARQUEURS_3D):
+        return "3d"
     if any("Audio" in t for t in sauvegardes):
         return "audio"
     video_markers = ("SaveVideo", "CreateVideo", "VideoCombine", "LTXV", "SVD", "EmptyLTXVLatentVideo")

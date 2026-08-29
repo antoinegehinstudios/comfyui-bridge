@@ -232,7 +232,7 @@ def test_chaque_categorie_est_deposee_la_ou_le_moteur_la_cherche():
     assert upload_subfolder("image") == "" and upload_subfolder("image_2") == ""
     assert upload_subfolder("video") == "" and upload_subfolder("audio") == ""
     # Load3D ne liste QUE le contenu de input/3d, et le cite « 3d/<nom> ».
-    assert upload_subfolder("model3d") == "3d"
+    assert upload_subfolder("3d") == "3d"
 
 
 def test_le_nom_rendu_est_celui_qu_un_graphe_peut_citer(monkeypatch):
@@ -287,3 +287,49 @@ def test_ce_qui_s_ingere_par_l_API_peut_se_retirer(tmp_path):
         assert "jetable" not in c.get("/v1/workflows").json()["workflows"]
         # …mais une entrée DÉCLARÉE dans le fichier de réconciliation, non.
         assert c.delete("/v1/workflows/sd15-txt2img").status_code == 500
+
+
+# -- un maillage est un genre, pas un défaut --------------------------------
+
+def test_un_workflow_qui_enregistre_un_maillage_le_dit():
+    """Sans SaveVideo ni SaveAudio, infer_kind tombait sur « image » par DÉFAUT
+    — pas par constat — et le catalogue annonçait « image » pour un GLB de
+    5,9 Mo (mesuré sur 3d_moge_perspective_to_mesh)."""
+    graph = {
+        "9": {"class_type": "LoadImage", "inputs": {"image": "vue.png"}},
+        "21": {"class_type": "SaveGLB", "inputs": {"filename_prefix": "3d/x"}},
+    }
+    assert autobind.infer_kind(graph) == "3d"
+
+
+def test_une_video_l_emporte_encore_sur_un_maillage_annexe():
+    """Un tour de caméra rendu à côté d'un maillage reste une illustration :
+    l'ordre de lecture existant ne bouge pas."""
+    graph = {"1": {"class_type": "SaveVideo", "inputs": {"filename_prefix": "v"}},
+             "2": {"class_type": "SaveGLB", "inputs": {"filename_prefix": "m"}}}
+    assert autobind.infer_kind(graph) == "video"
+
+
+def test_un_seul_mot_pour_une_seule_chose():
+    """Le fichier produit s'annonce « 3d » (adapter/media.py) : l'entrée qui le
+    charge porte le même mot. Deux orthographes pour la même chose, c'est la
+    dérive que ce dépôt corrige partout ailleurs."""
+    from comfyui_bridge.adapter.media import KIND_BY_EXT
+    from comfyui_bridge.core.intention import MEDIA_CATEGORIES, MediaKind
+    assert "3d" in MEDIA_CATEGORIES
+    assert KIND_BY_EXT["glb"] == "3d"
+    assert MediaKind.MODEL_3D.value == "3d"
+
+
+def test_un_modele_3d_joint_est_pilotable():
+    graph = {
+        "1": {"class_type": "Load3D",
+              "inputs": {"model_file": "3d/cube.obj", "width": 512, "height": 512}},
+        "2": {"class_type": "SaveGLB", "inputs": {"filename_prefix": "3d/x"}},
+    }
+    b = autobind.derive_bindings(graph)
+    assert (b["3d"].node, b["3d"].input) == ("1", "model_file")
+    spec = _spec(graph)
+    assert spec.carried == {"3d": "3d/cube.obj"}
+    # Aucun élément neutre pour un maillage : on ne prétend pas en fabriquer un.
+    assert spec.profile.neutral_for == ()

@@ -19,6 +19,7 @@ import sys
 from .config import Settings
 from .container import build_container
 from .core.errors import BridgeError, HardwareReconciliationError, to_problem
+from .core.intention import MediaKind
 from .core.jobs import JobStatus
 from .api.schemas import ConstraintIn, IntentIn
 
@@ -158,7 +159,8 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--prompt", required=True)
     r.add_argument("--workflow", default=None, help="named workflow from the reconciliation file")
     r.add_argument("--negative", default=None)
-    r.add_argument("--kind", choices=["image", "video", "audio"], default=None)
+    # Le vocabulaire vient du domaine : recopié ici, il dérivait.
+    r.add_argument("--kind", choices=[k.value for k in MediaKind], default=None)
     # Defaults are None so omitted flags inherit the workflow's declared defaults.
     r.add_argument("--width", type=int, default=None)
     r.add_argument("--height", type=int, default=None)

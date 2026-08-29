@@ -330,7 +330,7 @@ function buildWorkflowForm(name){
 // Le champ d'UNE pièce jointe. Son intitulé est le nom que l'auteur a donné au
 // nœud dans ComfyUI (« Load Last Frame ») : c'est lui qui distingue deux images
 // d'un même workflow — « image_2 » ne dit rien à personne.
-const MEDIA_LABEL = {image:"Image", video:"Vidéo", audio:"Son", model3d:"Modèle 3D"};
+const MEDIA_LABEL = {image:"Image", video:"Vidéo", audio:"Son", "3d":"Modèle 3D"};
 function mediaField(m){
   const titre = (m.label ? escapeHtml(m.label) : ((MEDIA_LABEL[m.category]||"Média") + " d'entrée"))
               + ` <span class="hint">(${escapeHtml(m.param)})</span>`;

@@ -18,6 +18,10 @@ class MediaKind(str, Enum):
     IMAGE = "image"
     VIDEO = "video"
     AUDIO = "audio"
+    # Un maillage est un livrable comme un autre. Le mot est celui que porte
+    # déjà le fichier produit (`adapter/media.py`, KIND_BY_EXT) : un seul mot
+    # pour une seule chose, du nœud qui la charge au fichier qui en sort.
+    MODEL_3D = "3d"
 
 
 class ConstraintOp(str, Enum):
@@ -33,7 +37,7 @@ class ConstraintOp(str, Enum):
 # ("image"), les suivantes sont numérotées ("image_2", "image_3"…), dans l'ordre
 # des nœuds : ainsi le nom est stable d'un appel à l'autre, et le nom NU reste
 # celui qu'il a toujours été pour les workflows à une seule entrée.
-MEDIA_CATEGORIES: tuple[str, ...] = ("image", "video", "audio", "model3d")
+MEDIA_CATEGORIES: tuple[str, ...] = ("image", "video", "audio", "3d")
 
 _MEDIA_PARAM = re.compile(r"^(" + "|".join(MEDIA_CATEGORIES) + r")(?:_(\d+))?$")
 

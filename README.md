@@ -296,7 +296,7 @@ photogrammétrique), ou une image **et** une voix. La découverte les nomme
 | 4 `LoadImage` | `image`, `image_2`, `image_3`, `image_4` |
 | `LoadImage` + `LoadAudio` | `image`, `audio` |
 | `LoadImage` + `LoadVideo` | `image`, `video` |
-| `Load3D` | `model3d` |
+| `Load3D` | `3d` |
 
 La première de chaque catégorie garde son nom nu — un workflow à une seule image
 s'appelle exactement comme avant. Les nœuds reconnus sont ceux que ComfyUI

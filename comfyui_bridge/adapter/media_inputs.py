@@ -27,8 +27,8 @@ MEDIA_LOADERS: dict[str, tuple[str, str]] = {
     "LoadImageOutput": ("image", "image"),
     "LoadVideo": ("video", "file"),
     "LoadAudio": ("audio", "audio"),
-    "Load3D": ("model3d", "model_file"),
-    "Load3DAdvanced": ("model3d", "model_file"),
+    "Load3D": ("3d", "model_file"),
+    "Load3DAdvanced": ("3d", "model_file"),
 }
 
 # Les drapeaux par lesquels ComfyUI annonce qu'une entrée reçoit un fichier.
@@ -36,7 +36,7 @@ UPLOAD_FLAGS: dict[str, str] = {
     "image_upload": "image",
     "video_upload": "video",
     "audio_upload": "audio",
-    "file_upload": "model3d",
+    "file_upload": "3d",
 }
 
 
@@ -44,7 +44,7 @@ UPLOAD_FLAGS: dict[str, str] = {
 # un graphe peut la citer. Images, vidéos et sons vivent à la racine du dossier
 # d'entrée ; un modèle 3D vit dans « 3d/ » et Load3D le liste « 3d/<nom> ».
 # Téléverser sans le dire rendait un nom que le graphe ne résolvait pas.
-UPLOAD_SUBFOLDER: dict[str, str] = {"model3d": "3d"}
+UPLOAD_SUBFOLDER: dict[str, str] = {"3d": "3d"}
 
 
 def upload_subfolder(param_or_category: str) -> str:
@@ -93,7 +93,7 @@ ACCEPT: dict[str, str] = {
     "image": "image/*",
     "video": "video/*",
     "audio": "audio/*",
-    "model3d": ".glb,.gltf,.obj,.fbx,.stl,.ply",
+    "3d": ".glb,.gltf,.obj,.fbx,.stl,.ply",
 }
 
 
