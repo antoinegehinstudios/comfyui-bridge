@@ -331,7 +331,7 @@ class ComfyUIHttpBackend:
                     # Toutes les ~30 s, on demande au moteur s'il a encore
                     # quelque chose à dire sur ce run ; sinon on passe la main à
                     # l'interrogation de l'historique, qui, elle, conclut.
-                    if quiet % 6 == 0 and self._plus_rien_a_dire(prompt_id):
+                    if quiet % 6 == 0 and self.settled(prompt_id):
                         return
                     continue
                 return  # socket closed/broken: the history poll takes over
@@ -352,14 +352,17 @@ class ComfyUIHttpBackend:
             elif msg.get("type") == "executing" and data.get("node") is None                     and data.get("prompt_id") == prompt_id:
                 return  # ComfyUI says this prompt is done
 
-    def _plus_rien_a_dire(self, prompt_id: str) -> bool:
-        """Le moteur n'a plus rien à annoncer sur ce run : fini, ou disparu.
+    def settled(self, prompt_id: str) -> bool:
+        """Le moteur n'a plus rien à annoncer sur ce run : fini, ÉCHOUÉ, ou oublié.
 
         Une socket devenue muette ressemble trait pour trait à un moteur qui
-        charge un modèle : seul l'historique tranche. Sans cette lecture, un run
-        dont la socket avait été remplacée restait « en cours » jusqu'à
-        l'expiration du budget (une heure) alors que le moteur l'avait terminé
-        en une seconde — mesuré.
+        charge un modèle ; un run que le moteur a terminé PAR UNE ERREUR
+        ressemble, lui, à un run qui n'a pas encore produit. Seul l'historique
+        tranche, et il le dit : mesuré sur un vrai échec de nœud, `status_str`
+        vaut « error » tandis que `completed` reste faux et que `outputs` reste
+        vide. Ne lire que `completed` laissait donc l'échec passer pour une
+        attente — la socket remplacée attendait le budget entier, et la trace du
+        run traînait dans le journal des runs en vol à chaque reprise.
         """
         try:
             q = self._client.queue()
@@ -369,9 +372,38 @@ class ComfyUIHttpBackend:
                                    self._settings.comfyui_request_timeout_s).get(prompt_id)
             if entry is None:
                 return True         # ni en file, ni connu : disparu
-            return bool(entry.get("outputs")) or bool((entry.get("status") or {}).get("completed"))
+            statut = entry.get("status") or {}
+            return (bool(entry.get("outputs")) or bool(statut.get("completed"))
+                    or statut.get("status_str") == "error")
         except Exception:
             return False        # unsure: never conclude on a silent engine
+
+    def failure(self, prompt_id: str) -> str | None:
+        """Le message du moteur quand SON historique dit que ce run a fini en erreur.
+
+        `None` tant que rien n'est définitif — encore en file, en cours, ou
+        moteur muet. Une erreur laisse `completed: false` dans l'historique de
+        ComfyUI, exactement comme un run qui continue : sans cette lecture, la
+        reprise attendait indéfiniment un run que le moteur avait abandonné, et
+        son échec n'était jamais consigné.
+        """
+        try:
+            hist = self._get_json("/history/" + urllib.parse.quote(prompt_id),
+                                  self._settings.comfyui_request_timeout_s)
+        except Exception:
+            return None             # moteur muet : on ne conclut pas
+        entry = hist.get(prompt_id)
+        if not entry:
+            return None
+        status = entry.get("status") or {}
+        if status.get("completed") or status.get("status_str") != "error":
+            return None
+        # Le verdict du moteur est GARDÉ avec son message : classer « string
+        # indices must be integers » sans lui donnait un échec non classé,
+        # c'est-à-dire quelque chose que la passerelle aurait pu causer.
+        # `execution_error` dit que c'est le graphe qui a échoué, pas nous.
+        return "execution_error" + (self._error_detail(entry)
+                                    or " (le moteur n'a pas dit lequel)")
 
     def vanished(self, prompt_id: str) -> bool:
         """True when the engine knows this prompt neither in its queue nor in

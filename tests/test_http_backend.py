@@ -183,6 +183,54 @@ def test_a_run_left_in_flight_is_collected_after_a_restart(tmp_path):
     assert list(log.entries()) == ["p-2"]
 
 
+def test_a_run_the_engine_ended_in_error_stops_being_in_flight(tmp_path, monkeypatch):
+    """MESURÉ : une exception dans un nœud laisse `completed: false` dans
+    l'historique de ComfyUI — la même trace qu'un run qui continue. La reprise
+    le redemandait à chaque démarrage sans jamais conclure, et l'échec réel
+    n'était consigné nulle part."""
+    from comfyui_bridge.adapter.inflight import InflightLog, recover
+
+    def fake_urlopen(req, timeout=None):
+        url = req.full_url if hasattr(req, "full_url") else req
+        if "/history/" in url:
+            return _Resp(json.dumps({"p-err": {
+                "status": {"status_str": "error", "completed": False, "messages": [
+                    ["execution_start", {"prompt_id": "p-err"}],
+                    ["execution_error", {"node_id": "1", "node_type": "Load3D",
+                                         "exception_message": "string indices must be integers"}],
+                ]},
+                "outputs": {},
+            }}).encode())
+        raise AssertionError(f"unexpected url {url}")
+
+    monkeypatch.setattr(H.urllib.request, "urlopen", fake_urlopen)
+    backend = _backend(tmp_path)
+    assert backend.collect("p-err") is None          # rien à collecter…
+    echec = backend.failure("p-err")                      # …mais c'est fini
+    # Le verdict du moteur voyage avec son message : sans lui, la cause se
+    # classait « inconnue », c'est-à-dire imputable à la passerelle.
+    assert echec.startswith("execution_error") and "string indices" in echec
+
+    log = InflightLog(tmp_path / "inflight.json")
+    log.add("p-err", workflow="wf", config="workflow-default", work=None,
+            params={"width": 512}, at="2026-08-29T06:14:54+00:00", kind="image")
+
+    class _Registry:
+        def __init__(self): self.rows = []
+        def record(self, host, workflow, params, status, problem=None, detail=None,
+                   duration_s=None, work=None, work_model=None, mechanism=None):
+            self.rows.append((workflow, status, problem, mechanism))
+
+    registry = _Registry()
+    out = recover(backend, log, registry, host="h")
+    assert [o["state"] for o in out] == ["failed"]
+    assert list(log.entries()) == []                  # il ne traîne plus
+    # Ce qu'un run vivant aurait retenu est retenu : la cause classée depuis le
+    # message réel du moteur, et le mécanisme qui l'a livré.
+    from comfyui_bridge.adapter.media import DELIVERY_MECHANISM
+    assert registry.rows == [("wf", "failed", "workflow-error", DELIVERY_MECHANISM)]
+
+
 def test_a_run_served_from_the_engine_cache_teaches_nothing_about_cost():
     """Measured: an identical intent came back in 0.3 s, 48 of 51 nodes reused.
     A real file — and a duration that must never be fitted as a cost."""

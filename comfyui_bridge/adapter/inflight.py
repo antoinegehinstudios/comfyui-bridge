@@ -97,12 +97,41 @@ def recover(backend, log: InflightLog, registry, host: str) -> list[dict[str, An
             recovered.append({"prompt_id": prompt_id, "state": "unknown", "detail": str(exc)[:200]})
             continue
         if result is None:
-            # Nothing final. Either it is still going, or the engine has no
-            # idea about it (cancelled from the console, engine restarted) —
-            # in which case waiting for it forever would be a lie.
-            if getattr(backend, "vanished", None) and backend.vanished(prompt_id):
+            # Rien de définitif POUR LE MOTEUR — mais « rien à collecter » ne
+            # veut pas dire « ça continue ». Un run qu'il a terminé en erreur
+            # laisse la même trace qu'un run en cours (`completed: false`) :
+            # mesuré, une exception dans un nœud a laissé le run en vol
+            # indéfiniment, redemandé à chaque démarrage, et son échec n'a
+            # jamais été consigné. Ce que le moteur a abandonné, on le retient
+            # comme un run vivant l'aurait été.
+            echec = getattr(backend, "failure", None)
+            detail = echec(prompt_id) if echec else None
+            if detail:
+                from ..core.problems import classify
                 log.remove(prompt_id)
-                recovered.append({"prompt_id": prompt_id, "state": "lost",
+                registry.record(host, meta.get("workflow", "?"), meta.get("params") or {},
+                                status="failed", problem=classify(detail), detail=detail,
+                                mechanism=getattr(backend, "delivery_mechanism", None))
+                recovered.append({"prompt_id": prompt_id, "state": "failed",
+                                  "workflow": meta.get("workflow"), "detail": detail[:200]})
+                continue
+            # Sinon : soit ça tourne encore, soit le moteur n'en sait plus rien
+            # (annulé depuis la console, moteur redémarré) — et l'attendre pour
+            # toujours serait un mensonge.
+            # « Est-il encore en vol ? » et non « le moteur le connaît-il
+            # encore ? » : un run que le moteur a terminé PAR UNE ERREUR reste
+            # dans son historique, donc il n'a jamais l'air disparu — et il
+            # restait inscrit ici pour toujours, repassé en revue à chaque
+            # reprise (mesuré : une entrée d'un workflow depuis longtemps
+            # retiré). Ce que le moteur a tranché ne nous est plus dû.
+            fini = getattr(backend, "settled", None) or getattr(backend, "vanished", None)
+            if fini and fini(prompt_id):
+                log.remove(prompt_id)
+                perdu = getattr(backend, "vanished", None)
+                recovered.append({"prompt_id": prompt_id,
+                                  # « perdu » = le moteur ne le connaît plus ;
+                                  # « échoué » = il le connaît et il a échoué.
+                                  "state": "lost" if (perdu and perdu(prompt_id)) else "failed",
                                   "workflow": meta.get("workflow")})
             continue
         artifacts, measured = result
