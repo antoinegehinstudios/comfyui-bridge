@@ -627,7 +627,11 @@ function artView(a){
   const m=a.measured||{};
   const contenu=[m.width&&m.height?`${m.width}×${m.height}`:"",
                  m.duration_s?`${m.duration_s} s`:"",
-                 m.frames?`${m.frames} image(s)`:""].filter(Boolean).join(" · ");
+                 m.frames?`${m.frames} image(s)`:"",
+                 // Une géométrie n'a ni largeur ni durée : ce qu'elle a, ce
+                 // sont des sommets et des triangles.
+                 m.vertices?`${m.vertices} sommets`:"",
+                 m.triangles?`${m.triangles} triangles`:""].filter(Boolean).join(" · ");
   const ecart=(a.gaps||[]).length
     ? `<div class="hint" style="flex-basis:100%;color:var(--warn)">⚠ écart avec la demande : `
       + escapeHtml(a.gaps.map(g=>`${g.field} demandé ${g.asked}, livré ${g.delivered}`).join(" · "))

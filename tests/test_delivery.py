@@ -1,5 +1,9 @@
 """Ce qui est livré est-il ce qui a été demandé ?"""
 
+import json
+import struct
+from pathlib import Path
+
 from comfyui_bridge.core.delivery import compare, describe
 
 
@@ -63,17 +67,93 @@ def test_a_real_png_is_measured(tmp_path):
 def test_a_workflow_that_measures_delivers_its_numbers():
     """ComfyUI rapporte une sortie NON média sous la clé `files`. Ignorée, un
     graphe d'analyse livrait son illustration et jamais son résultat."""
-    from comfyui_bridge.adapter.media import OUTPUT_KEYS, media_kind
+    from comfyui_bridge.adapter.media import media_kind, output_refs
 
     entree = {"outputs": {"5": {"text": ["12 faits"],
                                 "files": [{"filename": "faits_00001.txt", "type": "output"}],
                                 "images": [{"filename": "annote_00001.png", "type": "output"}]}}}
-    trouves = [ref["filename"]
-               for sortie in entree["outputs"].values()
-               for cle in OUTPUT_KEYS
-               for ref in (sortie.get(cle) or [])]
+    trouves = [ref["filename"] for ref in output_refs(entree)]
     assert trouves == ["annote_00001.png", "faits_00001.txt"]
     assert media_kind("faits_00001.txt") == "text"
+
+
+def test_a_workflow_that_delivers_a_mesh_delivers_it():
+    """MESURÉ sur un run réel de `3d_moge_perspective_to_mesh` : ComfyUI range
+    la sortie de SaveGLB sous la clé `3d`, pas `images`. Sans cette clé, le
+    maillage n'était jamais ramassé et le run livrait à sa place les deux
+    aperçus temporaires du graphe — un résultat faux, pas une erreur."""
+    from comfyui_bridge.adapter.media import media_kind, output_refs
+
+    # L'historique du run, tel que ComfyUI l'a rendu : les deux aperçus de
+    # normales du graphe, et le maillage sous `3d`.
+    entree = {"outputs": {
+        "47": {"images": [{"filename": "ComfyUI_temp_xpzrj_00001_.png",
+                           "subfolder": "", "type": "temp"}]},
+        "46": {"images": [{"filename": "ComfyUI_temp_otvyr_00001_.png",
+                           "subfolder": "", "type": "temp"}]},
+        "21": {"3d": [{"filename": "verif-3d_00001_.glb",
+                       "subfolder": "cortex", "type": "output"}]}}}
+    assert [r["filename"] for r in output_refs(entree)] == ["verif-3d_00001_.glb"]
+    assert media_kind("verif-3d_00001_.glb") == "3d"
+
+
+def test_a_mesh_is_a_deliverable_named_for_what_it_is():
+    """Sans extension 3D dans la table, `GET /v1/artifacts` ne listait jamais un
+    maillage produit, et `media_kind` le disait « image » par défaut."""
+    from comfyui_bridge.adapter.media import DELIVERABLE_EXT, media_kind
+
+    for nom in ("scene.glb", "scene.gltf", "scene.obj", "nuage.ply"):
+        assert Path(nom).suffix in DELIVERABLE_EXT, nom
+        assert media_kind(nom) == "3d", nom
+
+
+def test_what_the_engine_reports_without_a_file_is_not_a_deliverable():
+    """Save3DAdvanced rapporte sous `result` un chemin nu et l'état de sa
+    caméra — rien à rapatrier. Ramasser cela ferait échouer le téléchargement
+    sur une référence qui ne désigne aucun fichier."""
+    from comfyui_bridge.adapter.media import output_refs
+
+    entree = {"outputs": {"7": {"result": ["3d/ComfyUI_00001_.glb", {"position": [0, 0, 5]}, None]}}}
+    assert output_refs(entree) == []
+
+
+def _glb_minuscule(sommets: int, triangles: int) -> bytes:
+    """Un GLB conforme : entête, puis le morceau JSON qui décrit la scène."""
+    doc = json.dumps({
+        "asset": {"version": "2.0"},
+        "accessors": [{"count": sommets}, {"count": triangles * 3}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+    }).encode("utf-8")
+    doc += b" " * (-len(doc) % 4)              # les morceaux sont alignés sur 4
+    return (struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(doc))
+            + struct.pack("<I4s", len(doc), b"JSON") + doc)
+
+
+def test_a_mesh_is_measured_by_what_a_mesh_has(tmp_path):
+    from comfyui_bridge.adapter.measure import measure
+
+    maillage = tmp_path / "ComfyUI_00001_.glb"
+    maillage.write_bytes(_glb_minuscule(sommets=1234, triangles=2400))
+    assert measure(maillage) == {"vertices": 1234, "triangles": 2400}
+    # Une géométrie n'a ni largeur ni durée : la demande ne produit aucun écart
+    # plutôt qu'un « livré 0 » inventé.
+    assert compare({"width": 1024, "height": 1024}, measure(maillage)) == []
+
+
+def test_a_geometry_format_that_is_not_read_claims_nothing(tmp_path):
+    """OBJ, STL, PLY, splats ne sont pas lus ici — et un GLB tronqué non plus."""
+    from comfyui_bridge.adapter.measure import measure
+
+    for nom in ("scene.obj", "scene.stl", "nuage.ply", "nuage.splat"):
+        fichier = tmp_path / nom
+        fichier.write_bytes(b"v 0 0 0" * 8)
+        assert measure(fichier) == {}, nom
+    tronque = tmp_path / "coupe.glb"
+    tronque.write_bytes(_glb_minuscule(8, 12)[:14])
+    assert measure(tronque) == {}
+    pas_un_glb = tmp_path / "faux.glb"
+    pas_un_glb.write_bytes(b"not a glb at all, not even close")
+    assert measure(pas_un_glb) == {}
 
 
 def test_the_service_never_delivers_its_own_working_files():

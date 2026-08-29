@@ -33,7 +33,7 @@ from .comfyui_client import ComfyUIClient
 from .inflight import InflightLog
 from .injector import apply_overrides, inject
 from .measure import measure
-from .media import OUTPUT_KEYS, artifact_url, media_kind
+from .media import artifact_url, media_kind, output_refs
 
 
 def _execution_seconds(entry: dict) -> float | None:
@@ -460,16 +460,7 @@ class ComfyUIHttpBackend:
 
     def _download(self, entry: dict, out_dir: Path, req_t: float,
                   plan: ExecutionPlan | None = None) -> list[Artifact]:
-        refs: list[dict] = []
-        for out in entry.get("outputs", {}).values():
-            for key in OUTPUT_KEYS:
-                for ref in out.get(key, []) or []:
-                    if isinstance(ref, dict) and ref.get("filename"):
-                        refs.append(ref)
-        # ComfyUI marks previews as type "temp"; only "output" files are the
-        # real deliverable. Delivering a preview would misreport the result.
-        finals = [r for r in refs if r.get("type", "output") == "output"]
-        refs = finals or refs
+        refs = output_refs(entry)
         artifacts: list[Artifact] = []
         for ref in refs:
             qs = urllib.parse.urlencode({

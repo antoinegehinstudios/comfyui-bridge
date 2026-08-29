@@ -11,11 +11,18 @@ sur le reste : une mesure absente vaut mieux qu'une mesure inventée.
     PNG / JPEG / WEBP  -> Pillow (déjà utilisé pour l'élément neutre)
     MP4 / MOV          -> les boîtes `moov/mvhd` (durée) et `moov/trak/tkhd`
     FLAC               -> le bloc STREAMINFO
+    GLB / glTF         -> le document glTF : sommets et triangles
     WEBM / MKV / OGG   -> non lus : rien n'est annoncé
+    OBJ / STL / PLY / splats -> non lus : rien n'est annoncé
+
+Une géométrie n'a ni largeur ni durée : lui en inventer une pour remplir la
+fiche ferait dire au service qu'un maillage fait 1024x1024. On dit ce qu'un
+maillage a — des sommets et des triangles — ou on ne dit rien.
 """
 
 from __future__ import annotations
 
+import json
 import struct
 from pathlib import Path
 from typing import Any
@@ -78,6 +85,56 @@ def _measure_flac(data: bytes) -> dict[str, Any]:
     return {"duration_s": round(samples / rate, 3)} if rate and samples else {}
 
 
+def _gltf_document(p: Path) -> dict[str, Any]:
+    """Le document glTF d'un fichier — le JSON seul, jamais la géométrie binaire.
+
+    Un GLB est un conteneur : entête `glTF`, puis des morceaux. Le premier est
+    le JSON qui décrit la scène ; on ne lit que celui-là. Un maillage estimé
+    depuis une photo pèse des dizaines de méga-octets dont on n'a aucun besoin
+    pour le compter.
+    """
+    if p.suffix.lower() == ".gltf":
+        return json.loads(p.read_text(encoding="utf-8"))
+    with p.open("rb") as f:
+        entete = f.read(12)
+        if len(entete) < 12 or entete[:4] != b"glTF":
+            return {}
+        morceau = f.read(8)
+        if len(morceau) < 8:
+            return {}
+        taille, genre = struct.unpack("<I4s", morceau)
+        if genre != b"JSON":
+            return {}
+        return json.loads(f.read(taille).decode("utf-8"))
+
+
+def _measure_gltf(p: Path) -> dict[str, Any]:
+    doc = _gltf_document(p)
+    accesseurs = doc.get("accessors") or []
+
+    def compte(indice: Any) -> int:
+        if isinstance(indice, int) and 0 <= indice < len(accesseurs):
+            return int(accesseurs[indice].get("count") or 0)
+        return 0
+
+    sommets = triangles = 0
+    for maillage in doc.get("meshes") or []:
+        for morceau in maillage.get("primitives") or []:
+            positions = compte((morceau.get("attributes") or {}).get("POSITION"))
+            sommets += positions
+            # 4 = TRIANGLES, le mode par défaut de glTF. Un autre mode (lignes,
+            # points) ne compte pas des triangles : on n'en annonce pas.
+            if morceau.get("mode", 4) == 4:
+                indices = morceau.get("indices")
+                triangles += (compte(indices) if indices is not None else positions) // 3
+    mesure: dict[str, Any] = {}
+    if sommets:
+        mesure["vertices"] = sommets
+    if triangles:
+        mesure["triangles"] = triangles
+    return mesure
+
+
 def measure(path: str | Path) -> dict[str, Any]:
     """Ce que le fichier produit contient vraiment. ``{}`` si on ne sait pas lire."""
     p = Path(path)
@@ -95,6 +152,8 @@ def measure(path: str | Path) -> dict[str, Any]:
             return _measure_mp4(p.read_bytes())
         if suffix == ".flac":
             return _measure_flac(p.read_bytes())
+        if suffix in (".glb", ".gltf"):
+            return _measure_gltf(p)
     except Exception:
         return {}                              # illisible : on n'annonce rien
     return {}
