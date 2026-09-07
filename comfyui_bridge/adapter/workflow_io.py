@@ -36,7 +36,13 @@ def _spec_meta(spec: Any) -> dict[str, Any]:
     return {}
 
 
-def _option_values(options: list[Any], limit: int = 50) -> list[Any]:
+# Au-delà, une liste de choix n'est plus un menu : elle est coupée, et l'entrée
+# le DIT (« options_total ») — une coupe muette faisait disparaître des styles
+# d'un catalogue de 59 entrées derrière un plafond de 50 posé sans le dire.
+OPTIONS_MAX = 500
+
+
+def _option_values(options: list[Any], limit: int = OPTIONS_MAX) -> list[Any]:
     """The values a combo really accepts.
 
     A plain enum lists strings. ComfyUI's dynamic combos list objects whose
@@ -156,10 +162,15 @@ def describe_io(graph: dict[str, Any], object_info: dict[str, Any],
             for key in ("min", "max", "step", "default", "multiline", "round"):
                 if key in meta:
                     entry[key] = meta[key]
+            brutes = None
             if isinstance(meta.get("options"), list):
-                entry["options"] = _option_values(meta["options"])
+                brutes = meta["options"]
             elif isinstance(spec, list) and isinstance(spec[0], list):
-                entry["options"] = _option_values(spec[0])
+                brutes = spec[0]
+            if brutes is not None:
+                entry["options"] = _option_values(brutes)
+                if len(brutes) > OPTIONS_MAX:
+                    entry["options_total"] = len(brutes)   # coupée, et dit
             if nid in negatives:
                 entry["role"] = "negative"
             elif nid in positives:

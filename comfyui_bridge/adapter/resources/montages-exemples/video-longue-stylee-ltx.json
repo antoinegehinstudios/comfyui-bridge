@@ -1,0 +1,110 @@
+{
+ "assemblage": 1,
+ "_lisez_moi": [
+  "Vidéo longue DIRIGÉE avec LTX-2.3, par blocs de boucle chaînés par recouvrement.",
+  "",
+  "Même chaîne que « video-longue » (le nœud 13 de tout fragment chaînable porte",
+  "les latentes cumulées ; chaque segment prolonge de « images_nouvelles_par_segment »",
+  "images par masque temporel), mais la CONSIGNE change de bloc en bloc : le nœud",
+  "« DirectionDeStyle » du commun écrit un plan (style graphique + temps du récit),",
+  "et chaque bloc relit par « DirectionDuBloc » le temps où il tombe — puis encode",
+  "SON texte. Le négatif est celui du style, complété par « negative_prompt ».",
+  "",
+  "Le sujet (« prompt ») s'écrit « décor | temps un | temps deux … ».",
+  "",
+  "La coupe finale rend exactement le nombre d'images demandé."
+ ],
+ "constantes": {
+  "images_par_segment": 121,
+  "images_nouvelles_par_segment": 40,
+  "guidage_mouvement": 1.0
+ },
+ "exemple": {
+  "latent_batch": 375
+ },
+ "blocs": ["amorce", "segment"],
+ "montage": [
+  {
+   "fragment": "commun",
+   "sorties": {
+    "style": "30",
+    "negatif": "12",
+    "modele": "50",
+    "bruit": "10",
+    "echantillonneur": "31",
+    "sigmas": "32",
+    "cadence": "18",
+    "largeur": "13",
+    "hauteur": "14",
+    "images": "17",
+    "checkpoint": "20",
+    "encodeur": "22",
+    "vae_audio": "23"
+   },
+   "contenu": {
+    "20": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "ltx-2.3-22b-dev-fp8.safetensors"}},
+    "21": {"class_type": "LoraLoaderModelOnly", "inputs": {"lora_name": "ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors", "strength_model": 0.5, "model": ["20", 0]}},
+    "22": {"class_type": "LTXAVTextEncoderLoader", "inputs": {"text_encoder": "gemma_3_12B_it_fp4_mixed.safetensors", "ckpt_name": "ltx-2.3-22b-dev-fp8.safetensors", "device": "default"}},
+    "23": {"class_type": "LTXVAudioVAELoader", "inputs": {"ckpt_name": "ltx-2.3-22b-dev-fp8.safetensors"}},
+    "30": {"class_type": "DirectionDeStyle", "inputs": {"style_graphique": "fidele-a-l-oeuvre", "style_narratif": "quatre-temps-social", "sujet": "a continuous cinematic shot, the scene continues seamlessly", "negatif_supplementaire": "pc game, console game, video game, cartoon, childish, ugly, static, frozen"}},
+    "12": {"class_type": "CLIPTextEncode", "inputs": {"text": ["30", 2], "clip": ["22", 0]}},
+    "13": {"class_type": "PrimitiveInt", "inputs": {"value": 1280}},
+    "14": {"class_type": "PrimitiveInt", "inputs": {"value": 704}},
+    "15": {"class_type": "PrimitiveInt", "inputs": {"value": "$const.images_par_segment"}},
+    "16": {"class_type": "PrimitiveInt", "inputs": {"value": 25}},
+    "17": {"class_type": "ComfyMathExpression", "inputs": {"expression": "a", "values.a": ["15", 0]}},
+    "18": {"class_type": "ComfyMathExpression", "inputs": {"expression": "a", "values.a": ["16", 0]}},
+    "10": {"class_type": "RandomNoise", "inputs": {"noise_seed": 774100}},
+    "31": {"class_type": "SamplerEulerAncestral", "inputs": {"eta": 0, "s_noise": 1}},
+    "32": {"class_type": "ManualSigmas", "inputs": {"sigmas": "1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"}},
+    "50": {"class_type": "LTXVSpatioTemporalGuidance", "inputs": {"model": ["21", 0], "scale": "$const.guidage_mouvement", "blocks": "29", "start_percent": 0.0, "end_percent": 1.0}}
+   }
+  },
+  {
+   "fragment": "amorce",
+   "sorties": {"consigne": "20", "latentes": "13"},
+   "contenu": {
+    "1": {"class_type": "LoadImage", "inputs": {"image": "amorce_depart.png", "upload": "image"}},
+    "2": {"class_type": "ResizeImageMaskNode", "inputs": {"resize_type": "scale dimensions", "resize_type.width": ["$commun.largeur", 0], "resize_type.height": ["$commun.hauteur", 0], "resize_type.crop": "center", "scale_method": "lanczos", "input": ["1", 0]}},
+    "3": {"class_type": "EmptyLTXVLatentVideo", "inputs": {"width": ["$commun.largeur", 0], "height": ["$commun.hauteur", 0], "length": ["$commun.images", 1], "batch_size": 1}},
+    "4": {"class_type": "LTXVImgToVideoInplace", "inputs": {"vae": ["$commun.checkpoint", 2], "image": ["2", 0], "latent": ["3", 0], "strength": 1.0, "bypass": false}},
+    "5": {"class_type": "LTXVEmptyLatentAudio", "inputs": {"frames_number": ["$commun.images", 1], "frame_rate": ["$commun.16", 0], "batch_size": 1, "audio_vae": ["$commun.vae_audio", 0]}},
+    "6": {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": ["4", 0], "audio_latent": ["5", 0]}},
+    "20": {"class_type": "DirectionDuBloc", "inputs": {"plan_json": ["$commun.style", 3], "rang": {"$calc": "bloc_rang"}, "total": {"$calc": "blocs_total"}}},
+    "21": {"class_type": "CLIPTextEncode", "inputs": {"text": ["20", 0], "clip": ["$commun.encodeur", 0]}},
+    "7": {"class_type": "LTXVConditioning", "inputs": {"frame_rate": ["$commun.cadence", 0], "positive": ["21", 0], "negative": ["$commun.negatif", 0]}},
+    "8": {"class_type": "CFGGuider", "inputs": {"cfg": 1, "model": ["$commun.modele", 0], "positive": ["7", 0], "negative": ["7", 1]}},
+    "9": {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["$commun.bruit", 0], "guider": ["8", 0], "sampler": ["$commun.echantillonneur", 0], "sigmas": ["$commun.sigmas", 0], "latent_image": ["6", 0]}},
+    "13": {"class_type": "LTXVSeparateAVLatent", "inputs": {"av_latent": ["9", 1]}}
+   }
+  },
+  {
+   "pour": {"jusqu_a": "latent_batch", "chaque": "images_nouvelles_par_segment", "deja": "images_par_segment", "max": 60},
+   "faire": [
+    {
+     "fragment": "segment",
+     "sorties": {"consigne": "20", "latentes": "13"},
+     "contenu": {
+      "1": {"class_type": "LTXVAudioVideoMask", "inputs": {"video_latent": ["$precedent.13", 0], "audio_latent": ["$precedent.13", 1], "video_fps": ["$commun.cadence", 0], "video_start_time": {"$calc": "(121 + images_nouvelles_par_segment * tour - 1) / 25.0"}, "video_end_time": {"$calc": "(121 + images_nouvelles_par_segment * (tour + 1) - 1) / 25.0"}, "audio_start_time": {"$calc": "(121 + images_nouvelles_par_segment * tour - 1) / 25.0"}, "audio_end_time": {"$calc": "(121 + images_nouvelles_par_segment * (tour + 1) - 1) / 25.0"}, "max_length": "pad", "existing_mask_mode": "add"}},
+      "2": {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": ["1", 0], "audio_latent": ["1", 1]}},
+      "20": {"class_type": "DirectionDuBloc", "inputs": {"plan_json": ["$commun.style", 3], "rang": {"$calc": "bloc_rang"}, "total": {"$calc": "blocs_total"}}},
+      "21": {"class_type": "CLIPTextEncode", "inputs": {"text": ["20", 0], "clip": ["$commun.encodeur", 0]}},
+      "7": {"class_type": "LTXVConditioning", "inputs": {"frame_rate": ["$commun.cadence", 0], "positive": ["21", 0], "negative": ["$commun.negatif", 0]}},
+      "3": {"class_type": "CFGGuider", "inputs": {"cfg": 1, "model": ["$commun.modele", 0], "positive": ["7", 0], "negative": ["7", 1]}},
+      "4": {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["$commun.bruit", 0], "guider": ["3", 0], "sampler": ["$commun.echantillonneur", 0], "sigmas": ["$commun.sigmas", 0], "latent_image": ["2", 0]}},
+      "13": {"class_type": "LTXVSeparateAVLatent", "inputs": {"av_latent": ["4", 1]}}
+     }
+    }
+   ]
+  },
+  {
+   "fragment": "montage",
+   "contenu": {
+    "5": {"class_type": "VAEDecodeTiled", "inputs": {"tile_size": 768, "overlap": 64, "temporal_size": 4096, "temporal_overlap": 64, "samples": ["$precedent.13", 0], "vae": ["$commun.checkpoint", 2]}},
+    "0": {"class_type": "GetImageRangeFromBatch", "inputs": {"start_index": 0, "num_frames": 375, "images": ["5", 0]}},
+    "1": {"class_type": "CreateVideo", "inputs": {"fps": ["$commun.cadence", 0], "bit_depth": 8, "images": ["0", 0]}},
+    "2": {"class_type": "SaveVideo", "inputs": {"filename_prefix": "cortex/video-longue-stylee-ltx", "format": "auto", "codec": "auto", "video": ["1", 0]}}
+   }
+  }
+ ]
+}

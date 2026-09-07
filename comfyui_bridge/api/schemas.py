@@ -55,6 +55,13 @@ class IntentIn(BaseModel):
     steps: int | None = Field(None, ge=1)
     cfg: float | None = Field(None, ge=0.0)
     batch: int | None = Field(None, ge=1)
+    # Les menus de style : une valeur du catalogue du nœud de style que le
+    # workflow lie (voir `options` dans /v1/workflows/{name}/io). Le moteur
+    # refuse une valeur hors catalogue ; ici on ne recopie pas la liste.
+    style_graphique: str | None = Field(None, examples=["sumi-e"],
+        description="Style graphique, par sa clé au catalogue du workflow (menu)")
+    style_narratif: str | None = Field(None, examples=["quatre-temps-social"],
+        description="Style narratif, par sa clé au catalogue du workflow (menu)")
     label: str | None = Field(None, max_length=40, description=
         "Nom de la sortie côté hôte (fichiers 'cortex/<label>_00001_.…'), pour "
         "qu'un flux appelant retrouve SES livrables. Caractères non sûrs retirés.")
@@ -103,6 +110,8 @@ class IntentIn(BaseModel):
             steps=self.steps,
             cfg=self.cfg,
             batch=self.batch,
+            style_graphique=self.style_graphique,
+            style_narratif=self.style_narratif,
             inputs=dict(self.inputs or {}),
             constraints=tuple(
                 Constraint(c.key, ConstraintOp(c.op), c.value) for c in self.constraints

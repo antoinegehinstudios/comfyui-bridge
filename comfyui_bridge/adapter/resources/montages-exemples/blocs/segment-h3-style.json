@@ -1,0 +1,115 @@
+{
+ "bloc": "segment-h3-style",
+ "fragment": "segment",
+ "_lisez_moi": [
+  "UN maillon de chaîne MiniMax H3 DIRIGÉ : même raccord que « segment-h3 »",
+  "(l'ancre est la dernière image du bloc précédent, la première image produite",
+  "est jetée, le morceau est écrit sous son rang), mais la consigne n'est plus",
+  "la même pour tous les blocs.",
+  "",
+  "Le nœud « DirectionDuBloc » relit le PLAN écrit par « DirectionDeStyle » dans",
+  "le fragment commun, et compose la consigne de CE bloc : le préfixe du style",
+  "graphique, LE temps narratif où ce bloc tombe (d'après son rang et le nombre",
+  "de morceaux), le suffixe de mouvement. Un bloc ne rejoue donc jamais tout le",
+  "récit ; il joue sa part.",
+  "",
+  "« bloc_rang » et « blocs_total » viennent de la déclaration « blocs » du",
+  "montage : l'amorce compte comme premier morceau, le tour de boucle ne le",
+  "dirait pas."
+ ],
+ "besoin": {
+  "modele": "MODEL",
+  "texte": "CLIP",
+  "vae": "VAE",
+  "cadrage": "INT",
+  "bruit": "NOISE",
+  "echantillonneur": "SAMPLER",
+  "sigmas": "SIGMAS",
+  "style": "STRING",
+  "longueur": "INT",
+  "cadence": "FLOAT",
+  "images_utiles": "INT"
+ },
+ "attend": {
+  "derniere_image": "IMAGE"
+ },
+ "sorties": {
+  "images": "5",
+  "derniere_image": "6",
+  "consigne": "2"
+ },
+ "contenu": {
+  "2": {
+   "class_type": "DirectionDuBloc",
+   "inputs": {
+    "plan_json": ["$commun.style", 3],
+    "rang": {"$calc": "bloc_rang"},
+    "total": {"$calc": "blocs_total"}
+   }
+  },
+  "3": {
+   "class_type": "MiniMaxH3ImageToVideo",
+   "inputs": {
+    "clip": ["$commun.texte", 0],
+    "vae": ["$commun.vae", 0],
+    "prompt": ["2", 0],
+    "width": ["$commun.cadrage", 0],
+    "height": ["$commun.cadrage", 1],
+    "length": ["$commun.longueur", 0],
+    "first_frame": ["$precedent.derniere_image", 0]
+   }
+  },
+  "4": {
+   "class_type": "BasicGuider",
+   "inputs": {
+    "model": ["$commun.modele", 0],
+    "conditioning": ["3", 0]
+   }
+  },
+  "7": {
+   "class_type": "SamplerCustomAdvanced",
+   "inputs": {
+    "noise": ["$commun.bruit", 0],
+    "guider": ["4", 0],
+    "sampler": ["$commun.echantillonneur", 0],
+    "sigmas": ["$commun.sigmas", 0],
+    "latent_image": ["3", 1]
+   }
+  },
+  "5": {
+   "class_type": "VAEDecode",
+   "inputs": {
+    "samples": ["7", 0],
+    "vae": ["$commun.vae", 0]
+   }
+  },
+  "6": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": -1,
+    "num_frames": 1,
+    "images": ["5", 0]
+   }
+  },
+  "9": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": 1,
+    "num_frames": ["$commun.images_utiles", 0],
+    "images": ["5", 0]
+   }
+  },
+  "8": {
+   "class_type": "VHS_VideoCombine",
+   "inputs": {
+    "images": ["9", 0],
+    "frame_rate": ["$commun.cadence", 0],
+    "loop_count": 0,
+    "filename_prefix": {"$texte": "$const.prefixe_morceaux", "$rang": "bloc_rang"},
+    "format": "video/h264-mp4",
+    "pingpong": false,
+    "save_output": true
+   }
+  }
+ }
+}

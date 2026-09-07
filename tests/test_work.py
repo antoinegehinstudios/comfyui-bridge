@@ -85,3 +85,18 @@ def test_seconds_of_audio_are_a_produced_quantity_like_frames():
     video = {"4": {"class_type": "EmptyLatentVideo", "inputs": {"length": 48}}}
     assert _produced_quantity(audio) == 30
     assert _produced_quantity(video) == 48
+
+
+def test_a_menu_is_served_whole_and_a_cut_is_said():
+    """Un catalogue de 59 styles derrière un plafond muet de 50 : neuf styles
+    disparaissaient du menu sans un mot. Le menu est servi entier ; au-delà du
+    plafond réel, la coupe est dite."""
+    from comfyui_bridge.adapter.workflow_io import OPTIONS_MAX, describe_io
+    graph = {"1": {"class_type": "Menu", "inputs": {"choix": "a"}}}
+    petit = {"Menu": {"input": {"required": {"choix": [[f"s{i}" for i in range(59)], {}]}}}}
+    io = describe_io(graph, petit)
+    assert len(io["inputs"][0]["options"]) == 59 and "options_total" not in io["inputs"][0]
+    enorme = {"Menu": {"input": {"required": {"choix": [[f"s{i}" for i in range(OPTIONS_MAX + 7)], {}]}}}}
+    io = describe_io(graph, enorme)
+    assert len(io["inputs"][0]["options"]) == OPTIONS_MAX
+    assert io["inputs"][0]["options_total"] == OPTIONS_MAX + 7

@@ -81,7 +81,7 @@ class Orchestrator:
 
         asked: dict[str, Any] = {}
         for field in ("negative_prompt", "width", "height", "steps", "cfg", "seed", "fps",
-                      "duration_s", "batch"):
+                      "duration_s", "batch", "style_graphique", "style_narratif"):
             v = getattr(intent, field, None)
             if v is None:
                 v = declared.get(field)
@@ -101,7 +101,8 @@ class Orchestrator:
                 params[param] = nom
         for field, cast in (("negative_prompt", str), ("width", int), ("height", int),
                             ("steps", int), ("cfg", float), ("seed", int), ("fps", int),
-                            ("duration_s", float)):
+                            ("duration_s", float),
+                            ("style_graphique", str), ("style_narratif", str)):
             if field in asked:
                 params[field] = cast(asked[field])
 
@@ -148,10 +149,14 @@ class Orchestrator:
         # A value the workflow cannot receive goes nowhere. Naming it here is
         # the difference between "your 10 frames were applied" and the truth.
         reachable = set(profile.accepts) | set(derivable_params(kind, profile.accepts))
+        # Une durée et une cadence CONVERTIES en nombre d'images ont atteint le
+        # graphe par ce nombre : les dire ignorées mentirait au demandeur.
+        converties = {"duration_s", "fps"} if (
+            kind == "video" and "latent_batch" in params and "latent_batch" in reachable) else set()
         # Nommés comme l'appelant les a envoyés : lui rendre "latent_batch"
         # quand il a écrit "batch" le laissait chercher un champ qui n'existe pas.
         ignored = tuple(sorted(intent_field_of(k) for k in params
-                               if profile.accepts and k not in reachable))
+                               if profile.accepts and k not in reachable and k not in converties))
         return ExecutionPlan(
             intent=intent,
             params=params,

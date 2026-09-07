@@ -1,0 +1,176 @@
+{
+ "bloc": "segment-h3",
+ "fragment": "segment",
+ "_lisez_moi": [
+  "UN maillon de chaîne MiniMax H3, réutilisable par n'importe quelle recette.",
+  "",
+  "Sa fonction : prolonger la vidéo d'un bloc, sans que rien ne s'accumule.",
+  "Il prend l'ancre que lui tend le bloc précédent, produit ses images, écrit",
+  "son morceau sur le disque, et ne tend au suivant que sa dernière image.",
+  "",
+  "Les trois rôles sont tenus par des nœuds natifs, pas par de la plomberie",
+  "recopiée dans chaque recette :",
+  "  - MiniMaxH3ImageToVideo(first_frame) : l'ancre dure, le bloc démarre",
+  "    exactement là où le précédent s'arrête ;",
+  "  - GetImageRangeFromBatch(start_index -1) : la dernière image, tendue au",
+  "    bloc suivant ;",
+  "  - VHS_VideoCombine : le morceau, nommé par le rang du bloc pour que",
+  "    l'ordre soit dans le NOM et non dans l'ordre où le moteur a fini.",
+  "",
+  "La première image produite est jetée : c'est la re-génération de l'ancre,",
+  "déjà livrée par le bloc précédent. Aucun fondu — un fondu après coup",
+  "fabriquerait une surimpression au raccord."
+ ],
+ "besoin": {
+  "modele": "MODEL",
+  "texte": "CLIP",
+  "vae": "VAE",
+  "cadrage": "INT",
+  "bruit": "NOISE",
+  "echantillonneur": "SAMPLER",
+  "sigmas": "SIGMAS",
+  "prompt": "STRING",
+  "longueur": "INT",
+  "cadence": "FLOAT",
+  "images_utiles": "INT"
+ },
+ "attend": {
+  "derniere_image": "IMAGE"
+ },
+ "sorties": {
+  "images": "5",
+  "derniere_image": "6"
+ },
+ "contenu": {
+  "3": {
+   "class_type": "MiniMaxH3ImageToVideo",
+   "inputs": {
+    "clip": [
+     "$commun.texte",
+     0
+    ],
+    "vae": [
+     "$commun.vae",
+     0
+    ],
+    "prompt": [
+     "$commun.prompt",
+     0
+    ],
+    "width": [
+     "$commun.cadrage",
+     0
+    ],
+    "height": [
+     "$commun.cadrage",
+     1
+    ],
+    "length": [
+     "$commun.longueur",
+     0
+    ],
+    "first_frame": [
+     "$precedent.derniere_image",
+     0
+    ]
+   }
+  },
+  "4": {
+   "class_type": "BasicGuider",
+   "inputs": {
+    "model": [
+     "$commun.modele",
+     0
+    ],
+    "conditioning": [
+     "3",
+     0
+    ]
+   }
+  },
+  "7": {
+   "class_type": "SamplerCustomAdvanced",
+   "inputs": {
+    "noise": [
+     "$commun.bruit",
+     0
+    ],
+    "guider": [
+     "4",
+     0
+    ],
+    "sampler": [
+     "$commun.echantillonneur",
+     0
+    ],
+    "sigmas": [
+     "$commun.sigmas",
+     0
+    ],
+    "latent_image": [
+     "3",
+     1
+    ]
+   }
+  },
+  "5": {
+   "class_type": "VAEDecode",
+   "inputs": {
+    "samples": [
+     "7",
+     0
+    ],
+    "vae": [
+     "$commun.vae",
+     0
+    ]
+   }
+  },
+  "6": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": -1,
+    "num_frames": 1,
+    "images": [
+     "5",
+     0
+    ]
+   }
+  },
+  "9": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": 1,
+    "num_frames": [
+     "$commun.images_utiles",
+     0
+    ],
+    "images": [
+     "5",
+     0
+    ]
+   }
+  },
+  "8": {
+   "class_type": "VHS_VideoCombine",
+   "inputs": {
+    "images": [
+     "9",
+     0
+    ],
+    "frame_rate": [
+     "$commun.cadence",
+     0
+    ],
+    "loop_count": 0,
+    "filename_prefix": {
+     "$texte": "$const.prefixe_morceaux",
+     "$rang": "tour + 1"
+    },
+    "format": "video/h264-mp4",
+    "pingpong": false,
+    "save_output": true
+   }
+  }
+ }
+}

@@ -1,0 +1,360 @@
+{
+ "assemblage": 1,
+ "_lisez_moi": [
+  "Variante GUIDE de « video-longue-stylee-h3 » (MiniMaxH3AddGuide, cœur ComfyUI ≥ 0.34 — le poste est en 0.33.3 tant que la mise à jour n'est pas faite) :",
+  "raccordés par RECOUVREMENT : chaque bloc reçoit les 22 dernières images du",
+  "précédent comme guide (MiniMaxH3AddGuide, frame_idx 0 — cœur ComfyUI ≥ 0.34) et",
+  "continue le mouvement. Les 22 images re-rendues sont jetées à l'écriture.",
+  "",
+  "Deux menus décident de la consigne : un style GRAPHIQUE (le médium) et un style",
+  "NARRATIF (les temps du récit). « DirectionDeStyle » (commun) écrit un plan ;",
+  "chaque bloc le relit par « DirectionDuBloc » et reçoit le temps où il tombe.",
+  "",
+  "Le sujet (« prompt ») s'écrit « décor | temps un | temps deux … » : la première",
+  "part vaut pour toute la vidéo, les suivantes sont réparties sur les temps.",
+  "",
+  "Les morceaux sont recollés en un seul livrable par la passerelle (copie de flux)."
+ ],
+ "constantes": {
+  "images_par_bloc": 192,
+  "images_nouvelles_par_bloc": 170,
+  "megapixels": 0.6,
+  "pas": 8,
+  "cadence": 24,
+  "prefixe_morceaux": "cortex/morceaux/guide",
+  "guide_images": 22
+ },
+ "exemple": {
+  "latent_batch": 960
+ },
+ "livrable": {
+  "morceaux": "$const.prefixe_morceaux"
+ },
+ "blocs": [
+  "amorce",
+  "segment"
+ ],
+ "montage": [
+  {
+   "fragment": "commun",
+   "sorties": {
+    "modele": "2",
+    "texte": "3",
+    "vae": "4",
+    "cadrage": "5",
+    "bruit": "6",
+    "echantillonneur": "7",
+    "sigmas": "9",
+    "style": "30",
+    "longueur": "11",
+    "cadence": "14",
+    "images_utiles": "12",
+    "guide_images": "13"
+   },
+   "contenu": {
+    "1": {
+     "class_type": "UNETLoader",
+     "inputs": {
+      "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+     }
+    },
+    "2": {
+     "class_type": "LoraLoaderModelOnly",
+     "inputs": {
+      "lora_name": "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+       "1",
+       0
+      ]
+     }
+    },
+    "3": {
+     "class_type": "CLIPLoader",
+     "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+     }
+    },
+    "4": {
+     "class_type": "VAELoader",
+     "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+     }
+    },
+    "5": {
+     "class_type": "ResolutionSelector",
+     "inputs": {
+      "aspect_ratio": "16:9 (Widescreen)",
+      "megapixels": "$const.megapixels",
+      "multiple": 32
+     }
+    },
+    "6": {
+     "class_type": "RandomNoise",
+     "inputs": {
+      "noise_seed": 757358688076805
+     }
+    },
+    "7": {
+     "class_type": "KSamplerSelect",
+     "inputs": {
+      "sampler_name": "res_multistep"
+     }
+    },
+    "8": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": "$const.pas"
+     }
+    },
+    "9": {
+     "class_type": "BasicScheduler",
+     "inputs": {
+      "scheduler": "simple",
+      "steps": [
+       "8",
+       0
+      ],
+      "denoise": 1,
+      "model": [
+       "2",
+       0
+      ]
+     }
+    },
+    "30": {
+     "class_type": "DirectionDeStyle",
+     "inputs": {
+      "style_graphique": "fidele-a-l-oeuvre",
+      "style_narratif": "quatre-temps-social",
+      "sujet": "a continuous cinematic shot",
+      "negatif_supplementaire": ""
+     }
+    },
+    "11": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": "$const.images_par_bloc"
+     }
+    },
+    "14": {
+     "class_type": "PrimitiveFloat",
+     "inputs": {
+      "value": "$const.cadence"
+     }
+    },
+    "12": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": "$const.images_nouvelles_par_bloc"
+     }
+    },
+    "13": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": "$const.guide_images"
+     }
+    }
+   }
+  },
+  {
+   "fragment": "amorce",
+   "sorties": {
+    "images": "5",
+    "derniere_image": "6",
+    "consigne": "9",
+    "queue": "10"
+   },
+   "contenu": {
+    "1": {
+     "class_type": "LoadImage",
+     "inputs": {
+      "image": "uccello-saint-georges.jpg",
+      "upload": "image"
+     }
+    },
+    "2": {
+     "class_type": "ResizeImageMaskNode",
+     "inputs": {
+      "resize_type": "scale dimensions",
+      "resize_type.width": [
+       "$commun.cadrage",
+       0
+      ],
+      "resize_type.height": [
+       "$commun.cadrage",
+       1
+      ],
+      "resize_type.crop": "center",
+      "scale_method": "lanczos",
+      "input": [
+       "1",
+       0
+      ]
+     }
+    },
+    "9": {
+     "class_type": "DirectionDuBloc",
+     "inputs": {
+      "plan_json": [
+       "$commun.style",
+       3
+      ],
+      "rang": {
+       "$calc": "bloc_rang"
+      },
+      "total": {
+       "$calc": "blocs_total"
+      }
+     }
+    },
+    "3": {
+     "class_type": "MiniMaxH3ImageToVideo",
+     "inputs": {
+      "clip": [
+       "$commun.texte",
+       0
+      ],
+      "vae": [
+       "$commun.vae",
+       0
+      ],
+      "prompt": [
+       "9",
+       0
+      ],
+      "width": [
+       "$commun.cadrage",
+       0
+      ],
+      "height": [
+       "$commun.cadrage",
+       1
+      ],
+      "length": [
+       "$commun.longueur",
+       0
+      ],
+      "first_frame": [
+       "2",
+       0
+      ]
+     }
+    },
+    "4": {
+     "class_type": "BasicGuider",
+     "inputs": {
+      "model": [
+       "$commun.modele",
+       0
+      ],
+      "conditioning": [
+       "3",
+       0
+      ]
+     }
+    },
+    "7": {
+     "class_type": "SamplerCustomAdvanced",
+     "inputs": {
+      "noise": [
+       "$commun.bruit",
+       0
+      ],
+      "guider": [
+       "4",
+       0
+      ],
+      "sampler": [
+       "$commun.echantillonneur",
+       0
+      ],
+      "sigmas": [
+       "$commun.sigmas",
+       0
+      ],
+      "latent_image": [
+       "3",
+       1
+      ]
+     }
+    },
+    "5": {
+     "class_type": "VAEDecode",
+     "inputs": {
+      "samples": [
+       "7",
+       0
+      ],
+      "vae": [
+       "$commun.vae",
+       0
+      ]
+     }
+    },
+    "6": {
+     "class_type": "GetImageRangeFromBatch",
+     "inputs": {
+      "start_index": -1,
+      "num_frames": 1,
+      "images": [
+       "5",
+       0
+      ]
+     }
+    },
+    "8": {
+     "class_type": "VHS_VideoCombine",
+     "inputs": {
+      "images": [
+       "5",
+       0
+      ],
+      "frame_rate": [
+       "$commun.cadence",
+       0
+      ],
+      "loop_count": 0,
+      "filename_prefix": {
+       "$texte": "$const.prefixe_morceaux",
+       "$rang": "bloc_rang"
+      },
+      "format": "video/h264-mp4",
+      "pingpong": false,
+      "save_output": true
+     }
+    },
+    "10": {
+     "class_type": "GetImageRangeFromBatch",
+     "inputs": {
+      "start_index": -1,
+      "num_frames": [
+       "$commun.guide_images",
+       0
+      ],
+      "images": [
+       "5",
+       0
+      ]
+     }
+    }
+   }
+  },
+  {
+   "pour": {
+    "jusqu_a": "latent_batch",
+    "chaque": "images_nouvelles_par_bloc",
+    "deja": "images_par_bloc",
+    "max": 60
+   },
+   "faire": [
+    {
+     "utiliser": "segment-h3-guide"
+    }
+   ]
+  }
+ ]
+}

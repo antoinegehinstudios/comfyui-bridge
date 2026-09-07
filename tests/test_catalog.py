@@ -101,3 +101,55 @@ def test_a_registered_graph_shadowed_by_a_declaration_is_named(tmp_path):
     cat = load_catalog(declare, dossier)
     assert cat.shadowed == ("collision",)          # nommé…
     assert "libre" in cat.names()                  # …et le reste est bien découvert
+
+
+def _montage_en_morceaux(tmp_path, blocs=("b",)):
+    import json
+    wf = tmp_path / "wf"; wf.mkdir(exist_ok=True)
+    montage = {"assemblage": 1, "constantes": {"prefixe_morceaux": "cortex/morceaux/bloc"},
+               "exemple": {"n": 2}, "livrable": {"morceaux": "$const.prefixe_morceaux"},
+               "blocs": list(blocs),
+               "montage": [{"pour": {"jusqu_a": "n", "chaque": 1}, "faire": [{"fragment": "b", "contenu": {
+                   "1": {"class_type": "VHS_VideoCombine",
+                         "inputs": {"filename_prefix": {"$texte": "$const.prefixe_morceaux", "$rang": "bloc_rang"}}}}}]}]}
+    (wf / "m.json").write_text(json.dumps(montage), encoding="utf-8")
+    rec = tmp_path / "reconciliation.json"
+    rec.write_text(json.dumps({"default": "m", "workflows": {
+        "m": {"kind": "video", "workflow": str(wf / "m.json"), "bindings": {}}}}), encoding="utf-8")
+    return rec, wf
+
+
+def test_the_pieces_of_a_montage_carry_the_run_name_and_the_label_pilots_it(tmp_path):
+    """Deux runs du même montage n'écrivent plus au même endroit, et « label »
+    est un champ que le montage REÇOIT (il nomme les morceaux) — pas un réglage
+    à annoncer ignoré. La marque déclarée reste dans le nom : c'est elle que le
+    recollage cherche."""
+    from comfyui_bridge.adapter.catalog import load_catalog
+    rec, wf = _montage_en_morceaux(tmp_path)
+    cat = load_catalog(rec, workflows_dir=wf)
+    spec = cat.get_spec("m")
+    assert "filename_prefix" in spec.profile.accepts
+    g, _ = cat.monter(spec, {"n": 3, "filename_prefix": "cortex/essai"})
+    assert sorted(v["inputs"]["filename_prefix"] for v in g.values()) == [
+        "cortex/essai_bloc_000", "cortex/essai_bloc_001", "cortex/essai_bloc_002"]
+    assert cat.livrable(spec) == {"morceaux": "cortex/morceaux/bloc"}
+
+
+def test_a_converted_duration_is_not_reported_ignored(tmp_path):
+    """Une durée convertie en nombre d'images a atteint le graphe par ce nombre."""
+    import json
+    wf = tmp_path / "wf"; wf.mkdir()
+    graph = {"1": {"class_type": "EmptyLTXVLatentVideo",
+                   "inputs": {"width": 512, "height": 512, "length": 25, "batch_size": 1}},
+             "2": {"class_type": "SaveVideo", "inputs": {"filename_prefix": "v"}}}
+    (wf / "v.json").write_text(json.dumps(graph), encoding="utf-8")
+    rec = tmp_path / "reconciliation.json"
+    rec.write_text(json.dumps({"default": "v", "workflows": {"v": {
+        "kind": "video", "workflow": str(wf / "v.json"),
+        "bindings": {"latent_batch": {"node": "1", "input": "length"}}}}}), encoding="utf-8")
+    c = build_container(Settings(comfy_backend="cli", dry_run=True, catalog_file=rec,
+                                 comfy_output_dir=tmp_path, hermes_db=tmp_path / "h.sqlite3",
+                                 workflows_dir=wf))
+    plan = c.orchestrator.build_plan(RenderIntent(prompt="x", workflow="v", duration_s=2, fps=12))
+    assert plan.params["latent_batch"] == 24
+    assert "duration_s" not in plan.ignored and "fps" not in plan.ignored

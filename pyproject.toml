@@ -15,6 +15,10 @@ dependencies = [
     "pillow>=10.0",
     # La progression réelle du moteur ; son absence est annoncée, pas subie.
     "websocket-client>=1.7",
+    # Le dépôt d'une image passe par un formulaire : sans ce paquet, FastAPI
+    # refuse de démarrer. Il manquait à cette liste et ne tenait que par
+    # hasard, installé au hasard d'un environnement.
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]

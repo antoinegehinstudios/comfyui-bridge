@@ -33,6 +33,11 @@ def inject(
         for node in graph.values():
             inputs = node.get("inputs") if isinstance(node, dict) else None
             if isinstance(inputs, dict) and isinstance(inputs.get(key), str):
+                # Un montage a déjà nommé ses morceaux d'après ce préfixe
+                # (« cortex/x_bloc_003 ») : écraser ce nom effacerait le RANG,
+                # et le recollage remettrait les blocs dans l'ordre du hasard.
+                if isinstance(params[key], str) and inputs[key].startswith(params[key] + "_"):
+                    continue
                 inputs[key] = params[key]
     for key, binding in bindings.items():
         if key not in params or key in _APPLIQUE_A_TOUS:

@@ -666,6 +666,32 @@ Consultation : `GET /v1/hermes/runs` (ce qu'il sait, avec la levée éventuelle 
 chaque échec) et `GET /v1/hermes/problems?workflow=…` (problèmes debout, plus
 les souvenirs `revised` avec leur moment et leur cause).
 
+## Vidéo longue dirigée (menus de style)
+
+Trois montages du catalogue produisent une vidéo LONGUE dont chaque bloc
+reçoit le temps du récit où il tombe, au lieu de rejouer la même consigne :
+
+| entrée | moteur | mécanique |
+|---|---|---|
+| `video-longue-stylee-h3` | MiniMax H3 | blocs de 8 s à mémoire constante, recollés en un livrable |
+| `video-longue-stylee-ltx` | LTX-2.3 | blocs chaînés par recouvrement (latentes cumulées) |
+| `video-longue-relais-stylee` | LTX-2.3 | une passe, fenêtres de contexte + relais de prompt |
+
+Deux champs d'intention les dirigent — `style_graphique` (le médium) et
+`style_narratif` (les temps du récit). Ce sont des champs SÉMANTIQUES, comme
+`prompt` : une clé de catalogue, jamais un numéro de nœud. Les valeurs sont
+celles que ComfyUI déclare pour le nœud `DirectionDeStyle` du paquet
+`comfyui-direction-de-style` — `GET /v1/workflows/{nom}/io` les rend dans
+`intent_inputs[].options`, et la console les montre en menus déroulants.
+Le `prompt` s'écrit `décor | temps un | temps deux …` : la première part vaut
+pour toute la vidéo, les suivantes sont réparties sur les temps du récit.
+
+Dans un montage, la clé `"blocs": ["amorce", "segment"]` nomme les fragments
+qui produisent un morceau : chacun voit alors `bloc_rang` et `blocs_total`
+dans ses calculs (`{"$calc": "bloc_rang"}`), ce que le tour de boucle ne dit
+pas (l'amorce est hors boucle). Le nœud `DirectionDuBloc` de chaque bloc en
+déduit son temps.
+
 ## Ajouter un workflow
 
 Aucun code à toucher : on ajoute une entrée au fichier de réconciliation (voir la

@@ -73,3 +73,14 @@ def test_the_output_name_reaches_every_saving_node():
     assert sorti["4"]["inputs"]["filename_prefix"] == "cortex/analyse"
     assert sorti["5"]["inputs"]["filename_prefix"] == "cortex/analyse"   # celui-ci était oublié
     assert sorti["6"]["inputs"]["steps"] == 8        # les autres restent liés à leur nœud
+
+
+def test_a_piece_already_named_after_the_run_keeps_its_rank():
+    """Un montage nomme ses morceaux « <préfixe du run>_bloc_003 » : le nom de
+    sortie ne doit pas les écraser, sinon le rang — et l'ordre du recollage —
+    disparaît. Un nœud de sauvegarde ordinaire, lui, prend bien le nom du run."""
+    wf = {"1": {"class_type": "VHS_VideoCombine", "inputs": {"filename_prefix": "cortex/x_bloc_003"}},
+          "2": {"class_type": "SaveVideo", "inputs": {"filename_prefix": "cortex/video"}}}
+    g = inject(wf, {}, {"filename_prefix": "cortex/x"})
+    assert g["1"]["inputs"]["filename_prefix"] == "cortex/x_bloc_003"
+    assert g["2"]["inputs"]["filename_prefix"] == "cortex/x"

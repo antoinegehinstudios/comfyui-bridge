@@ -430,3 +430,19 @@ def test_both_ingestion_doors_answer_the_same_shape(client):
     for cle in ("name", "kind", "intent_fields", "bindings", "dependencies",
                 "analysis", "delivers", "changes"):
         assert cle in posted, cle
+
+
+def test_the_style_menus_are_intent_fields_not_node_numbers(client):
+    """Un appelant choisit un style par son NOM ; un numéro de nœud ne sort
+    jamais de la passerelle (loi de l'orchestrateur au-dessus)."""
+    from comfyui_bridge.core.intention import RenderIntent, intent_fields
+    assert "style_graphique" in RenderIntent.__dataclass_fields__
+    assert "style_narratif" in RenderIntent.__dataclass_fields__
+    assert set(intent_fields(["style_graphique", "style_narratif", "prompt"])) == {
+        "style_graphique", "style_narratif", "prompt"}
+    # Accepté par l'API (pas un champ inconnu) ; non transmis quand le workflow
+    # ne le lie pas — et dit, jamais avalé.
+    r = client.post("/v1/preview", json={"prompt": "x", "style_graphique": "sumi-e",
+                                          "style_narratif": "quatre-temps-social"})
+    assert r.status_code == 200, r.text
+    assert "style_graphique" in r.json().get("ignored", [])

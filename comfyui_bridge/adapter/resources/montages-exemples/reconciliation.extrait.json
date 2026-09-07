@@ -1,0 +1,188 @@
+{
+ "workflows": {
+  "video-longue-stylee-ltx": {
+   "kind": "video",
+   "workflow": "E:\\Projets Cortex\\Banc socles\\comfyui-bridge\\_data\\workflows\\video-longue-stylee-ltx.json",
+   "description": "Vidéo longue DIRIGÉE (LTX-2.3, blocs chaînés par recouvrement) : style graphique + style narratif écrivent la consigne de chaque bloc selon sa place ; le négatif est celui du style, complété par negative_prompt. Sujet « décor | temps un | temps deux ».",
+   "defaults": {
+    "duration_s": 15,
+    "fps": 25,
+    "width": 1280,
+    "height": 704,
+    "style_graphique": "fidele-a-l-oeuvre",
+    "style_narratif": "quatre-temps-social"
+   },
+   "bindings": {
+    "prompt": {
+     "node": "$commun.style",
+     "input": "sujet"
+    },
+    "style_graphique": {
+     "node": "$commun.style",
+     "input": "style_graphique"
+    },
+    "style_narratif": {
+     "node": "$commun.style",
+     "input": "style_narratif"
+    },
+    "negative_prompt": {
+     "node": "$commun.style",
+     "input": "negatif_supplementaire"
+    },
+    "width": {
+     "node": "$commun.largeur",
+     "input": "value"
+    },
+    "height": {
+     "node": "$commun.hauteur",
+     "input": "value"
+    },
+    "fps": {
+     "node": "$commun.16",
+     "input": "value"
+    },
+    "seed": {
+     "node": "$commun.bruit",
+     "input": "noise_seed"
+    },
+    "image": {
+     "node": "$amorce.1",
+     "input": "image"
+    },
+    "filename_prefix": {
+     "node": "$montage.2",
+     "input": "filename_prefix"
+    },
+    "latent_batch": {
+     "node": "$montage.0",
+     "input": "num_frames"
+    }
+   }
+  },
+  "video-longue-relais-stylee": {
+   "kind": "video",
+   "workflow": "E:\\Projets Cortex\\Banc socles\\comfyui-bridge\\_data\\workflows\\video-longue-relais-stylee.json",
+   "description": "Vidéo longue DIRIGÉE en UNE passe (LTX-2.3, fenêtres de contexte + relais de prompt) : le style narratif date chaque temps du récit sur la durée, le style graphique tient le médium. Sujet « décor | temps un | temps deux ». Aucune frontière de bloc.",
+   "defaults": {
+    "duration_s": 15,
+    "fps": 25,
+    "width": 1024,
+    "height": 768,
+    "style_graphique": "fidele-a-l-oeuvre",
+    "style_narratif": "quatre-temps-social"
+   },
+   "bindings": {
+    "prompt": {
+     "node": "$commun.style",
+     "input": "sujet"
+    },
+    "style_graphique": {
+     "node": "$commun.style",
+     "input": "style_graphique"
+    },
+    "style_narratif": {
+     "node": "$commun.style",
+     "input": "style_narratif"
+    },
+    "negative_prompt": {
+     "node": "$commun.style",
+     "input": "negatif_supplementaire"
+    },
+    "width": {
+     "node": "$commun.largeur",
+     "input": "value"
+    },
+    "height": {
+     "node": "$commun.hauteur",
+     "input": "value"
+    },
+    "latent_batch": {
+     "node": "$commun.images",
+     "input": "value"
+    },
+    "fps": {
+     "node": "$commun.cadence_int",
+     "input": "value"
+    },
+    "seed": {
+     "node": "$commun.bruit",
+     "input": "noise_seed"
+    },
+    "image": {
+     "node": "$passe.1",
+     "input": "image"
+    },
+    "filename_prefix": {
+     "node": "$montage.2",
+     "input": "filename_prefix"
+    }
+   }
+  },
+  "video-longue-stylee-h3": {
+   "kind": "video",
+   "workflow": "E:\\Projets Cortex\\Banc socles\\comfyui-bridge\\_data\\workflows\\video-longue-stylee-h3.json",
+   "description": "Vidéo longue DIRIGÉE (MiniMax H3, blocs de 8 s à mémoire constante, chaque bloc repart de la dernière image du précédent — mesuré : coutures invisibles, mouvement qui décroît) : deux menus — style graphique (le médium) et style narratif (les temps du récit) — écrivent la consigne de chaque bloc selon sa place ; sujet « décor | temps un | temps deux ». Recollage en un livrable.",
+   "defaults": {
+    "duration_s": 40,
+    "fps": 24,
+    "style_graphique": "fidele-a-l-oeuvre",
+    "style_narratif": "quatre-temps-social"
+   },
+   "bindings": {
+    "prompt": {
+     "node": "$commun.style",
+     "input": "sujet"
+    },
+    "style_graphique": {
+     "node": "$commun.style",
+     "input": "style_graphique"
+    },
+    "style_narratif": {
+     "node": "$commun.style",
+     "input": "style_narratif"
+    },
+    "seed": {
+     "node": "$commun.bruit",
+     "input": "noise_seed"
+    },
+    "image": {
+     "node": "$amorce.1",
+     "input": "image"
+    }
+   }
+  },
+  "video-longue-stylee-h3-guide": {
+   "kind": "video",
+   "workflow": "E:\\Projets Cortex\\Banc socles\\comfyui-bridge\\_data\\workflows\\video-longue-stylee-h3-guide.json",
+   "description": "Variante GUIDE de video-longue-stylee-h3 : chaque bloc reçoit les 22 dernières images du précédent comme guide (MiniMaxH3AddGuide — cœur ComfyUI ≥ 0.34, absent du poste en 0.33.3) et continue le mouvement. Même direction de style, même recollage.",
+   "defaults": {
+    "duration_s": 40,
+    "fps": 24,
+    "style_graphique": "fidele-a-l-oeuvre",
+    "style_narratif": "quatre-temps-social"
+   },
+   "bindings": {
+    "prompt": {
+     "node": "$commun.style",
+     "input": "sujet"
+    },
+    "style_graphique": {
+     "node": "$commun.style",
+     "input": "style_graphique"
+    },
+    "style_narratif": {
+     "node": "$commun.style",
+     "input": "style_narratif"
+    },
+    "seed": {
+     "node": "$commun.bruit",
+     "input": "noise_seed"
+    },
+    "image": {
+     "node": "$amorce.1",
+     "input": "image"
+    }
+   }
+  }
+ }
+}

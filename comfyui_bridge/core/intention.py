@@ -84,6 +84,13 @@ class RenderIntent:
     steps: int | None = None
     cfg: float | None = None
     batch: int | None = None
+    # La direction de style : deux valeurs prises au catalogue d'un nœud de
+    # style (menus déroulants). Sémantiques comme `prompt` : elles ne nomment
+    # aucun nœud, la liaison du workflow dit où elles atterrissent — un
+    # appelant (orchestrateur, console) les envoie par leur nom, jamais par un
+    # numéro de nœud.
+    style_graphique: str | None = None
+    style_narratif: str | None = None
     # Direct overrides on the workflow's OWN inputs, keyed "node.input".
     # The neutral params above are conveniences; this is the full surface the
     # workflow declares (discovered from ComfyUI's node schemas).

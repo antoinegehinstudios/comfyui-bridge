@@ -152,12 +152,12 @@ def effective_values(catalog, plan) -> dict[str, Any]:
     from .injector import apply_overrides, inject
 
     spec = catalog.get_spec(plan.workflow)
-    graph = apply_overrides(
-        inject(catalog.load_template(spec), spec.bindings, plan.params), plan.overrides)
+    gabarit, liaisons = catalog.monter(spec, plan.params)
+    graph = apply_overrides(inject(gabarit, liaisons, plan.params), plan.overrides)
 
     def at(param: str) -> Any:
         """The value of a bound parameter, read back from the injected graph."""
-        b = spec.bindings.get(param)
+        b = liaisons.get(param)
         if not b:
             return None
         return _literal_int(((graph.get(b.node) or {}).get("inputs") or {}).get(b.input))

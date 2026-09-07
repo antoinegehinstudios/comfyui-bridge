@@ -130,22 +130,25 @@ def _analyse_workflow(container, spec) -> dict:
     """
     from ..adapter import media_inputs
     from ..adapter.workflow_io import describe_io
-    graph = container.catalog.load_template(spec)
+    # `monter` : un montage n'est un graphe qu'une fois déplié, et ses liaisons
+    # (« $amorce.1 ») ne désignent un nœud qu'après — les lire telles quelles
+    # annoncerait des pièces jointes sans nœud.
+    graph, liaisons = container.catalog.monter(spec)
     # Les pièces jointes se lisent dans le GRAPHE : les annoncer ne demande pas
     # que le moteur réponde, et une ingestion moteur éteint doit dire pareil.
-    pieces = media_inputs.describe(spec.bindings, spec.titles, spec.carried, graph)
+    pieces = media_inputs.describe(liaisons, spec.titles, spec.carried, graph)
     probe = container.comfyui.probe()
     if not probe.get("available"):
         return {"described": False, "reason": probe.get("reason", "moteur injoignable"),
-                "accepts": sorted(spec.bindings), "media_inputs": pieces}
+                "accepts": sorted(spec.profile.accepts), "media_inputs": pieces}
     io = describe_io(graph, container.comfyui.get_object_info(), spec.titles)
     return {
         "described": True,
-        "accepts": sorted(spec.bindings),          # semantic inputs we can drive
+        "accepts": sorted(spec.profile.accepts),          # semantic inputs we can drive
         "media_inputs": pieces,                    # les pièces jointes, une par entrée
-        "intent_fields": sorted(set(intent_fields(spec.bindings))
-                                | set(derivable_params(spec.kind, spec.bindings))),
-        "derived": derivable_params(spec.kind, spec.bindings),  # drivable via conversion
+        "intent_fields": sorted(set(intent_fields(spec.profile.accepts))
+                                | set(derivable_params(spec.kind, spec.profile.accepts))),
+        "derived": derivable_params(spec.kind, spec.profile.accepts),  # drivable via conversion
         "settable_inputs": len(io["inputs"]),      # everything the workflow exposes
         "outputs": io["outputs"],                  # what it delivers
         "carried": spec.carried,                   # media it already holds
@@ -302,10 +305,10 @@ def _spec_dict(spec) -> dict:
     return {
         "name": spec.name,
         "kind": spec.kind,
-        "accepts": sorted(spec.bindings),
-        "intent_fields": sorted(set(intent_fields(spec.bindings))
-                                | set(derivable_params(spec.kind, spec.bindings))),
-        "derived": derivable_params(spec.kind, spec.bindings),
+        "accepts": sorted(spec.profile.accepts),
+        "intent_fields": sorted(set(intent_fields(spec.profile.accepts))
+                                | set(derivable_params(spec.kind, spec.profile.accepts))),
+        "derived": derivable_params(spec.kind, spec.profile.accepts),
         "defaults": spec.defaults,
         "limits": spec.limits,
         "source": spec.source,
@@ -441,11 +444,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "kind": spec.kind,
                 # What this workflow can actually receive. A field it does not
                 # bind goes nowhere: offering it would be a lie.
-                "accepts": sorted(spec.bindings),
+                "accepts": sorted(spec.profile.accepts),
                 # The names to actually put in a render request — the contract a
                 # caller programs against, UI or not.
-                "intent_fields": sorted(set(intent_fields(spec.bindings))
-                                        | set(derivable_params(spec.kind, spec.bindings))),
+                "intent_fields": sorted(set(intent_fields(spec.profile.accepts))
+                                        | set(derivable_params(spec.kind, spec.profile.accepts))),
                 # Same memory as /readiness and as the reconciler: a workflow
                 # known to fail here must not be the one the console opens on.
                 "runnable": not c.registry.blocking_problems(c.settings.host_id, name),
@@ -456,7 +459,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # un appelant pilotait une analyse périmée sans le savoir.
                 **_freshness(c, spec),
                 # Drivable without a node of its own, by conversion (seconds -> frames).
-                "derived": derivable_params(spec.kind, spec.bindings),
+                "derived": derivable_params(spec.kind, spec.profile.accepts),
                 # Media already inside the workflow: used as-is if not replaced.
                 "carried": spec.carried,
                 # …and those a neutral element can stand in for.
@@ -465,7 +468,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # nom que l'auteur a donné au nœud. Un workflow à quatre images
                 # en déclare quatre : c'est CE contrat qu'un formulaire suit.
                 "media_inputs": media_inputs.describe(
-                    spec.bindings, spec.titles, spec.carried, cat.load_template(spec)),
+                    cat.monter(spec)[1], spec.titles, spec.carried, cat.monter(spec)[0]),
                 "defaults": spec.defaults,
                 "limits": spec.limits,
                 "dependencies": spec.dependencies,
@@ -626,7 +629,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from ..adapter.workflow_io import describe_io
         c = request.app.state.container
         spec = c.catalog.get_spec(name)
-        graph = c.catalog.load_template(spec)
+        # Les liaisons d'un montage visent des rôles (« $commun.style ») : c'est
+        # le dépliage qui leur donne un numéro de nœud, et donc des options.
+        graph, liaisons = c.catalog.monter(spec)
         probe = c.comfyui.probe()
         if not probe.get("available"):
             return {"name": spec.name, "engine": probe, "described": False}
@@ -637,14 +642,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"name": spec.name, "engine": probe, "described": True,
                 # The contract to program against: field name, bounds, current
                 # value — the join done once, server side.
-                "intent_inputs": intent_inputs(io["inputs"], spec.bindings, spec.kind),
+                "intent_inputs": intent_inputs(io["inputs"], liaisons, spec.kind),
                 # Les pièces jointes pilotables…
-                "media_inputs": media_inputs.describe(spec.bindings, spec.titles,
+                "media_inputs": media_inputs.describe(liaisons, spec.titles,
                                                       spec.carried, graph),
                 # …et celles que le MOTEUR déclare téléversables sans que rien
                 # ici ne les pilote (un custom node absent de la table). Vide
                 # en temps normal ; ce qui manque doit se voir.
-                "media_inputs_unbound": media_inputs.unbound(graph, spec.bindings, object_info),
+                "media_inputs_unbound": media_inputs.unbound(graph, liaisons, object_info),
                 **io}
 
     @app.get("/v1/comfyui/workflows", tags=["workflows"])
