@@ -137,15 +137,15 @@ def _analyse_workflow(container, spec) -> dict:
     probe = container.comfyui.probe()
     if not probe.get("available"):
         return {"described": False, "reason": probe.get("reason", "moteur injoignable"),
-                "accepts": sorted(spec.bindings), "media_inputs": pieces}
+                "accepts": sorted(spec.profile.accepts), "media_inputs": pieces}
     io = describe_io(graph, container.comfyui.get_object_info(), spec.titles)
     return {
         "described": True,
-        "accepts": sorted(spec.bindings),          # semantic inputs we can drive
+        "accepts": sorted(spec.profile.accepts),          # semantic inputs we can drive
         "media_inputs": pieces,                    # les pièces jointes, une par entrée
-        "intent_fields": sorted(set(intent_fields(spec.bindings))
-                                | set(derivable_params(spec.kind, spec.bindings))),
-        "derived": derivable_params(spec.kind, spec.bindings),  # drivable via conversion
+        "intent_fields": sorted(set(intent_fields(spec.profile.accepts))
+                                | set(derivable_params(spec.kind, spec.profile.accepts))),
+        "derived": derivable_params(spec.kind, spec.profile.accepts),  # drivable via conversion
         "settable_inputs": len(io["inputs"]),      # everything the workflow exposes
         "outputs": io["outputs"],                  # what it delivers
         "carried": spec.carried,                   # media it already holds
@@ -302,10 +302,10 @@ def _spec_dict(spec) -> dict:
     return {
         "name": spec.name,
         "kind": spec.kind,
-        "accepts": sorted(spec.bindings),
-        "intent_fields": sorted(set(intent_fields(spec.bindings))
-                                | set(derivable_params(spec.kind, spec.bindings))),
-        "derived": derivable_params(spec.kind, spec.bindings),
+        "accepts": sorted(spec.profile.accepts),
+        "intent_fields": sorted(set(intent_fields(spec.profile.accepts))
+                                | set(derivable_params(spec.kind, spec.profile.accepts))),
+        "derived": derivable_params(spec.kind, spec.profile.accepts),
         "defaults": spec.defaults,
         "limits": spec.limits,
         "source": spec.source,
@@ -441,11 +441,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "kind": spec.kind,
                 # What this workflow can actually receive. A field it does not
                 # bind goes nowhere: offering it would be a lie.
-                "accepts": sorted(spec.bindings),
+                "accepts": sorted(spec.profile.accepts),
                 # The names to actually put in a render request — the contract a
                 # caller programs against, UI or not.
-                "intent_fields": sorted(set(intent_fields(spec.bindings))
-                                        | set(derivable_params(spec.kind, spec.bindings))),
+                "intent_fields": sorted(set(intent_fields(spec.profile.accepts))
+                                        | set(derivable_params(spec.kind, spec.profile.accepts))),
                 # Same memory as /readiness and as the reconciler: a workflow
                 # known to fail here must not be the one the console opens on.
                 "runnable": not c.registry.blocking_problems(c.settings.host_id, name),
@@ -456,7 +456,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # un appelant pilotait une analyse périmée sans le savoir.
                 **_freshness(c, spec),
                 # Drivable without a node of its own, by conversion (seconds -> frames).
-                "derived": derivable_params(spec.kind, spec.bindings),
+                "derived": derivable_params(spec.kind, spec.profile.accepts),
                 # Media already inside the workflow: used as-is if not replaced.
                 "carried": spec.carried,
                 # …and those a neutral element can stand in for.

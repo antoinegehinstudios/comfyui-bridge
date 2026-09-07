@@ -33,12 +33,45 @@ from typing import Any
 
 import re
 
+from ..core.blocs import deplier
 from ..core.errors import IntentValidationError, WorkflowMappingError
 from ..core.workflow import WorkflowProfile
-from . import autobind
+from . import assembleur, autobind
 from .mapping import Binding
 
 _SAFE_NAME = re.compile(r"[^a-zA-Z0-9_-]+")
+
+
+def est_montage(brut: Any) -> bool:
+    """Un gabarit de montage, par opposition à un graphe API tel quel."""
+    return isinstance(brut, dict) and bool(brut.get("assemblage"))
+
+
+def _monter(brut: dict[str, Any], params: dict[str, Any] | None, nom: str
+            ) -> tuple[dict[str, Any], dict[tuple[str, int], dict[str, str]]]:
+    """Déplier un montage et le recoudre, avec sa table de numéros.
+
+    Sans paramètres — le cas des pages qui DÉCRIVENT un workflow sans le lancer
+    — le montage est déplié sur son exemple. Sans exemple, une recette resterait
+    indescriptible : on refuse plutôt que de rendre un graphe vide.
+    """
+    montage = brut.get("montage")
+    if not isinstance(montage, list):
+        raise WorkflowMappingError(f"workflow {nom!r} : un montage a besoin de « montage »")
+    constantes = dict(brut.get("constantes") or {})
+    # Les constantes sont visibles de la boucle COMME des paramètres : le même
+    # nombre sert au nœud qui fixe la longueur d'un bloc et au compte de tours.
+    # Un paramètre du demandeur l'emporte, sans quoi une constante empêcherait
+    # de piloter ce qu'elle nomme.
+    valeurs = dict(constantes)
+    valeurs.update(brut.get("exemple") or {})
+    valeurs.update({k: v for k, v in (params or {}).items() if v is not None})
+    if not valeurs and not brut.get("exemple"):
+        raise WorkflowMappingError(
+            f"workflow {nom!r} : montage sans « exemple », impossible à décrire "
+            f"tant qu'aucun paramètre n'est fourni")
+    fragments = deplier(montage, valeurs)
+    return assembleur.assembler(fragments, valeurs), assembleur.numeroter(fragments)
 
 
 @dataclass(frozen=True)
@@ -57,13 +90,16 @@ class WorkflowSpec:
 
     carried: dict[str, Any] = field(default_factory=dict)
     titles: dict[str, str] = field(default_factory=dict)
+    # Paramètres qui pilotent un MONTAGE sans viser de nœud : la durée demandée
+    # décide du nombre de blocs, elle ne s'écrit dans aucun d'eux.
+    pilote: tuple[str, ...] = ()
 
     @property
     def profile(self) -> WorkflowProfile:
         from .neutral import has_neutral
         return WorkflowProfile(self.name, self.kind, dict(self.defaults),
                                dict(self.limits), dict(self.carried),
-                               tuple(sorted(self.bindings)),
+                               tuple(sorted(set(self.bindings) | set(self.pilote))),
                                # Media inputs for which a neutral element exists:
                                # for the others, saying "neutral was sent" would
                                # be false and the workflow's own content is used.
@@ -200,7 +236,31 @@ class WorkflowCatalog:
             )
         return spec
 
-    def load_template(self, spec: WorkflowSpec) -> dict[str, Any]:
+    def load_template(self, spec: WorkflowSpec,
+                      params: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self.monter(spec, params)[0]
+
+    def monter(self, spec: WorkflowSpec, params: dict[str, Any] | None = None
+               ) -> tuple[dict[str, Any], dict[str, Binding]]:
+        """Le graphe à envoyer, et les liaisons qui le visent.
+
+        Un gabarit ordinaire est rendu tel quel, avec ses liaisons déclarées.
+        Un gabarit de MONTAGE (``"assemblage": 1``) est déplié d'abord : le
+        nombre de blocs sort des paramètres, donc les numéros de nœuds n'existent
+        qu'après le dépliage, et les liaisons doivent être traduites vers eux.
+        """
+        brut = self._brut(spec)
+        if not est_montage(brut):
+            return brut, spec.bindings
+        graphe, table = _monter(brut, params, spec.name)
+        liaisons = {
+            k: (Binding(node=assembleur.adresse(b.node, table), input=b.input)
+                if b.node.startswith(assembleur.PREFIXE) else b)
+            for k, b in spec.bindings.items()
+        }
+        return graphe, liaisons
+
+    def _brut(self, spec: WorkflowSpec) -> dict[str, Any]:
         if spec.name not in self._templates:
             try:
                 self._templates[spec.name] = json.loads(spec.workflow_path.read_text(encoding="utf-8"))
@@ -264,15 +324,15 @@ def build_injection(catalog: "WorkflowCatalog", plan) -> dict[str, Any]:
     from .injector import apply_overrides, inject
 
     spec = catalog.get_spec(plan.workflow)
-    template = catalog.load_template(spec)
-    graph = apply_overrides(inject(template, spec.bindings, plan.params), plan.overrides)
+    template, liaisons = catalog.monter(spec, plan.params)
+    graph = apply_overrides(inject(template, liaisons, plan.params), plan.overrides)
     applied = [
         {
             "param": key, "node": b.node, "input": b.input,
             "class_type": (template.get(b.node) or {}).get("class_type"),
             "value": plan.params[key],
         }
-        for key, b in spec.bindings.items()
+        for key, b in liaisons.items()
         if key in plan.params
     ]
     touched = {a["node"] for a in applied}
@@ -289,11 +349,33 @@ def build_injection(catalog: "WorkflowCatalog", plan) -> dict[str, Any]:
     }
 
 
+def _pilotes(path: Path) -> tuple[str, ...]:
+    """Ce qui pilote le montage d'un gabarit, lu dans le gabarit lui-même."""
+    from ..core.blocs import parametres_pilotes
+    try:
+        brut = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ()
+    if not est_montage(brut):
+        return ()
+    return tuple(sorted(parametres_pilotes(brut.get("montage") or [])))
+
+
 def _graph_of(path: Path) -> dict[str, Any]:
     try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
+        brut = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
+    if est_montage(brut):
+        # Un montage n'est un graphe qu'une fois déplié. Ce qui le lit ici — le
+        # média que le graphe porte déjà, ses dépendances — se lit donc sur son
+        # exemple. Un montage impossible à déplier ne fait pas échouer le
+        # chargement du catalogue : il se signalera au moment de servir.
+        try:
+            return _monter(brut, None, str(path))[0]
+        except Exception:
+            return {}
+    return brut
 
 
 def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
@@ -328,7 +410,9 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
         # Derive dependencies from the declared graph too (for deps checks).
         deps: dict[str, list[str]] = {}
         try:
-            deps = autobind.derive_dependencies(json.loads(wf_path.read_text(encoding="utf-8")))
+            # Passe par _graph_of : un gabarit de MONTAGE n'est un graphe qu'une
+            # fois déplié, et ses dépendances doivent se lire sur ce dépliage.
+            deps = autobind.derive_dependencies(_graph_of(wf_path))
         except (OSError, json.JSONDecodeError):
             pass
         specs[name] = WorkflowSpec(
@@ -340,6 +424,7 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
             limits=dict(entry.get("limits", {})),
             dependencies=deps,
             carried=_carried_media(_graph_of(wf_path), bindings),
+            pilote=_pilotes(wf_path),
         )
 
     default = data.get("default") or next(iter(specs))

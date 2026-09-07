@@ -128,8 +128,10 @@ class ComfyUIHttpBackend:
         """
         spec = self._catalog.get_spec(plan.workflow)
         params = self._with_neutral_media(spec, dict(plan.params))
-        graph = apply_overrides(
-            inject(self._catalog.load_template(spec), spec.bindings, params), plan.overrides)
+        # `monter` déplie les gabarits de montage : le nombre de blocs sort des
+        # paramètres, donc les liaisons ne sont connues qu'après le dépliage.
+        gabarit, liaisons = self._catalog.monter(spec, params)
+        graph = apply_overrides(inject(gabarit, liaisons, params), plan.overrides)
         out_dir = self._settings.comfy_output_dir.resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
         req_t = self._settings.comfyui_request_timeout_s

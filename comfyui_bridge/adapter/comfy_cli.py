@@ -47,8 +47,8 @@ class ComfyCliBackend:
     def submit(self, plan: ExecutionPlan, on_enqueued=None, on_progress=None,
                on_note=None, on_started=None) -> BackendResult:
         spec = self._catalog.get_spec(plan.workflow)
-        graph = apply_overrides(
-            inject(self._catalog.load_template(spec), spec.bindings, plan.params), plan.overrides)
+        gabarit, liaisons = self._catalog.monter(spec, plan.params)
+        graph = apply_overrides(inject(gabarit, liaisons, plan.params), plan.overrides)
         out_dir = self._settings.comfy_output_dir.resolve()  # absolute → openable paths
         out_dir.mkdir(parents=True, exist_ok=True)
 
