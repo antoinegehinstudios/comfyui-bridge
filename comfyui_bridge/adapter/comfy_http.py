@@ -28,6 +28,7 @@ from typing import Any
 from ..config import Settings
 from ..core.errors import BackendExecutionError
 from ..core.plan import Artifact, BackendResult, ExecutionPlan
+from . import morceaux
 from .catalog import WorkflowCatalog, build_injection
 from .comfyui_client import ComfyUIClient
 from .inflight import InflightLog
@@ -128,8 +129,10 @@ class ComfyUIHttpBackend:
         """
         spec = self._catalog.get_spec(plan.workflow)
         params = self._with_neutral_media(spec, dict(plan.params))
-        graph = apply_overrides(
-            inject(self._catalog.load_template(spec), spec.bindings, params), plan.overrides)
+        # `monter` déplie les gabarits de montage : le nombre de blocs sort des
+        # paramètres, donc les liaisons ne sont connues qu'après le dépliage.
+        gabarit, liaisons = self._catalog.monter(spec, params)
+        graph = apply_overrides(inject(gabarit, liaisons, params), plan.overrides)
         out_dir = self._settings.comfy_output_dir.resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
         req_t = self._settings.comfyui_request_timeout_s
@@ -172,6 +175,7 @@ class ComfyUIHttpBackend:
                 except Exception:
                     pass
         artifacts = self._download(entry, out_dir, req_t, plan)
+        artifacts = self._recoller(artifacts, spec, out_dir, plan, on_note)
         self._forget_inflight(prompt_id)
         if not artifacts:
             raise BackendExecutionError("ComfyUI finished but produced no media", prompt_id=prompt_id)
@@ -494,6 +498,38 @@ class ComfyUIHttpBackend:
         except Exception:
             pass
         return ""
+
+    def _recoller(self, artifacts: list[Artifact], spec, out_dir: Path,
+                  plan: ExecutionPlan | None, on_note=None) -> list[Artifact]:
+        """Joindre les morceaux d'un montage en un seul livrable.
+
+        Fin de chaine : ce qui est rendu doit etre la video commandee, pas la
+        collection de blocs qui a servi a la produire. Si le recollage echoue,
+        les morceaux sont rendus tels quels avec la raison — mieux vaut un
+        livrable en pieces et dit, qu'un run declare perdu.
+        """
+        declare = self._catalog.livrable(spec) if hasattr(self._catalog, "livrable") else {}
+        prefixe = declare.get("morceaux")
+        if not prefixe or len(artifacts) < 2:
+            return artifacts
+        pieces = morceaux.a_recoller([a.path for a in artifacts], prefixe)
+        if len(pieces) < 2:
+            return artifacts
+        nom = (plan.params.get("filename_prefix") if plan else None) or "cortex/video"
+        sortie = out_dir / (str(nom).replace("\\", "/") + "_recolle.mp4")
+        try:
+            morceaux.joindre(pieces, sortie)
+        except Exception as exc:
+            if on_note:
+                on_note("morceaux non recolles (%s) — les blocs sont livres tels quels" % exc)
+            return artifacts
+        if on_note:
+            on_note("%d morceaux recolles en un livrable : %s" % (len(pieces), sortie.name))
+        joint = Artifact(kind=media_kind(sortie), path=str(sortie.resolve()),
+                         url=artifact_url(out_dir, sortie),
+                         bytes=sortie.stat().st_size, measured=measure(sortie) or None)
+        # Le livrable d'abord : c'est LUI dont le journal et le demandeur parlent.
+        return [joint] + artifacts
 
     def _download(self, entry: dict, out_dir: Path, req_t: float,
                   plan: ExecutionPlan | None = None) -> list[Artifact]:

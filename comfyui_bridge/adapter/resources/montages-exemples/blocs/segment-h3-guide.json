@@ -1,0 +1,225 @@
+{
+ "bloc": "segment-h3-guide",
+ "fragment": "segment",
+ "_lisez_moi": [
+  "UN maillon de chaîne MiniMax H3 par RECOUVREMENT : le bloc reçoit les 22",
+  "dernières images du bloc précédent comme GUIDE (nœud MiniMaxH3AddGuide,",
+  "frame_idx 0 — cœur ComfyUI ≥ 0.34) et continue le mouvement, au lieu de",
+  "repartir d'une image fixe. C'est le raccord que la littérature reconnaît",
+  "(conditionnement par chevauchement) : la vitesse traverse la couture.",
+  "",
+  "22 = la longueur de clip valide la plus courte au-dessus d'une image",
+  "(grille 17k+5 du modèle). Les 22 premières images produites re-rendent le",
+  "guide : elles sont JETÉES à l'écriture (le bloc précédent les a déjà",
+  "livrées), et le morceau écrit commence à l'image 22.",
+  "",
+  "La consigne du bloc vient de « DirectionDuBloc » (le temps du récit où ce",
+  "bloc tombe, dans le style choisi). Le morceau est nommé par son rang.",
+  "La queue de 22 images se prend avec start_index -1 : pour GetImageRangeFromBatch, -1 veut dire « les num_frames dernières images » (un index négatif quelconque est refusé)."
+ ],
+ "besoin": {
+  "modele": "MODEL",
+  "texte": "CLIP",
+  "vae": "VAE",
+  "cadrage": "INT",
+  "bruit": "NOISE",
+  "echantillonneur": "SAMPLER",
+  "sigmas": "SIGMAS",
+  "style": "STRING",
+  "longueur": "INT",
+  "cadence": "FLOAT",
+  "images_utiles": "INT",
+  "guide_images": "INT"
+ },
+ "attend": {
+  "queue": "IMAGE"
+ },
+ "sorties": {
+  "images": "5",
+  "queue": "6",
+  "derniere_image": "10",
+  "consigne": "2"
+ },
+ "contenu": {
+  "2": {
+   "class_type": "DirectionDuBloc",
+   "inputs": {
+    "plan_json": [
+     "$commun.style",
+     3
+    ],
+    "rang": {
+     "$calc": "bloc_rang"
+    },
+    "total": {
+     "$calc": "blocs_total"
+    }
+   }
+  },
+  "3": {
+   "class_type": "MiniMaxH3ImageToVideo",
+   "inputs": {
+    "clip": [
+     "$commun.texte",
+     0
+    ],
+    "vae": [
+     "$commun.vae",
+     0
+    ],
+    "prompt": [
+     "2",
+     0
+    ],
+    "width": [
+     "$commun.cadrage",
+     0
+    ],
+    "height": [
+     "$commun.cadrage",
+     1
+    ],
+    "length": [
+     "$commun.longueur",
+     0
+    ]
+   }
+  },
+  "11": {
+   "class_type": "MiniMaxH3AddGuide",
+   "inputs": {
+    "positive": [
+     "3",
+     0
+    ],
+    "vae": [
+     "$commun.vae",
+     0
+    ],
+    "latent": [
+     "3",
+     1
+    ],
+    "image": [
+     "$precedent.queue",
+     0
+    ],
+    "frame_idx": 0
+   }
+  },
+  "4": {
+   "class_type": "BasicGuider",
+   "inputs": {
+    "model": [
+     "$commun.modele",
+     0
+    ],
+    "conditioning": [
+     "11",
+     0
+    ]
+   }
+  },
+  "7": {
+   "class_type": "SamplerCustomAdvanced",
+   "inputs": {
+    "noise": [
+     "$commun.bruit",
+     0
+    ],
+    "guider": [
+     "4",
+     0
+    ],
+    "sampler": [
+     "$commun.echantillonneur",
+     0
+    ],
+    "sigmas": [
+     "$commun.sigmas",
+     0
+    ],
+    "latent_image": [
+     "3",
+     1
+    ]
+   }
+  },
+  "5": {
+   "class_type": "VAEDecode",
+   "inputs": {
+    "samples": [
+     "7",
+     0
+    ],
+    "vae": [
+     "$commun.vae",
+     0
+    ]
+   }
+  },
+  "6": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": -1,
+    "num_frames": [
+     "$commun.guide_images",
+     0
+    ],
+    "images": [
+     "5",
+     0
+    ]
+   }
+  },
+  "10": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": -1,
+    "num_frames": 1,
+    "images": [
+     "5",
+     0
+    ]
+   }
+  },
+  "9": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": [
+     "$commun.guide_images",
+     0
+    ],
+    "num_frames": [
+     "$commun.images_utiles",
+     0
+    ],
+    "images": [
+     "5",
+     0
+    ]
+   }
+  },
+  "8": {
+   "class_type": "VHS_VideoCombine",
+   "inputs": {
+    "images": [
+     "9",
+     0
+    ],
+    "frame_rate": [
+     "$commun.cadence",
+     0
+    ],
+    "loop_count": 0,
+    "filename_prefix": {
+     "$texte": "$const.prefixe_morceaux",
+     "$rang": "bloc_rang"
+    },
+    "format": "video/h264-mp4",
+    "pingpong": false,
+    "save_output": true
+   }
+  }
+ }
+}

@@ -1,0 +1,90 @@
+{
+ "assemblage": 1,
+ "_lisez_moi": [
+  "Vidéo longue DIRIGÉE en UNE passe (LTX-2.3), avec relais de prompt.",
+  "",
+  "Même mécanique que « video-longue-relais » : le modèle dispose la séquence",
+  "entière, LTXVContextWindows la parcourt par fenêtres fusionnées à chaque pas,",
+  "et PromptRelaySmartEncode route chaque segment de consigne vers sa plage de",
+  "temps. Ce qui change : la consigne n'est plus écrite à la main. Le nœud",
+  "« DirectionDeStyle » lit le style graphique et le style narratif, et rend",
+  "la forme RELAIS (un segment par temps du récit, daté en parts de la durée)",
+  "ainsi que le préfixe global et le négatif.",
+  "",
+  "Le sujet (« prompt ») s'écrit « décor | temps un | temps deux … » ; sans",
+  "barre, les temps du style narratif dirigent seuls.",
+  "",
+  "La coupe finale rend exactement le nombre d'images demandé."
+ ],
+ "constantes": {
+  "longueur_fenetre": 481,
+  "recouvrement_fenetre": 160
+ },
+ "exemple": {
+  "latent_batch": 375
+ },
+ "montage": [
+  {
+   "fragment": "commun",
+   "sorties": {
+    "style": "30",
+    "negatif": "12",
+    "checkpoint": "20",
+    "lora": "21",
+    "encodeur": "22",
+    "vae_audio": "23",
+    "largeur": "13",
+    "hauteur": "14",
+    "images": "15",
+    "cadence_int": "16",
+    "cadence": "18",
+    "bruit": "10",
+    "echantillonneur": "31",
+    "sigmas": "32"
+   },
+   "contenu": {
+    "20": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "ltx-2.3-22b-dev-fp8.safetensors"}},
+    "21": {"class_type": "LoraLoaderModelOnly", "inputs": {"lora_name": "ltx_2.3_22b_distilled_1.1_lora_dynamic_fro09_avg_rank_111_bf16.safetensors", "strength_model": 0.5, "model": ["20", 0]}},
+    "22": {"class_type": "LTXAVTextEncoderLoader", "inputs": {"text_encoder": "gemma_3_12B_it_fp4_mixed.safetensors", "ckpt_name": "ltx-2.3-22b-dev-fp8.safetensors", "device": "default"}},
+    "23": {"class_type": "LTXVAudioVAELoader", "inputs": {"ckpt_name": "ltx-2.3-22b-dev-fp8.safetensors"}},
+    "30": {"class_type": "DirectionDeStyle", "inputs": {"style_graphique": "fidele-a-l-oeuvre", "style_narratif": "quatre-temps-social", "sujet": "a continuous cinematic shot", "negatif_supplementaire": "static, frozen, still, video game, cartoon, ugly, scene change, cut"}},
+    "12": {"class_type": "CLIPTextEncode", "inputs": {"text": ["30", 2], "clip": ["22", 0]}},
+    "13": {"class_type": "PrimitiveInt", "inputs": {"value": 1024}},
+    "14": {"class_type": "PrimitiveInt", "inputs": {"value": 768}},
+    "15": {"class_type": "PrimitiveInt", "inputs": {"value": 375}},
+    "16": {"class_type": "PrimitiveInt", "inputs": {"value": 25}},
+    "18": {"class_type": "ComfyMathExpression", "inputs": {"expression": "a", "values.a": ["16", 0]}},
+    "10": {"class_type": "RandomNoise", "inputs": {"noise_seed": 774100}},
+    "31": {"class_type": "SamplerEulerAncestral", "inputs": {"eta": 0, "s_noise": 1}},
+    "32": {"class_type": "ManualSigmas", "inputs": {"sigmas": "1., 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0"}}
+   }
+  },
+  {
+   "fragment": "passe",
+   "sorties": {"images_decodees": "13"},
+   "contenu": {
+    "1": {"class_type": "LoadImage", "inputs": {"image": "uccello-saint-georges.jpg", "upload": "image"}},
+    "2": {"class_type": "ResizeImageMaskNode", "inputs": {"resize_type": "scale dimensions", "resize_type.width": ["$commun.largeur", 0], "resize_type.height": ["$commun.hauteur", 0], "resize_type.crop": "center", "scale_method": "lanczos", "input": ["1", 0]}},
+    "3": {"class_type": "EmptyLTXVLatentVideo", "inputs": {"width": ["$commun.largeur", 0], "height": ["$commun.hauteur", 0], "length": ["$commun.images", 0], "batch_size": 1}},
+    "4": {"class_type": "LTXVImgToVideoInplace", "inputs": {"vae": ["$commun.checkpoint", 2], "image": ["2", 0], "latent": ["3", 0], "strength": 1.0, "bypass": false}},
+    "5": {"class_type": "PromptRelaySmartEncode", "inputs": {"model": ["$commun.lora", 0], "clip": ["$commun.encodeur", 0], "latent": ["4", 0], "global_prompt": ["$commun.style", 4], "smart_prompt": ["$commun.style", 1], "normalize_by_tokens": false, "epsilon": 0.001}},
+    "6": {"class_type": "LTXVContextWindows", "inputs": {"model": ["5", 0], "context_length": "$const.longueur_fenetre", "context_overlap": "$const.recouvrement_fenetre", "context_schedule": "standard_static", "context_stride": 1, "closed_loop": false, "fuse_method": "overlap-linear", "freenoise": true, "retain_first_frame": false, "split_conds_to_windows": true}},
+    "7": {"class_type": "LTXVConditioning", "inputs": {"frame_rate": ["$commun.cadence", 0], "positive": ["5", 1], "negative": ["$commun.negatif", 0]}},
+    "8": {"class_type": "LTXVEmptyLatentAudio", "inputs": {"frames_number": ["$commun.images", 0], "frame_rate": ["$commun.cadence_int", 0], "batch_size": 1, "audio_vae": ["$commun.vae_audio", 0]}},
+    "9": {"class_type": "LTXVConcatAVLatent", "inputs": {"video_latent": ["4", 0], "audio_latent": ["8", 0]}},
+    "10": {"class_type": "CFGGuider", "inputs": {"cfg": 1, "model": ["6", 0], "positive": ["7", 0], "negative": ["7", 1]}},
+    "11": {"class_type": "SamplerCustomAdvanced", "inputs": {"noise": ["$commun.bruit", 0], "guider": ["10", 0], "sampler": ["$commun.echantillonneur", 0], "sigmas": ["$commun.sigmas", 0], "latent_image": ["9", 0]}},
+    "12": {"class_type": "LTXVSeparateAVLatent", "inputs": {"av_latent": ["11", 1]}},
+    "13": {"class_type": "VAEDecodeTiled", "inputs": {"tile_size": 768, "overlap": 64, "temporal_size": 4096, "temporal_overlap": 64, "samples": ["12", 0], "vae": ["$commun.checkpoint", 2]}}
+   }
+  },
+  {
+   "fragment": "montage",
+   "contenu": {
+    "0": {"class_type": "GetImageRangeFromBatch", "inputs": {"start_index": 0, "num_frames": ["$commun.images", 0], "images": ["$precedent.13", 0]}},
+    "1": {"class_type": "CreateVideo", "inputs": {"fps": ["$commun.cadence", 0], "bit_depth": 8, "images": ["0", 0]}},
+    "2": {"class_type": "SaveVideo", "inputs": {"filename_prefix": "cortex/video-longue-relais-stylee", "format": "auto", "codec": "auto", "video": ["1", 0]}}
+   }
+  }
+ ]
+}
