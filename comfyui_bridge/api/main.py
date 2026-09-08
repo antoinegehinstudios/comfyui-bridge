@@ -359,6 +359,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "engine": c.engine.name,
             "engine_state": c.engine_state.get("state"),
             "output_dir": str(c.settings.comfy_output_dir.resolve()),
+            # The hard ceiling on ONE job here. A caller that plans a longer
+            # wait than this is planning something that cannot happen: the job
+            # is killed at this mark whatever it asked for. Measured cost of not
+            # saying it: a caller waited an hour for a run it had budgeted four
+            # hours for, and learned the ceiling from the failure.
+            "job_max_duration_s": c.settings.comfyui_total_timeout_s,
         }
 
     @app.get("/v1/backend", tags=["backend"])
