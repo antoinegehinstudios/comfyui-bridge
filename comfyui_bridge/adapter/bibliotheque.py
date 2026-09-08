@@ -42,16 +42,29 @@ def _lire(chemin: Path) -> dict[str, Any]:
         raise WorkflowMappingError(f"bloc réutilisable illisible : {chemin} ({exc})") from None
 
 
-def charger(racine: Path) -> dict[str, dict[str, Any]]:
-    """Les blocs disponibles, par nom."""
-    dossier = Path(racine) / DOSSIER
-    if not dossier.is_dir():
-        return {}
+def _livres() -> Path:
+    """Les blocs livrés avec le paquet, pour qu'une machine neuve en ait."""
+    return Path(__file__).resolve().parent / "resources" / "montages-exemples" / DOSSIER
+
+
+def charger(racine: Path | None = None) -> dict[str, dict[str, Any]]:
+    """Les blocs disponibles, par nom.
+
+    Deux sources, dans cet ordre : ceux livrés avec le paquet, puis ceux de la
+    machine (``_data/blocs/``). Les seconds l'emportent — un poste peut adapter
+    un bloc sans modifier le paquet, et sans que l'adaptation soit écrasée à la
+    prochaine mise à jour.
+    """
     blocs: dict[str, dict[str, Any]] = {}
-    for fichier in sorted(dossier.glob("*.json")):
-        brut = _lire(fichier)
-        nom = str(brut.get("bloc") or fichier.stem)
-        blocs[nom] = brut
+    dossiers = [_livres()]
+    if racine is not None:
+        dossiers.append(Path(racine) / DOSSIER)
+    for dossier in dossiers:
+        if not dossier.is_dir():
+            continue
+        for fichier in sorted(dossier.glob("*.json")):
+            brut = _lire(fichier)
+            blocs[str(brut.get("bloc") or fichier.stem)] = brut
     return blocs
 
 
@@ -62,7 +75,8 @@ def _offert_par(montage: list[Any], nom_fragment: str) -> dict[str, Any]:
     return {}
 
 
-def _verifier(bloc: dict[str, Any], montage: list[Any], depuis: str | None) -> None:
+def _verifier(bloc: dict[str, Any], montage: list[Any], depuis: str | None,
+              se_suit: bool = False) -> None:
     """Les ports du bloc sont-ils servis par ce montage ?"""
     nom = bloc.get("bloc", "?")
     besoin = dict(bloc.get("besoin") or {})
@@ -77,9 +91,11 @@ def _verifier(bloc: dict[str, Any], montage: list[Any], depuis: str | None) -> N
     attend = dict(bloc.get("attend") or {})
     if attend and depuis is not None:
         offert = _offert_par(montage, depuis)
-        # Un bloc répété se sert lui-même au tour suivant : ses propres sorties
-        # comptent donc aussi comme ce qui le précède.
-        offert.update(dict(bloc.get("sorties") or {}))
+        if se_suit:
+            # DANS une boucle seulement : au deuxième tour, le bloc se suit
+            # lui-même. Hors boucle, se compter comme son propre fournisseur
+            # rendait le contrôle toujours vrai — donc inutile.
+            offert.update(dict(bloc.get("sorties") or {}))
         manque = [r for r in attend if r not in offert]
         if manque:
             raise WorkflowMappingError(
@@ -89,7 +105,8 @@ def _verifier(bloc: dict[str, Any], montage: list[Any], depuis: str | None) -> N
 
 
 def resoudre(montage: list[Any], blocs: dict[str, dict[str, Any]],
-             amont: list[Any] | None = None, dernier: str | None = None) -> list[Any]:
+             amont: list[Any] | None = None, dernier: str | None = None,
+             dans_boucle: bool = False) -> list[Any]:
     """Remplacer chaque « utiliser » par le bloc de la bibliothèque.
 
     Le montage rendu ne contient plus que des fragments ordinaires : le reste de
@@ -111,7 +128,7 @@ def resoudre(montage: list[Any], blocs: dict[str, dict[str, Any]],
                 raise WorkflowMappingError(
                     f"bloc réutilisable {nom!r} introuvable",
                     available=sorted(blocs))
-            _verifier(bloc, vus + sortie, dernier_fragment)
+            _verifier(bloc, vus + sortie, dernier_fragment, dans_boucle)
             fragment = {"fragment": bloc.get("fragment") or nom,
                         "contenu": bloc.get("contenu"),
                         "sorties": bloc.get("sorties")}
@@ -126,13 +143,13 @@ def resoudre(montage: list[Any], blocs: dict[str, dict[str, Any]],
         if "pour" in element:
             element = dict(element)
             element["faire"] = resoudre(element.get("faire") or [], blocs,
-                                        vus + sortie, dernier_fragment)
+                                        vus + sortie, dernier_fragment, True)
         elif "si" in element:
             element = dict(element)
             element["alors"] = resoudre(element.get("alors") or [], blocs,
-                                        vus + sortie, dernier_fragment)
+                                        vus + sortie, dernier_fragment, dans_boucle)
             element["sinon"] = resoudre(element.get("sinon") or [], blocs,
-                                        vus + sortie, dernier_fragment)
+                                        vus + sortie, dernier_fragment, dans_boucle)
         elif "fragment" in element:
             dernier_fragment = str(element["fragment"])
         sortie.append(element)

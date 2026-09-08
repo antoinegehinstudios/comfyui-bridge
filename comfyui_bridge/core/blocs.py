@@ -171,18 +171,6 @@ def parametres_pilotes(plan: list[dict[str, Any]]) -> set[str]:
                 noms.add(str(condition["parametre"]))
             noms |= parametres_pilotes(bloc.get("alors") or [])
             noms |= parametres_pilotes(bloc.get("sinon") or [])
-        elif "fragment" in bloc:
-            noms |= _consignes_decoupees(bloc.get("contenu"))
-    return noms
-
-
-def _consignes_decoupees(contenu) -> set[str]:
-    """Les consignes qu'un fragment decoupe en temps, donc qu'il faut accepter."""
-    noms: set[str] = set()
-    for noeud in (contenu or {}).values():
-        for valeur in ((noeud or {}).get("inputs") or {}).values():
-            if isinstance(valeur, dict) and "$segment" in valeur:
-                noms.add(str(valeur["$segment"]))
     return noms
 
 
