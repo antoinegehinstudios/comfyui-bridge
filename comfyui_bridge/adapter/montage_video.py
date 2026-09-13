@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -392,28 +393,32 @@ def apercu_anime(video: str | Path, sortie: str | Path, largeur: int = 240,
     virgule = chr(92) + ","
     base = (f"select='not(mod(n{virgule}{pas}))',setpts=N/({cadence}*TB),"
             f"scale={int(largeur)}:-2:flags=lanczos")
+    # L'encodeur écrit dans un fichier de côté, remplacé d'un coup à la fin :
+    # écrit en place, une vignette en cours de refabrication était servie
+    # tronquée — mesuré : un lanceur a reçu 0 octet en 200 pendant qu'ffmpeg
+    # réécrivait l'aperçu, et la carte est restée vide.
     if encodeur_present("libwebp_anim"):
         fichier = sortie.with_suffix(".webp")
-        for ancien in (sortie.with_suffix(".gif"),):
-            if ancien.exists():
-                ancien.unlink()          # un seul aperçu par mode, jamais deux formats
+        brouillon = sortie.with_name(f".{sortie.name}.part.webp")
         _lancer(outil(), ["-y", "-v", "error", "-i", str(video), "-vf", base,
                           "-c:v", "libwebp_anim", "-q:v", "55", "-compression_level", "6",
-                          "-loop", "0", "-an", str(fichier)],
+                          "-loop", "0", "-an", str(brouillon)],
                 f"aperçu animé de {video.name}")
         forme = "webp"
     else:
         fichier = sortie.with_suffix(".gif")
-        for ancien in (sortie.with_suffix(".webp"),):
-            if ancien.exists():
-                ancien.unlink()
+        brouillon = sortie.with_name(f".{sortie.name}.part.gif")
         filtre = (f"{base},split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];"
                   f"[b][p]paletteuse=dither=bayer:bayer_scale=3")
         _lancer(outil(), ["-y", "-v", "error", "-i", str(video), "-vf", filtre,
-                          "-loop", "0", "-an", str(fichier)],
+                          "-loop", "0", "-an", str(brouillon)],
                 f"aperçu animé de {video.name}")
         forme = "gif"
-    if not fichier.exists() or not fichier.stat().st_size:
-        raise MediaAssemblyError(f"aperçu animé : rien n'a été écrit dans {fichier}")
+    if not brouillon.exists() or not brouillon.stat().st_size:
+        raise MediaAssemblyError(f"aperçu animé : rien n'a été écrit dans {brouillon}")
+    os.replace(brouillon, fichier)
+    for ancien in (sortie.with_suffix(".gif"), sortie.with_suffix(".webp")):
+        if ancien != fichier and ancien.exists():
+            ancien.unlink()              # un seul aperçu par mode, jamais deux formats
     return {"fichier": str(fichier.resolve()), "octets": fichier.stat().st_size,
             "images": min(images, total), "pas": pas, "format": forme}

@@ -382,6 +382,11 @@ def test_un_livrable_devient_l_apercu_anime_de_son_mode(atelier):
         assert g.content[:6] in (b"GIF87a", b"GIF89a")
     apres = atelier.get("/v1/workflows").json()["workflows"]["chaine-recollee"]
     assert apres["presentation"]["apercu_url"] == "/v1/workflows/chaine-recollee/apercu"
+    # Rien de partiel ne traîne : l'aperçu est écrit de côté puis remplacé d'un
+    # coup, sinon un lecteur pouvait recevoir un fichier tronqué pendant la
+    # refabrication (mesuré : 0 octet servi en 200).
+    apercus = pathlib.Path(atelier.app.state.container.settings.hermes_db).parent / "apercus"
+    assert not [f for f in apercus.iterdir() if ".part." in f.name]
 
     # Un fichier hors du dossier de sortie n'est pas un livrable : refusé, nommé.
     r = atelier.put("/v1/workflows/chaine-recollee/apercu", json={"path": "C:/Windows/notepad.exe"})
