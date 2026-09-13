@@ -327,11 +327,15 @@ def _habiller(c, entree: dict, menu: dict | None = None) -> dict:
         entree["choix"] = choix
     if manque:
         entree["manque"] = manque
-    libelle = declare.get("libelle") or entree.get("libelle") or entree.get("label")
+    # Le libellé le plus PROCHE l'emporte : celui que la chaîne écrit pour SON
+    # champ (« Durée de la révélation »), puis le menu déclaré pour ce nom de
+    # champ (« Durée »), puis le titre que l'auteur a donné au nœud. Mesuré dans
+    # l'autre ordre : le menu générique effaçait le libellé propre à la chaîne.
+    libelle = entree.get("libelle") or declare.get("libelle") or entree.get("label")
     if libelle:
         entree["libelle"] = libelle
-    unite = _menus.unite(str(entree.get("field") or ""), declare.get("unite")
-                         or entree.get("unite"))
+    unite = _menus.unite(str(entree.get("field") or ""), entree.get("unite")
+                         or declare.get("unite"))
     if unite:
         entree["unite"] = unite
     return entree
