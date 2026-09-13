@@ -176,7 +176,7 @@ python -m comfyui_bridge workflows
 | Méthode | Chemin                         | Rôle                                            |
 |---------|--------------------------------|-------------------------------------------------|
 | POST    | `/v1/render`                   | Soumet une intention → `202` + `Location` du job |
-| GET/PUT/DELETE | `/v1/workflows/{name}/apercu` | **L'aperçu animé** d'un mode (GIF de six secondes résumant toute la vidéo) : servi, désigné depuis un job livré ou un fichier du dossier de sortie (`{"job_id"}` / `{"path"}`), retiré ; `presentation.apercu_url` l'annonce quand il existe |
+| GET/PUT/DELETE | `/v1/workflows/{name}/apercu` | **L'aperçu animé** d'un mode (six secondes qui résument toute la vidéo ; WebP animé, ~270 Ko, ou GIF si l'encodeur manque) : servi, désigné depuis un job livré ou un fichier du dossier de sortie (`{"job_id"}` / `{"path"}`), retiré ; `presentation.apercu_url` l'annonce quand il existe |
 | GET     | `/v1/jobs`                     | **Les runs**, du plus récent au plus ancien (mémoire + persistés) ; les sous-jobs d'une chaîne sur demande (`?enfants=1`) |
 | GET     | `/v1/jobs/{id}`                | État du job + artefacts + **journal (logs)** + `etapes` d'une chaîne |
 | POST    | `/v1/jobs/{id}/rejouer`        | **Rejouer** un run, à l'identique ou avec `{"reglages": {…}}` |

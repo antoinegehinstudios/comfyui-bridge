@@ -600,13 +600,26 @@ def _apercus_dir(c) -> Path:
     return Path(c.settings.hermes_db).parent / "apercus"
 
 
+APERCU_FORMATS = ((".webp", "image/webp"), (".gif", "image/gif"))
+
+
+def _apercu_fichier(c, name: str) -> tuple[Path, str] | None:
+    """L'aperçu d'un mode s'il existe, avec son type : WebP animé de
+    préférence, GIF quand l'encodeur manquait à la fabrication."""
+    for ext, mime in APERCU_FORMATS:
+        f = _apercus_dir(c) / f"{name}{ext}"
+        if f.is_file():
+            return f, mime
+    return None
+
+
 def _presentation(c, spec) -> dict:
     """La vitrine d'une entrée, avec son aperçu animé s'il en a un.
 
     L'adresse n'est annoncée que si le fichier est là : une vignette promise
     et absente ferait une image cassée dans chaque lanceur."""
     p = dict(spec.presentation)
-    if (_apercus_dir(c) / f"{spec.name}.gif").is_file():
+    if _apercu_fichier(c, spec.name):
         p["apercu_url"] = f"/v1/workflows/{spec.name}/apercu"
     return p
 
@@ -998,13 +1011,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """L'aperçu animé d'un mode : ce qu'il produit, en six secondes de GIF."""
         c = request.app.state.container
         c.catalog.get_spec(name)                       # 400 si inconnu
-        fichier = _apercus_dir(c) / f"{name}.gif"
-        if not fichier.is_file():
+        trouve = _apercu_fichier(c, name)
+        if trouve is None:
             raise UnknownWorkflowInputError(
                 f"{name!r} n'a pas d'aperçu : en désigner un avec PUT /v1/workflows/{name}/apercu "
                 f"(un job livré, ou un fichier du dossier de sortie)", workflow=name)
-        return FileResponse(fichier, media_type="image/gif",
-                            headers={"Cache-Control": "no-cache"})
+        fichier, mime = trouve
+        return FileResponse(fichier, media_type=mime, headers={"Cache-Control": "no-cache"})
 
     @app.put("/v1/workflows/{name}/apercu", status_code=201, tags=["workflows"])
     async def workflow_apercu_depuis(name: str, request: Request) -> dict:
@@ -1041,7 +1054,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 f"devenir un aperçu", workflow=name)
         if not source.is_file():
             raise UnknownWorkflowInputError(f"{source} introuvable", workflow=name)
-        cible = _apercus_dir(c) / f"{name}.gif"
+        cible = _apercus_dir(c) / name            # l'extension suit le format produit
         fait = await run_in_threadpool(montage_video.apercu_anime, source, cible)
         return {"workflow": name, "apercu_url": f"/v1/workflows/{name}/apercu",
                 "source": str(source.resolve()), **fait}
@@ -1049,10 +1062,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.delete("/v1/workflows/{name}/apercu", tags=["workflows"])
     async def workflow_apercu_retirer(name: str, request: Request) -> dict:
         c = request.app.state.container
-        fichier = _apercus_dir(c) / f"{name}.gif"
-        existait = fichier.is_file()
-        if existait:
-            fichier.unlink()
+        existait = False
+        for ext, _mime in APERCU_FORMATS:
+            fichier = _apercus_dir(c) / f"{name}{ext}"
+            if fichier.is_file():
+                fichier.unlink()
+                existait = True
         return {"workflow": name, "removed": existait}
 
     @app.get("/v1/workflows/{name}", tags=["workflows"])

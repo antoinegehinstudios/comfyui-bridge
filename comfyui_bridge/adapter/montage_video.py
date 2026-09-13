@@ -348,17 +348,39 @@ def mesurer_raccords(parts: Any, travail: str | Path,
             "meilleure": max(valeurs), "moyenne": sum(valeurs) / len(valeurs)}
 
 
+_ENCODEURS: set[str] | None = None
+
+
+def encodeur_present(nom: str) -> bool:
+    """L'encodeur est-il compilé dans CET ffmpeg ? Demandé une fois, jamais
+    supposé : un WebP animé sans libwebp sort vide, sans une ligne d'erreur."""
+    global _ENCODEURS
+    if _ENCODEURS is None:
+        try:
+            stdout, _ = _lancer(outil(), ["-hide_banner", "-encoders"], "liste des encodeurs")
+            _ENCODEURS = {ligne.split()[1] for ligne in str(stdout).splitlines()
+                          if len(ligne.split()) > 1 and ligne.startswith(" ")}
+        except MediaAssemblyError:
+            _ENCODEURS = set()
+    return nom in _ENCODEURS
+
+
 def apercu_anime(video: str | Path, sortie: str | Path, largeur: int = 240,
                  images: int = 48, cadence: int = 8) -> dict[str, Any]:
-    """Un GIF léger qui résume TOUTE la vidéo — ce qu'un mode produit, en un
-    coup d'œil sur sa vignette.
+    """Une image animée LÉGÈRE qui résume TOUTE la vidéo — ce qu'un mode
+    produit, en un coup d'œil sur sa vignette.
 
     Pas les premières secondes : une révélation se joue sur la durée entière,
     et ses six premières secondes ne montrent que du papier blanc. On prend
     donc une image toutes les K, réparties sur la longueur, jouées en boucle à
-    huit par seconde : 48 images font six secondes, et la palette est réduite
-    à 64 couleurs — mesuré : 200 à 400 Ko pour une vidéo verticale, là où les
-    premières secondes en pleine palette en pesaient plus de deux mégaoctets.
+    huit par seconde : 48 images font six secondes.
+
+    Le format est le WebP animé quand cet ffmpeg sait l'écrire, le GIF sinon —
+    et le résultat DIT lequel. Mesuré sur la révélation pour podcast (82 s,
+    704×1280) : 2 272 Ko en GIF 240 px à 64 couleurs, 267 Ko en WebP 240 px
+    (q 55). Un GIF n'est léger qu'à 160 px et 32 couleurs (499 Ko), où la
+    vignette ne se lit plus ; le WebP tient la lisibilité ET le poids.
+    ``sortie`` est donné SANS extension : la fonction la pose selon le format.
     """
     video, sortie = Path(video), Path(sortie)
     total = compter_images(video)
@@ -368,14 +390,30 @@ def apercu_anime(video: str | Path, sortie: str | Path, largeur: int = 240,
     # (elle séparerait sinon deux filtres) : un antislash réel, écrit ici sans
     # que Python n'en fasse une séquence.
     virgule = chr(92) + ","
-    filtre = (f"select='not(mod(n{virgule}{pas}))',setpts=N/({cadence}*TB),"
-              f"scale={int(largeur)}:-2:flags=lanczos,"
-              f"split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];"
-              f"[b][p]paletteuse=dither=bayer:bayer_scale=3")
-    _lancer(outil(), ["-y", "-v", "error", "-i", str(video), "-vf", filtre,
-                      "-loop", "0", "-an", str(sortie)],
-            f"aperçu animé de {video.name}")
-    if not sortie.exists() or not sortie.stat().st_size:
-        raise MediaAssemblyError(f"aperçu animé : rien n'a été écrit dans {sortie}")
-    return {"fichier": str(sortie.resolve()), "octets": sortie.stat().st_size,
-            "images": min(images, total), "pas": pas}
+    base = (f"select='not(mod(n{virgule}{pas}))',setpts=N/({cadence}*TB),"
+            f"scale={int(largeur)}:-2:flags=lanczos")
+    if encodeur_present("libwebp_anim"):
+        fichier = sortie.with_suffix(".webp")
+        for ancien in (sortie.with_suffix(".gif"),):
+            if ancien.exists():
+                ancien.unlink()          # un seul aperçu par mode, jamais deux formats
+        _lancer(outil(), ["-y", "-v", "error", "-i", str(video), "-vf", base,
+                          "-c:v", "libwebp_anim", "-q:v", "55", "-compression_level", "6",
+                          "-loop", "0", "-an", str(fichier)],
+                f"aperçu animé de {video.name}")
+        forme = "webp"
+    else:
+        fichier = sortie.with_suffix(".gif")
+        for ancien in (sortie.with_suffix(".webp"),):
+            if ancien.exists():
+                ancien.unlink()
+        filtre = (f"{base},split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];"
+                  f"[b][p]paletteuse=dither=bayer:bayer_scale=3")
+        _lancer(outil(), ["-y", "-v", "error", "-i", str(video), "-vf", filtre,
+                          "-loop", "0", "-an", str(fichier)],
+                f"aperçu animé de {video.name}")
+        forme = "gif"
+    if not fichier.exists() or not fichier.stat().st_size:
+        raise MediaAssemblyError(f"aperçu animé : rien n'a été écrit dans {fichier}")
+    return {"fichier": str(fichier.resolve()), "octets": fichier.stat().st_size,
+            "images": min(images, total), "pas": pas, "format": forme}

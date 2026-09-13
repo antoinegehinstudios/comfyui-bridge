@@ -371,8 +371,15 @@ def test_un_livrable_devient_l_apercu_anime_de_son_mode(atelier):
     assert r.json()["octets"] > 0
 
     g = atelier.get("/v1/workflows/chaine-recollee/apercu")
-    assert g.status_code == 200 and g.headers["content-type"].startswith("image/gif")
-    assert g.content[:6] in (b"GIF87a", b"GIF89a")
+    assert g.status_code == 200
+    # WebP animé quand l'encodeur est là (dix fois plus léger, mesuré), GIF sinon
+    # — et le format annoncé est celui du fichier servi.
+    if r.json()["format"] == "webp":
+        assert g.headers["content-type"].startswith("image/webp")
+        assert g.content[:4] == b"RIFF" and g.content[8:12] == b"WEBP"
+    else:
+        assert g.headers["content-type"].startswith("image/gif")
+        assert g.content[:6] in (b"GIF87a", b"GIF89a")
     apres = atelier.get("/v1/workflows").json()["workflows"]["chaine-recollee"]
     assert apres["presentation"]["apercu_url"] == "/v1/workflows/chaine-recollee/apercu"
 
