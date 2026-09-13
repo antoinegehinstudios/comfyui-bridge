@@ -232,7 +232,7 @@ class RunnerDeChaines:
             return {**fait, "depot": self._deposer(Path(fait["fichier"]))}
         if etape.genre == "recoller":
             parts = self._parts_locales(params["parts"], travail)
-            sortie = self._sortie(label, etape.id, ".mp4")
+            sortie = self._sortie(job_id, label, etape.id, ".mp4")
             return montage_video.recoller(parts, sortie, fps=int(params.get("fps") or 25),
                                           largeur=int(params.get("largeur") or 1280),
                                           hauteur=int(params.get("hauteur") or 720),
@@ -321,11 +321,20 @@ class RunnerDeChaines:
 
     # -- fichiers ---------------------------------------------------------------
 
-    def _sortie(self, label: str, etape_id: str, suffixe: str) -> Path:
+    def _sortie(self, job_id: str, label: str, etape_id: str, suffixe: str) -> Path:
+        """Où écrire ce qu'une étape de montage produit — UN chemin par run.
+
+        Mesuré le 2026-09-13 : deux runs du même mode portent le même label,
+        donc écrivaient tous deux « cortex/<label>-final.mp4 » ; le second a
+        effacé le livrable du premier (7 622 063 o à 13:32, 7 577 018 o à 13:35),
+        et deux cartes de livraison montraient un seul fichier. Le début de
+        l'identifiant du job les sépare, et se relit dans le nom.
+        """
         base = Path(self._c.settings.comfy_output_dir).resolve() / "cortex"
         base.mkdir(parents=True, exist_ok=True)
         propre = "".join(ch for ch in f"{label}-{etape_id}" if ch.isalnum() or ch in "-_")
-        return base / f"{propre or etape_id}{suffixe}"
+        marque = "".join(ch for ch in str(job_id)[:8] if ch.isalnum())
+        return base / f"{propre or etape_id}_{marque}{suffixe}"
 
     def _fichier_local(self, valeur: Any, travail: Path) -> Path:
         """Le fichier désigné, ramené ICI s'il vit chez le moteur.

@@ -147,8 +147,10 @@ def _analyse_workflow(container, spec) -> dict:
         "accepts": sorted(spec.profile.accepts),          # semantic inputs we can drive
         "media_inputs": pieces,                    # les pièces jointes, une par entrée
         "intent_fields": sorted(set(intent_fields(spec.profile.accepts))
-                                | set(derivable_params(spec.kind, spec.profile.accepts))),
-        "derived": derivable_params(spec.kind, spec.profile.accepts),  # drivable via conversion
+                                | set(derivable_params(spec.kind, spec.profile.accepts,
+                                                       spec.defaults))),
+        # drivable via conversion — la cadence peut n'être qu'un défaut déclaré
+        "derived": derivable_params(spec.kind, spec.profile.accepts, spec.defaults),
         "settable_inputs": len(io["inputs"]),      # everything the workflow exposes
         "outputs": io["outputs"],                  # what it delivers
         "carried": spec.carried,                   # media it already holds
@@ -313,8 +315,9 @@ def _menu_declare(c, champ: str | None) -> dict:
     return dict((getattr(c.catalog, "menus", None) or {}).get(champ or "") or {})
 
 
-def _habiller(c, entree: dict, menu: dict | None = None) -> dict:
-    """Ajouter à un champ ce qu'il faut pour l'AFFICHER : choix, libellé, unité.
+def _habiller(c, entree: dict, menu: dict | None = None,
+              aides: dict | None = None) -> dict:
+    """Ajouter à un champ ce qu'il faut pour l'AFFICHER : choix, libellé, unité, aide.
 
     La liste des valeurs reste celle du fournisseur (le moteur, ou le catalogue) ;
     seuls les libellés sont déclarés ici. Recopier la liste dans un client la
@@ -338,7 +341,33 @@ def _habiller(c, entree: dict, menu: dict | None = None) -> dict:
                          or declare.get("unite"))
     if unite:
         entree["unite"] = unite
+    # L'aide de l'ENTRÉE l'emporte sur celle du menu global : « le sujet s'écrit
+    # décor | temps un | temps deux » ne vaut que pour les montages qui
+    # répartissent les parts, pas pour tout champ nommé « prompt ».
+    aide = (aides or {}).get(str(entree.get("field") or "")) or entree.get("aide") \
+        or declare.get("aide")
+    if aide:
+        entree["aide"] = aide
     return entree
+
+
+def _habiller_medias(c, pieces: list[dict], aides: dict | None = None) -> list[dict]:
+    """Une pièce jointe, telle qu'un formulaire l'affiche : libellé et aide.
+
+    Le nom que l'auteur a donné au nœud manque souvent — un « LoadImage » posé
+    sans titre —, et le formulaire montrait alors la clé nue, « image ». Le
+    libellé déclaré au menu de ce nom de champ prend le relais : déclaré une
+    fois pour tous les workflows, plutôt que retitré nœud par nœud dans ComfyUI.
+    """
+    for piece in pieces:
+        champ = str(piece.get("param") or "")
+        declare = _menu_declare(c, champ)
+        if not piece.get("label") and declare.get("libelle"):
+            piece["label"] = declare["libelle"]
+        aide = (aides or {}).get(champ) or declare.get("aide")
+        if aide:
+            piece["aide"] = aide
+    return pieces
 
 
 def _options_du_catalogue(c, filtre: Any) -> tuple[list[str], dict[str, Any]]:
@@ -383,7 +412,7 @@ def _options_exposees(c, chaine) -> dict[str, tuple]:
     return sorties
 
 
-def _intent_inputs_chaine(c, chaine) -> list[dict]:
+def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
     """Le formulaire d'une chaîne, lu dans sa rubrique « expose ».
 
     Décrit sans le moteur : une chaîne n'a pas de graphe à interroger, et son
@@ -412,7 +441,7 @@ def _intent_inputs_chaine(c, chaine) -> list[dict]:
                 entree[cle] = valeur
         if options is not None:
             entree["options"] = list(options)
-        entrees.append(_habiller(c, entree, menu))
+        entrees.append(_habiller(c, entree, menu, aides))
     return entrees
 
 
@@ -578,8 +607,9 @@ def _spec_dict(spec) -> dict:
         "kind": spec.kind,
         "accepts": sorted(spec.profile.accepts),
         "intent_fields": sorted(set(intent_fields(spec.profile.accepts))
-                                | set(derivable_params(spec.kind, spec.profile.accepts))),
-        "derived": derivable_params(spec.kind, spec.profile.accepts),
+                                | set(derivable_params(spec.kind, spec.profile.accepts,
+                                                       spec.defaults))),
+        "derived": derivable_params(spec.kind, spec.profile.accepts, spec.defaults),
         "defaults": spec.defaults,
         "limits": spec.limits,
         "source": spec.source,
@@ -814,7 +844,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "derived": [],
                     "carried": {},
                     "neutral_for": [],
-                    "media_inputs": _media_inputs_chaine(chaine),
+                    "media_inputs": _habiller_medias(c, _media_inputs_chaine(chaine),
+                                                     spec.aides),
                     "defaults": spec.defaults,
                     "limits": spec.limits,
                     "dependencies": spec.dependencies,
@@ -835,7 +866,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # The names to actually put in a render request — the contract a
                 # caller programs against, UI or not.
                 "intent_fields": sorted(set(intent_fields(spec.profile.accepts))
-                                        | set(derivable_params(spec.kind, spec.profile.accepts))),
+                                        | set(derivable_params(spec.kind, spec.profile.accepts,
+                                                               spec.defaults))),
                 # Same memory as /readiness and as the reconciler: a workflow
                 # known to fail here must not be the one the console opens on.
                 "runnable": not c.registry.blocking_problems(c.settings.host_id, name),
@@ -846,7 +878,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # un appelant pilotait une analyse périmée sans le savoir.
                 **_freshness(c, spec),
                 # Drivable without a node of its own, by conversion (seconds -> frames).
-                "derived": derivable_params(spec.kind, spec.profile.accepts),
+                "derived": derivable_params(spec.kind, spec.profile.accepts, spec.defaults),
                 # Media already inside the workflow: used as-is if not replaced.
                 "carried": spec.carried,
                 # …and those a neutral element can stand in for.
@@ -854,8 +886,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # Les pièces jointes, une par entrée média du workflow, avec le
                 # nom que l'auteur a donné au nœud. Un workflow à quatre images
                 # en déclare quatre : c'est CE contrat qu'un formulaire suit.
-                "media_inputs": media_inputs.describe(
+                "media_inputs": _habiller_medias(c, media_inputs.describe(
                     cat.monter(spec)[1], spec.titles, spec.carried, cat.monter(spec)[0]),
+                    spec.aides),
                 "defaults": spec.defaults,
                 "limits": spec.limits,
                 "dependencies": spec.dependencies,
@@ -1039,8 +1072,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             chaine = c.catalog.chaine(spec)
             return {"name": spec.name, "engine": probe, "described": True, "chaine": True,
                     "resume": chaine.resume,
-                    "intent_inputs": _intent_inputs_chaine(c, chaine),
-                    "media_inputs": _media_inputs_chaine(chaine),
+                    "intent_inputs": _intent_inputs_chaine(c, chaine, spec.aides),
+                    "media_inputs": _habiller_medias(c, _media_inputs_chaine(chaine),
+                                                     spec.aides),
                     "media_inputs_unbound": [],
                     "etapes": _etapes_annoncees(chaine),
                     "inputs": [], "outputs": []}
@@ -1057,11 +1091,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 # The contract to program against: field name, bounds, current
                 # value — the join done once, server side. Habillé de ce qu'il
                 # faut pour l'afficher : libellés des valeurs, unité.
-                "intent_inputs": [_habiller(c, e)
-                                  for e in intent_inputs(io["inputs"], liaisons, spec.kind)],
+                "intent_inputs": [
+                    _habiller(c, e, aides=spec.aides)
+                    for e in intent_inputs(io["inputs"], liaisons, spec.kind,
+                                           spec.defaults, spec.pilote, spec.exemple)],
                 # Les pièces jointes pilotables…
-                "media_inputs": media_inputs.describe(liaisons, spec.titles,
-                                                      spec.carried, graph),
+                "media_inputs": _habiller_medias(
+                    c, media_inputs.describe(liaisons, spec.titles, spec.carried, graph),
+                    spec.aides),
                 # …et celles que le MOTEUR déclare téléversables sans que rien
                 # ici ne les pilote (un custom node absent de la table). Vide
                 # en temps normal ; ce qui manque doit se voir.

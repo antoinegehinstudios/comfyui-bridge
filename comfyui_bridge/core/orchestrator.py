@@ -34,16 +34,25 @@ _CONSTRAINT_ALIASES["frames"] = "latent_batch"
 # declares nothing keeps the values its author baked into the graph.
 
 
-def derivable_params(kind: str, bindings) -> list[str]:
+def derivable_params(kind: str, bindings, defaults: dict[str, Any] | None = None) -> list[str]:
     """Parameters a caller can set although no node carries them directly.
 
-    A video workflow exposing its frame count AND its frame rate is drivable in
-    SECONDS: ``resolve_params`` turns duration x fps into frames. Saying so lets
-    the form offer the field a user thinks in, without pretending a node holds
-    it. Nothing else is inferred.
+    A video workflow whose FRAME COUNT can be reached AND whose frame rate is
+    known is drivable in SECONDS: ``resolve_params`` turns duration x fps into
+    frames. Saying so lets the form offer the field a user thinks in, without
+    pretending a node holds it. Nothing else is inferred.
+
+    « Atteignable » vaut pour une liaison comme pour un paramètre PILOTE d'un
+    montage (``pour.jusqu_a``) : le nombre d'images décide alors du nombre de
+    blocs sans s'écrire dans aucun nœud. Et la cadence peut n'être qu'un DÉFAUT
+    déclaré au catalogue. Mesuré sur « video-longue-stylee-h3 » : cadence en
+    défaut (24) et non en liaison, donc aucune durée annoncée, donc un
+    formulaire qui n'offrait que la graine pour un montage que la DURÉE pilote.
     """
+    declares = defaults or {}
     if kind == "video" and "duration_s" not in bindings \
-            and "latent_batch" in bindings and "fps" in bindings:
+            and "latent_batch" in bindings \
+            and ("fps" in bindings or "fps" in declares):
         return ["duration_s"]
     return []
 
@@ -153,7 +162,8 @@ class Orchestrator:
         self._apply_constraints(params, intent.constraints)
         # A value the workflow cannot receive goes nowhere. Naming it here is
         # the difference between "your 10 frames were applied" and the truth.
-        reachable = set(profile.accepts) | set(derivable_params(kind, profile.accepts))
+        reachable = set(profile.accepts) | set(
+            derivable_params(kind, profile.accepts, defaults))
         # Une durée et une cadence CONVERTIES en nombre d'images ont atteint le
         # graphe par ce nombre : les dire ignorées mentirait au demandeur.
         converties = {"duration_s", "fps"} if (

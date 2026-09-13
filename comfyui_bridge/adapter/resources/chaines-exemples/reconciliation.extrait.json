@@ -1,5 +1,8 @@
 {
   "_lire_moi": "Extrait du fichier de réconciliation : ce qu'il faut y ajouter pour que ces chaînes et cette vitrine existent. Les valeurs entre chevrons sont à remplacer par les chemins de LA machine (le dépôt n'en publie aucun). Un chemin de chaîne peut aussi être relatif au fichier de réconciliation.",
+  "_lire_moi_resume": "« description » est ce qu'un utilisateur lit AVANT de choisir : ce que la vidéo va être, en une phrase. Aucun terme de moteur (nom de nœud, nom de modèle, mécanique interne) — le nom du modèle a sa place dans le TITRE, qui est un choix que l'utilisateur fait.",
+  "_lire_moi_menus_medias": "Le libellé d'une PIÈCE JOINTE se lit dans « menus » au nom du champ (image, video, audio) quand l'auteur du graphe n'a pas titré son nœud de chargement : sans lui, le formulaire montrait la clé nue « image ».",
+  "_lire_moi_aides": "« aides » : { \"<champ>\": \"<phrase ou exemple>\" } sur une entrée — rendu par /io sous « aide » sur le champ concerné. Un menu global peut aussi porter « aide » ; l'entrée l'emporte.",
 
   "categories": {
     "reveler-une-image": { "titre": "Révéler une image", "ordre": 1, "icone": "🖌️",
@@ -31,6 +34,9 @@
         "table": "styles", "libelle": "libelle", "resume": "resume", "groupe": "famille"
       }
     },
+    "image": { "libelle": "L'image de départ" },
+    "video": { "libelle": "La vidéo de départ" },
+    "audio": { "libelle": "Le son de départ" },
     "prompt": { "libelle": "Sujet" },
     "negative_prompt": { "libelle": "À éviter" },
     "seed": { "libelle": "Graine" },
@@ -47,19 +53,19 @@
     "video-revelation-podcast": {
       "kind": "video",
       "chaine": "<dossier de données>/chaines/video-revelation-podcast.json",
-      "description": "Analyse, intention et révélation cinématique de l'image, puis la page se referme sur la queue de la révélation ; recollé et contrôlé.",
+      "description": "L'image se dévoile à l'encre pendant que la caméra la parcourt, puis la page se referme doucement sur elle.",
       "titre": "Révélation pour podcast", "categorie": "reveler-une-image", "ordre": 1
     },
     "video-revelation-poussee": {
       "kind": "video",
       "chaine": "<dossier de données>/chaines/video-revelation-poussee.json",
-      "description": "Une révélation au mode choisi, prolongée par une poussée caméra sur la même image (cadrage identique, donc raccord sans couture).",
+      "description": "L'image se dévoile, puis la caméra continue d'avancer dedans sans que la jointure se voie.",
       "titre": "Révélation puis poussée caméra", "categorie": "reveler-une-image", "ordre": 2
     },
     "video-prolongement": {
       "kind": "video",
       "chaine": "<dossier de données>/chaines/video-prolongement.json",
-      "description": "Prolonger une vidéo : ses 17 dernières images sont remises au modèle, le chevauchement re-rendu est jeté au recollage, le raccord est mesuré.",
+      "description": "Votre plan repart exactement là où il s'arrête et continue la scène, sans saut visible.",
       "titre": "Prolonger un plan", "categorie": "prolonger-une-video", "ordre": 1
     },
 

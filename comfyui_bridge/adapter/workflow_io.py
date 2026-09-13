@@ -71,19 +71,47 @@ def _real_bound(value: Any) -> bool:
     return isinstance(value, (int, float)) and abs(value) < _NO_REAL_BOUND
 
 
-def intent_inputs(io_inputs: list[dict[str, Any]], bindings, kind: str) -> list[dict[str, Any]]:
+def _type_sans_noeud(valeur: Any) -> str:
+    """Le type d'un paramètre que le moteur ne déclare pas — lu sur ce qu'il vaut.
+
+    Un paramètre PILOTE ne vise aucun nœud : ComfyUI n'en sait rien, il n'y a
+    donc personne à qui demander son type. Sa valeur d'exemple le dit, et sans
+    type un formulaire ne sait pas quel champ poser.
+    """
+    if isinstance(valeur, bool):
+        return "BOOLEAN"
+    if isinstance(valeur, int):
+        return "INT"
+    if isinstance(valeur, float):
+        return "FLOAT"
+    return "STRING"
+
+
+def intent_inputs(io_inputs: list[dict[str, Any]], bindings, kind: str,
+                  defaults: dict[str, Any] | None = None,
+                  pilotes: Any = (), exemple: dict[str, Any] | None = None
+                  ) -> list[dict[str, Any]]:
     """The input contract, field by field: what to send and within which bounds.
 
     The join between "the field a caller sends" and "what ComfyUI declares for
     the node it drives" is done ONCE here. Left to each client, it was done in
     the browser only — so anything driving this service without the console had
     to redo it, or go without bounds.
+
+    Trois sources, et non une seule liaison : les champs qu'un NŒUD porte, les
+    paramètres qui PILOTENT un montage (aucun nœud ne les reçoit, ils décident
+    du nombre de blocs) et ceux que la passerelle DÉRIVE (la durée, convertie en
+    nombre d'images). Ne rendre que la première laissait un montage piloté par
+    sa durée sans le moindre champ de durée.
     """
     from ..core.intention import intent_field_of, intent_fields
     from ..core.orchestrator import derivable_params
 
+    declares = dict(defaults or {})
+    exemples = dict(exemple or {})
     declared = {(i["node"], i["input"]): i for i in io_inputs}
     out: list[dict[str, Any]] = []
+    vus: set[str] = set()
     for param in sorted(bindings):
         field = intent_field_of(param)
         if field not in intent_fields(bindings):
@@ -100,11 +128,25 @@ def intent_inputs(io_inputs: list[dict[str, Any]], bindings, kind: str) -> list[
             if key in ("min", "max") and not _real_bound(value):
                 continue                          # a limit that limits nothing
             entry[key] = value
+        vus.add(field)
         out.append(entry)
-    for field in derivable_params(kind, bindings):
+    for param in sorted(set(pilotes or ()) - set(bindings)):
+        field = intent_field_of(param)
+        if field in vus or field not in intent_fields([param]):
+            continue        # une constante du montage n'est pas un champ d'appel
+        valeur = exemples.get(param, declares.get(field, declares.get(param)))
+        out.append({"field": field, "param": param, "node": None, "input": None,
+                    "type": _type_sans_noeud(valeur), "value": valeur, "derived": False})
+        vus.add(field)
+    for field in derivable_params(kind, set(bindings) | set(pilotes or ()), declares):
+        if field in vus:
+            continue
         # Converted rather than carried by a node: no node, no bounds, said so.
+        # La valeur, elle, est celle que le catalogue DÉCLARE : un formulaire
+        # ouvert sur un champ vide ne dit pas ce que ce montage produit par
+        # défaut, et le demandeur devait deviner sa propre durée.
         out.append({"field": field, "param": None, "node": None, "input": None,
-                    "type": "FLOAT", "value": None, "derived": True})
+                    "type": "FLOAT", "value": declares.get(field), "derived": True})
     return out
 
 

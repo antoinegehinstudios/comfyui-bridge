@@ -3,7 +3,7 @@
   "video-longue-stylee-ltx": {
    "kind": "video",
    "workflow": "E:\\Projets Cortex\\Banc socles\\comfyui-bridge\\_data\\workflows\\video-longue-stylee-ltx.json",
-   "description": "Vidéo longue DIRIGÉE (LTX-2.3, blocs chaînés par recouvrement) : style graphique + style narratif écrivent la consigne de chaque bloc selon sa place ; le négatif est celui du style, complété par negative_prompt. Sujet « décor | temps un | temps deux ».",
+   "description": "Une vidéo longue tenue d'un bout à l'autre par le style choisi, chaque moment jouant son temps du récit.",
    "defaults": {
     "duration_s": 15,
     "fps": 25,
@@ -57,12 +57,18 @@
      "node": "$montage.0",
      "input": "num_frames"
     }
+   },
+   "titre": "LTX-2.3 blocs chaînés",
+   "categorie": "video-longue",
+   "ordre": 3,
+   "aides": {
+    "prompt": "décor | temps un | temps deux … — la première part vaut pour toute la vidéo, les suivantes se répartissent sur les temps du récit"
    }
   },
   "video-longue-relais-stylee": {
    "kind": "video",
    "workflow": "E:\\Projets Cortex\\Banc socles\\comfyui-bridge\\_data\\workflows\\video-longue-relais-stylee.json",
-   "description": "Vidéo longue DIRIGÉE en UNE passe (LTX-2.3, fenêtres de contexte + relais de prompt) : le style narratif date chaque temps du récit sur la durée, le style graphique tient le médium. Sujet « décor | temps un | temps deux ». Aucune frontière de bloc.",
+   "description": "Jusqu'à vingt secondes d'un seul tenant, où le récit passe d'un temps au suivant sans jamais couper.",
    "defaults": {
     "duration_s": 15,
     "fps": 25,
@@ -116,12 +122,18 @@
      "node": "$montage.2",
      "input": "filename_prefix"
     }
+   },
+   "titre": "LTX-2.3 une passe (≤ 20 s)",
+   "categorie": "video-longue",
+   "ordre": 4,
+   "aides": {
+    "prompt": "décor | temps un | temps deux … — la première part vaut pour toute la vidéo, les suivantes se répartissent sur les temps du récit"
    }
   },
   "video-longue-stylee-h3": {
    "kind": "video",
    "workflow": "E:\\Projets Cortex\\Banc socles\\comfyui-bridge\\_data\\workflows\\video-longue-stylee-h3.json",
-   "description": "Vidéo longue DIRIGÉE (MiniMax H3, blocs de 8 s à mémoire constante, chaque bloc repart de la dernière image du précédent — mesuré : coutures invisibles, mouvement qui décroît) : deux menus — style graphique (le médium) et style narratif (les temps du récit) — écrivent la consigne de chaque bloc selon sa place ; sujet « décor | temps un | temps deux ». Recollage en un livrable.",
+   "description": "Une minute et plus : l'image s'anime par blocs, chaque bloc jouant son temps du récit selon les deux styles choisis.",
    "defaults": {
     "duration_s": 40,
     "fps": 24,
@@ -149,6 +161,12 @@
      "node": "$amorce.1",
      "input": "image"
     }
+   },
+   "titre": "MiniMax H3 par blocs",
+   "categorie": "video-longue",
+   "ordre": 1,
+   "aides": {
+    "prompt": "décor | temps un | temps deux … — la première part vaut pour toute la vidéo, les suivantes se répartissent sur les temps du récit"
    }
   },
   "video-longue-stylee-h3-guide": {
@@ -182,6 +200,11 @@
      "node": "$amorce.1",
      "input": "image"
     }
+   },
+   "titre": "MiniMax H3 par blocs, guide de 22 images (moteur ≥ 0.34)",
+   "ordre": 2,
+   "aides": {
+    "prompt": "décor | temps un | temps deux … — la première part vaut pour toute la vidéo, les suivantes se répartissent sur les temps du récit"
    }
   }
  }

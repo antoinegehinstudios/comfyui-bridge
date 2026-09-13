@@ -126,6 +126,10 @@ class WorkflowSpec:
     # Paramètres qui pilotent un MONTAGE sans viser de nœud : la durée demandée
     # décide du nombre de blocs, elle ne s'écrit dans aucun d'eux.
     pilote: tuple[str, ...] = ()
+    # Les valeurs sur lesquelles un montage se DÉCRIT quand personne n'a encore
+    # rien demandé (sa clé « exemple »). C'est la seule valeur connue d'un
+    # paramètre pilote : le moteur ne le déclare pas, il ne vise aucun nœud.
+    exemple: dict[str, Any] = field(default_factory=dict)
     # Une CHAÎNE au lieu d'un graphe : le fichier qui décrit l'enchaînement.
     # Une entrée porte l'un OU l'autre — jamais les deux.
     chaine_path: Path | None = None
@@ -139,6 +143,11 @@ class WorkflowSpec:
     description: str = ""
     categorie: str | None = None
     ordre: int = 100
+    # Ce qu'il faut SAVOIR pour remplir un champ, quand le nom du champ ne
+    # suffit pas (« le sujet s'écrit décor | temps un | temps deux »). Déclaré à
+    # l'entrée, rendu par /io sur le champ concerné : écrit dans un client, ce
+    # savoir mourait avec ce client.
+    aides: dict[str, str] = field(default_factory=dict)
 
     @property
     def est_chaine(self) -> bool:
@@ -470,6 +479,23 @@ def build_injection(catalog: "WorkflowCatalog", plan) -> dict[str, Any]:
     }
 
 
+def _exemple(path: Path) -> dict[str, Any]:
+    """Les valeurs d'exemple d'un gabarit de montage, lues dans le gabarit.
+
+    Un paramètre pilote n'est déclaré par personne d'autre : ni le moteur (il ne
+    vise aucun nœud), ni les défauts du catalogue (qui parlent en champs
+    d'intention). Sans elles, le formulaire d'un montage annonçait un champ sans
+    la moindre valeur.
+    """
+    try:
+        brut = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not est_montage(brut):
+        return {}
+    return dict(brut.get("exemple") or {})
+
+
 def _pilotes(path: Path) -> tuple[str, ...]:
     """Ce qui pilote le montage d'un gabarit, lu dans le gabarit lui-même."""
     from ..core.blocs import parametres_pilotes
@@ -583,6 +609,7 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
             "description": str(entry.get("description") or ""),
             "categorie": (str(entry["categorie"]) if entry.get("categorie") else None),
             "ordre": int(entry.get("ordre", 100)),
+            "aides": {str(k): str(v) for k, v in (entry.get("aides") or {}).items()},
         }
         if "chaine" in entry:
             specs[name] = _spec_de_chaine(name, entry, path, vitrine)
@@ -620,6 +647,7 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
             dependencies=deps,
             carried=_carried_media(_graph_of(wf_path), bindings),
             pilote=_pilotes(wf_path),
+            exemple=_exemple(wf_path),
             **vitrine,
         )
 

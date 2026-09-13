@@ -312,21 +312,39 @@ def resoudre(valeur: Any, valeurs: dict[str, Any], resultats: dict[str, Any],
 # -- valeurs exposées ---------------------------------------------------------
 
 
+def _nomme(champ: Champ) -> str:
+    """Comment NOMMER un champ dans un refus : son libellé, puis sa clé.
+
+    La clé seule (« duration_s ») ne dit pas quel champ du formulaire a été
+    refusé ; le libellé seul (« Durée ») ne dit pas quoi corriger dans le corps
+    envoyé. Les deux, une fois : « Durée (duration_s) ».
+    """
+    return f"{champ.libelle} ({champ.nom})" if champ.libelle and champ.libelle != champ.nom \
+        else champ.nom
+
+
+def _refus(champ: Champ, dit: str, **extras: Any) -> InputValueRefusedError:
+    """Un refus qui porte la CLÉ refusée, et son libellé quand il en existe un.
+
+    Sans ces extensions, un client devait relire la phrase pour savoir quel
+    champ de son formulaire mettre en rouge.
+    """
+    if champ.libelle and champ.libelle != champ.nom:
+        extras["libelle"] = champ.libelle
+    return InputValueRefusedError(f"{_nomme(champ)} : {dit}", field=champ.nom, **extras)
+
+
 def _nombre(champ: Champ, valeur: Any) -> Any:
     try:
         nombre = int(valeur) if champ.type == "INT" else float(valeur)
     except (TypeError, ValueError):
-        raise InputValueRefusedError(
-            f"« {champ.nom} » attend un nombre ({champ.type}), reçu {valeur!r}",
-            field=champ.nom) from None
+        raise _refus(champ, f"attend un nombre ({champ.type}), reçu {valeur!r}") from None
     if champ.minimum is not None and nombre < champ.minimum:
-        raise InputValueRefusedError(
-            f"« {champ.nom} » : {nombre} est sous le minimum {champ.minimum}",
-            field=champ.nom, min=champ.minimum, max=champ.maximum)
+        raise _refus(champ, f"{nombre} est sous le minimum {champ.minimum}",
+                     min=champ.minimum, max=champ.maximum)
     if champ.maximum is not None and nombre > champ.maximum:
-        raise InputValueRefusedError(
-            f"« {champ.nom} » : {nombre} dépasse le maximum {champ.maximum}",
-            field=champ.nom, min=champ.minimum, max=champ.maximum)
+        raise _refus(champ, f"{nombre} dépasse le maximum {champ.maximum}",
+                     min=champ.minimum, max=champ.maximum)
     return nombre
 
 
@@ -341,16 +359,13 @@ def valeur_de(champ: Champ, brute: Any, options: tuple[Any, ...] | None = None) 
             return True
         if str(brute).strip().lower() in ("0", "false", "faux", "non", "off"):
             return False
-        raise InputValueRefusedError(
-            f"« {champ.nom} » attend un booléen, reçu {brute!r}", field=champ.nom)
+        raise _refus(champ, f"attend un booléen, reçu {brute!r}")
     if champ.type in ("INT", "FLOAT"):
         return _nombre(champ, brute)
     texte = str(brute)
     permises = options if options is not None else champ.options
     if champ.type == "COMBO" and permises and texte not in [str(o) for o in permises]:
-        raise InputValueRefusedError(
-            f"« {champ.nom} » : {texte!r} n'est pas au menu",
-            field=champ.nom, options=list(permises))
+        raise _refus(champ, f"{texte!r} n'est pas au menu", options=list(permises))
     return texte
 
 
@@ -373,9 +388,8 @@ def valeurs(chaine: Chaine, demande: dict[str, Any],
         brute = demande.get(nom)
         if brute is None or brute == "":
             if champ.requis:
-                raise InputValueRefusedError(
-                    f"chaîne {chaine.nom!r} : « {nom} » est requis ({champ.libelle})",
-                    workflow=chaine.nom, field=nom)
+                raise _refus(champ, f"est requis par la chaîne {chaine.nom!r}",
+                             workflow=chaine.nom)
             if champ.defaut is None:
                 continue
             brute = champ.defaut

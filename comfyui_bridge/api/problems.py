@@ -24,8 +24,30 @@ def _resp(status: int, body: dict) -> JSONResponse:
     return JSONResponse(status_code=status, content=jsonable_encoder(body), media_type=PROBLEM_MEDIA)
 
 
+def _nommer_le_champ(request: Request, probleme: dict) -> dict:
+    """Le LIBELLÉ du champ refusé, quand la passerelle en déclare un.
+
+    Le noyau connaît le libellé qu'une chaîne écrit pour SON champ ; les
+    libellés déclarés au fichier de réconciliation (« Durée » pour
+    ``duration_s``) vivent, eux, dans le catalogue — le noyau ne les voit pas.
+    Sans ce raccord, un refus ne nommait le champ que par sa clé, et un
+    formulaire ne pouvait pas dire lequel de ses champs il devait montrer.
+    """
+    champ = probleme.get("field")
+    if not champ or probleme.get("libelle"):
+        return probleme
+    conteneur = getattr(request.app.state, "container", None)
+    menus = getattr(getattr(conteneur, "catalog", None), "menus", None) or {}
+    menu = menus.get(champ)
+    libelle = menu.get("libelle") if isinstance(menu, dict) else None
+    if libelle:
+        probleme["libelle"] = libelle
+    return probleme
+
+
 async def bridge_error_handler(request: Request, exc: BridgeError) -> JSONResponse:
-    return _resp(exc.status, to_problem(exc, instance=str(request.url.path)))
+    return _resp(exc.status, _nommer_le_champ(
+        request, to_problem(exc, instance=str(request.url.path))))
 
 
 async def validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
