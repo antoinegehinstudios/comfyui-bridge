@@ -393,3 +393,24 @@ def test_un_livrable_devient_l_apercu_anime_de_son_mode(atelier):
     assert r.status_code == 422
     assert atelier.delete("/v1/workflows/chaine-recollee/apercu").json()["removed"] is True
     assert "apercu_url" not in atelier.get("/v1/workflows").json()["workflows"]["chaine-recollee"]["presentation"]
+
+
+@SANS_FFMPEG
+def test_le_nom_donne_puis_le_type_nomment_tous_les_fichiers(atelier):
+    """Règle générale de nommage, tenue par la passerelle puisque c'est elle qui
+    écrit : « <nom donné>_<type> » sur le livrable final d'une chaîne (le type
+    est la chaîne), et sur chaque rendu d'étape (le type est son workflow, le
+    nom porte l'étape). Un lanceur retrouve sa production à son nom, et sait
+    laquelle de deux productions homonymes vient de quel mode."""
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-recollee",
+                                                         "label": "Mon-yokai"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    final = pathlib.Path(job["artifacts"][0]["path"]).name
+    assert final.startswith("Mon-yokai_chaine-recollee-final_"), final
+    sous = [e for e in job["etapes"] if e.get("job_id")]
+    assert sous, "aucune étape rendue"
+    premier = atelier.get(f"/v1/jobs/{sous[0]['job_id']}").json()
+    assert premier["params"]["filename_prefix"] == f"cortex/Mon-yokai-{sous[0]['id']}_video-essai"
+    # Sans nom donné : le type seul, jamais deux fois.
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-recollee"}))
+    assert pathlib.Path(job["artifacts"][0]["path"]).name.startswith("chaine-recollee-final_")

@@ -130,9 +130,18 @@ class Orchestrator:
         # Sans nom donné, c'est le WORKFLOW qui nomme : « cortex/video » mettait
         # tous les runs vidéo du poste sous un seul nom, où plus rien ne se
         # distinguait — le nom du workflow, lui, dit déjà ce qui a produit quoi.
+        # RÈGLE GÉNÉRALE DE NOMMAGE, tenue ici parce que c'est ici que le fichier
+        # se nomme : « <nom donné>_<type> » — le nom que l'appelant a choisi,
+        # puis le workflow qui a produit. Un lanceur montre ses livraisons par
+        # ce nom ; le type dit ce qui l'a faite quand deux productions
+        # portent le même nom. Sans nom donné, le type seul.
         label = "".join(c for c in (intent.label or "") if c.isalnum() or c in "-_")[:40]
-        repli = "".join(c for c in workflow if c.isalnum() or c in "-_")[:40]
-        params["filename_prefix"] = f"cortex/{label or repli or kind}"
+        genre = "".join(c for c in workflow if c.isalnum() or c in "-_")[:40]
+        if label and genre and label != genre:
+            nom = f"{label}_{genre}"
+        else:
+            nom = label or genre or kind
+        params["filename_prefix"] = f"cortex/{nom}"
         return params, kind
 
     def _apply_constraints(

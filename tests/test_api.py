@@ -239,11 +239,17 @@ def test_an_unknown_field_is_refused_not_swallowed(client):
 def test_a_caller_can_name_its_own_output(client):
     """A larger flow must recognise ITS files: the job id dies with the process,
     the file name does not."""
+    # Le nom donné, PUIS le type (le workflow qui produit) : une production
+    # nommée « plan-42 » par deux modes différents donne deux fichiers qu'on
+    # distingue sans ouvrir le journal.
     r = client.post("/v1/preview", json={"prompt": "x", "label": "plan-42"})
-    assert r.json()["params"]["filename_prefix"] == "cortex/plan-42"
+    assert r.json()["params"]["filename_prefix"] == "cortex/plan-42_sd15-txt2img"
     # …and cannot be turned into a path of its own choosing.
     r = client.post("/v1/preview", json={"prompt": "x", "label": "../../etc/passwd"})
-    assert r.json()["params"]["filename_prefix"] == "cortex/etcpasswd"
+    assert r.json()["params"]["filename_prefix"] == "cortex/etcpasswd_sd15-txt2img"
+    # Sans nom donné, le type seul nomme.
+    r = client.post("/v1/preview", json={"prompt": "x"})
+    assert r.json()["params"]["filename_prefix"] == "cortex/sd15-txt2img"
 
 
 def test_every_way_in_weighs_the_run_not_just_the_http_api():

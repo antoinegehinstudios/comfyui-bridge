@@ -108,7 +108,8 @@ class RunnerDeChaines:
             debut = time.monotonic()
             try:
                 resultat = self._executer_etape(job_id, etape, valeurs, resultats,
-                                                travail, label, etapes, rang)
+                                                travail, label, etapes, rang,
+                                                chaine_nom=chaine.nom)
             except BridgeError as exc:
                 if store.get(job_id).cancel_requested:
                     self._abandonner(job_id, etapes, rang, chaine, produits)
@@ -214,7 +215,8 @@ class RunnerDeChaines:
 
     def _executer_etape(self, job_id: str, etape: noyau.Etape, valeurs: dict[str, Any],
                         resultats: dict[str, Any], travail: Path, label: str,
-                        etapes: list[dict[str, Any]], rang: int) -> dict[str, Any]:
+                        etapes: list[dict[str, Any]], rang: int,
+                        chaine_nom: str = "") -> dict[str, Any]:
         if etape.genre == "verifier":
             return self._verifier(etape, valeurs, resultats)
         params = noyau.resoudre(etape.params, valeurs, resultats)
@@ -232,7 +234,7 @@ class RunnerDeChaines:
             return {**fait, "depot": self._deposer(Path(fait["fichier"]))}
         if etape.genre == "recoller":
             parts = self._parts_locales(params["parts"], travail)
-            sortie = self._sortie(job_id, label, etape.id, ".mp4")
+            sortie = self._sortie(job_id, label, etape.id, ".mp4", chaine=chaine_nom)
             return montage_video.recoller(parts, sortie, fps=int(params.get("fps") or 25),
                                           largeur=int(params.get("largeur") or 1280),
                                           hauteur=int(params.get("hauteur") or 720),
@@ -321,20 +323,25 @@ class RunnerDeChaines:
 
     # -- fichiers ---------------------------------------------------------------
 
-    def _sortie(self, job_id: str, label: str, etape_id: str, suffixe: str) -> Path:
+    def _sortie(self, job_id: str, label: str, etape_id: str, suffixe: str,
+                chaine: str = "") -> Path:
         """Où écrire ce qu'une étape de montage produit — UN chemin par run.
 
-        Mesuré le 2026-09-13 : deux runs du même mode portent le même label,
-        donc écrivaient tous deux « cortex/<label>-final.mp4 » ; le second a
-        effacé le livrable du premier (7 622 063 o à 13:32, 7 577 018 o à 13:35),
-        et deux cartes de livraison montraient un seul fichier. Le début de
-        l'identifiant du job les sépare, et se relit dans le nom.
+        Même règle de nommage que les rendus : « <nom donné>_<type>-<étape> »,
+        le type étant ici la chaîne. Mesuré le 2026-09-13 : deux runs du même
+        mode portent le même label, donc écrivaient tous deux
+        « cortex/<label>-final.mp4 » ; le second a effacé le livrable du premier
+        (7 622 063 o à 13:32, 7 577 018 o à 13:35), et deux cartes de livraison
+        montraient un seul fichier. Le début de l'identifiant du job les sépare,
+        et se relit dans le nom.
         """
         base = Path(self._c.settings.comfy_output_dir).resolve() / "cortex"
         base.mkdir(parents=True, exist_ok=True)
-        propre = "".join(ch for ch in f"{label}-{etape_id}" if ch.isalnum() or ch in "-_")
+        surete = lambda s: "".join(ch for ch in str(s) if ch.isalnum() or ch in "-_")
+        nom, genre = surete(label), surete(chaine)
+        tete = f"{nom}_{genre}" if nom and genre and nom != genre else (nom or genre)
         marque = "".join(ch for ch in str(job_id)[:8] if ch.isalnum())
-        return base / f"{propre or etape_id}_{marque}{suffixe}"
+        return base / f"{tete + '-' if tete else ''}{etape_id}_{marque}{suffixe}"
 
     def _fichier_local(self, valeur: Any, travail: Path) -> Path:
         """Le fichier désigné, ramené ICI s'il vit chez le moteur.
