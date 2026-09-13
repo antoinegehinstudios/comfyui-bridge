@@ -594,6 +594,23 @@ def _extras_admis(c, intent_in) -> dict:
     return extras
 
 
+def _apercus_dir(c) -> Path:
+    """Où vivent les aperçus animés des modes : à côté des jobs, jamais dans le
+    dossier de sortie du moteur (un aperçu n'est pas un livrable)."""
+    return Path(c.settings.hermes_db).parent / "apercus"
+
+
+def _presentation(c, spec) -> dict:
+    """La vitrine d'une entrée, avec son aperçu animé s'il en a un.
+
+    L'adresse n'est annoncée que si le fichier est là : une vignette promise
+    et absente ferait une image cassée dans chaque lanceur."""
+    p = dict(spec.presentation)
+    if (_apercus_dir(c) / f"{spec.name}.gif").is_file():
+        p["apercu_url"] = f"/v1/workflows/{spec.name}/apercu"
+    return p
+
+
 def _spec_dict(spec) -> dict:
     if spec.est_chaine:
         return {"name": spec.name, "kind": spec.kind, "chaine": True,
@@ -830,7 +847,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 items[name] = {
                     "kind": spec.kind,
                     "chaine": True,
-                    "presentation": spec.presentation,
+                    "presentation": _presentation(c, spec),
                     "resume": chaine.resume,
                     # Ce qu'elle enchaîne : un appelant doit pouvoir dire ce
                     # qu'il lance avant de le lancer.
@@ -859,7 +876,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "chaine": False,
                 # La vitrine : sans `categorie`, l'entrée reste technique et un
                 # lanceur ne la propose pas.
-                "presentation": spec.presentation,
+                "presentation": _presentation(c, spec),
                 # What this workflow can actually receive. A field it does not
                 # bind goes nowhere: offering it would be a lie.
                 "accepts": sorted(spec.profile.accepts),
@@ -975,6 +992,68 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                               "reason": state.get("source_change_reason"),
                               "extracted_at": spec.extracted_at})
         return {"count": len(stale), "updates": stale}
+
+    @app.get("/v1/workflows/{name}/apercu", tags=["workflows"], include_in_schema=True)
+    async def workflow_apercu(name: str, request: Request) -> FileResponse:
+        """L'aperçu animé d'un mode : ce qu'il produit, en six secondes de GIF."""
+        c = request.app.state.container
+        c.catalog.get_spec(name)                       # 400 si inconnu
+        fichier = _apercus_dir(c) / f"{name}.gif"
+        if not fichier.is_file():
+            raise UnknownWorkflowInputError(
+                f"{name!r} n'a pas d'aperçu : en désigner un avec PUT /v1/workflows/{name}/apercu "
+                f"(un job livré, ou un fichier du dossier de sortie)", workflow=name)
+        return FileResponse(fichier, media_type="image/gif",
+                            headers={"Cache-Control": "no-cache"})
+
+    @app.put("/v1/workflows/{name}/apercu", status_code=201, tags=["workflows"])
+    async def workflow_apercu_depuis(name: str, request: Request) -> dict:
+        """Faire d'une vidéo livrée l'aperçu de ce mode.
+
+        Corps : `{"job_id": "…"}` (le premier livrable vidéo de ce run) ou
+        `{"path": "…"}` (un fichier du dossier de sortie, jamais ailleurs). La
+        passerelle fabrique le GIF elle-même : un lanceur ne manipule pas
+        d'images, il désigne."""
+        from ..adapter import montage_video
+        c = request.app.state.container
+        c.catalog.get_spec(name)
+        corps = await request.json()
+        if not isinstance(corps, dict):
+            raise UnknownWorkflowInputError("un objet JSON était attendu", workflow=name)
+        source: Path | None = None
+        if corps.get("job_id"):
+            job = c.store.get(str(corps["job_id"]))
+            videos = [a for a in job.artifacts if a.kind == "video" and a.path]
+            if not videos:
+                raise UnknownWorkflowInputError(
+                    f"le job {job.id} n'a livré aucune vidéo", workflow=name, job_id=job.id)
+            source = Path(videos[0].path)
+        elif corps.get("path"):
+            source = Path(str(corps["path"]))
+        else:
+            raise UnknownWorkflowInputError("il manque « job_id » ou « path »", workflow=name)
+        out_dir = c.settings.comfy_output_dir.resolve()
+        try:
+            source.resolve().relative_to(out_dir)
+        except ValueError:
+            raise UnknownWorkflowInputError(
+                f"{source} n'est pas dans le dossier de sortie : seul un livrable peut "
+                f"devenir un aperçu", workflow=name)
+        if not source.is_file():
+            raise UnknownWorkflowInputError(f"{source} introuvable", workflow=name)
+        cible = _apercus_dir(c) / f"{name}.gif"
+        fait = await run_in_threadpool(montage_video.apercu_anime, source, cible)
+        return {"workflow": name, "apercu_url": f"/v1/workflows/{name}/apercu",
+                "source": str(source.resolve()), **fait}
+
+    @app.delete("/v1/workflows/{name}/apercu", tags=["workflows"])
+    async def workflow_apercu_retirer(name: str, request: Request) -> dict:
+        c = request.app.state.container
+        fichier = _apercus_dir(c) / f"{name}.gif"
+        existait = fichier.is_file()
+        if existait:
+            fichier.unlink()
+        return {"workflow": name, "removed": existait}
 
     @app.get("/v1/workflows/{name}", tags=["workflows"])
     async def get_workflow(name: str, request: Request) -> dict:

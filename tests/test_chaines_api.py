@@ -352,3 +352,32 @@ def test_les_copies_de_reference_des_chaines_suivent_les_donnees():
         if a != b:
             ecarts.append(f"{fichier.name} : la copie de référence diverge des données")
     assert not ecarts, " ; ".join(ecarts)
+
+
+@SANS_FFMPEG
+def test_un_livrable_devient_l_apercu_anime_de_son_mode(atelier):
+    """Un lanceur montre ce qu'un mode PRODUIT avant qu'on le lance : la
+    passerelle fabrique la vignette depuis un livrable et la sert elle-même.
+    Sans fichier, aucune adresse n'est promise — une image cassée par carte."""
+    avant = atelier.get("/v1/workflows").json()["workflows"]["chaine-recollee"]
+    assert "apercu_url" not in avant["presentation"]
+    assert atelier.get("/v1/workflows/chaine-recollee/apercu").status_code == 422
+
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-recollee"}))
+    assert job["status"] == "succeeded"
+    r = atelier.put("/v1/workflows/chaine-recollee/apercu", json={"job_id": job["id"]})
+    assert r.status_code == 201, r.text
+    assert r.json()["apercu_url"] == "/v1/workflows/chaine-recollee/apercu"
+    assert r.json()["octets"] > 0
+
+    g = atelier.get("/v1/workflows/chaine-recollee/apercu")
+    assert g.status_code == 200 and g.headers["content-type"].startswith("image/gif")
+    assert g.content[:6] in (b"GIF87a", b"GIF89a")
+    apres = atelier.get("/v1/workflows").json()["workflows"]["chaine-recollee"]
+    assert apres["presentation"]["apercu_url"] == "/v1/workflows/chaine-recollee/apercu"
+
+    # Un fichier hors du dossier de sortie n'est pas un livrable : refusé, nommé.
+    r = atelier.put("/v1/workflows/chaine-recollee/apercu", json={"path": "C:/Windows/notepad.exe"})
+    assert r.status_code == 422
+    assert atelier.delete("/v1/workflows/chaine-recollee/apercu").json()["removed"] is True
+    assert "apercu_url" not in atelier.get("/v1/workflows").json()["workflows"]["chaine-recollee"]["presentation"]

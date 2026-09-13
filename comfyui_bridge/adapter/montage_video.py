@@ -346,3 +346,36 @@ def mesurer_raccords(parts: Any, travail: str | Path,
     valeurs = [p["similarite"] for p in paires]
     return {"paires": paires, "nombre": len(paires), "pire": min(valeurs),
             "meilleure": max(valeurs), "moyenne": sum(valeurs) / len(valeurs)}
+
+
+def apercu_anime(video: str | Path, sortie: str | Path, largeur: int = 240,
+                 images: int = 48, cadence: int = 8) -> dict[str, Any]:
+    """Un GIF léger qui résume TOUTE la vidéo — ce qu'un mode produit, en un
+    coup d'œil sur sa vignette.
+
+    Pas les premières secondes : une révélation se joue sur la durée entière,
+    et ses six premières secondes ne montrent que du papier blanc. On prend
+    donc une image toutes les K, réparties sur la longueur, jouées en boucle à
+    huit par seconde : 48 images font six secondes, et la palette est réduite
+    à 64 couleurs — mesuré : 200 à 400 Ko pour une vidéo verticale, là où les
+    premières secondes en pleine palette en pesaient plus de deux mégaoctets.
+    """
+    video, sortie = Path(video), Path(sortie)
+    total = compter_images(video)
+    pas = max(1, round(total / max(1, images)))
+    sortie.parent.mkdir(parents=True, exist_ok=True)
+    # La virgule de `mod` est échappée pour le parseur de filtres d'ffmpeg
+    # (elle séparerait sinon deux filtres) : un antislash réel, écrit ici sans
+    # que Python n'en fasse une séquence.
+    virgule = chr(92) + ","
+    filtre = (f"select='not(mod(n{virgule}{pas}))',setpts=N/({cadence}*TB),"
+              f"scale={int(largeur)}:-2:flags=lanczos,"
+              f"split[a][b];[a]palettegen=max_colors=64:stats_mode=diff[p];"
+              f"[b][p]paletteuse=dither=bayer:bayer_scale=3")
+    _lancer(outil(), ["-y", "-v", "error", "-i", str(video), "-vf", filtre,
+                      "-loop", "0", "-an", str(sortie)],
+            f"aperçu animé de {video.name}")
+    if not sortie.exists() or not sortie.stat().st_size:
+        raise MediaAssemblyError(f"aperçu animé : rien n'a été écrit dans {sortie}")
+    return {"fichier": str(sortie.resolve()), "octets": sortie.stat().st_size,
+            "images": min(images, total), "pas": pas}
