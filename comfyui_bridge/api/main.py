@@ -1131,16 +1131,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Déclarée AVANT "/v1/jobs/{job_id}" : sinon la liste est lue comme un
     # identifiant de job et répond 404.
     @app.get("/v1/jobs", tags=["render"])
-    async def list_jobs(request: Request, limit: int = 50) -> dict:
+    async def list_jobs(request: Request, limit: int = 50, enfants: bool = False) -> dict:
         """Les runs, du plus récent au plus ancien — mémoire ET persistés.
 
         Un appelant qui veut montrer ses livraisons n'a pas à tenir la liste
         des identifiants qu'il a lancés : elle vit ici, et survit à un
         redémarrage de la passerelle.
+
+        Les sous-jobs d'une chaîne n'en font pas partie par défaut : ils sont
+        déjà dans les ``etapes`` de leur parent, et les lister à côté montrait
+        trois cartes pour une seule création. ``enfants=1`` les rend.
         """
         c = request.app.state.container
-        return {"jobs": [_with_engine_state(c, JobOut.of(j).model_dump())
-                         for j in c.store.list(limit)]}
+        jobs = [j for j in c.store.list(limit * 4 if not enfants else limit)
+                if enfants or not j.parent][:limit]
+        return {"jobs": [_with_engine_state(c, JobOut.of(j).model_dump()) for j in jobs]}
 
     @app.get("/v1/jobs/{job_id}", tags=["render"])
     async def get_job(job_id: str, request: Request) -> dict:

@@ -241,8 +241,12 @@ def test_les_jobs_se_listent_du_plus_recent_au_plus_ancien(atelier):
     assert len(chaines) == 2
     assert chaines[0]["created_at"] >= chaines[1]["created_at"]
     assert chaines[0]["demande"]["label"] == "deux"
-    # Les sous-jobs sont là aussi : ce sont des runs comme les autres.
-    assert any(j["parent"] for j in jobs)
+    # Les sous-jobs ne sont PAS là : une création, une carte. Ils vivent dans
+    # les étapes de leur parent, et se listent sur demande.
+    assert not any(j["parent"] for j in jobs)
+    avec = atelier.get("/v1/jobs?limit=50&enfants=1").json()["jobs"]
+    assert any(j["parent"] for j in avec)
+    assert len(avec) > len(jobs)
 
 
 def test_un_job_survit_au_redemarrage(tmp_path):
