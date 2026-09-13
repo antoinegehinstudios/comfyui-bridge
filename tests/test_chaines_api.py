@@ -329,3 +329,26 @@ def test_une_chaine_recolle_ses_rendus_en_un_livrable(atelier):
     # Le livrable est servi par la passerelle, et son URL n'est pas reconstruite
     # par l'appelant.
     assert job["artifacts"][0]["url"].startswith("/artifacts/")
+
+
+def test_les_copies_de_reference_des_chaines_suivent_les_donnees():
+    """Une chaîne modifiée dans `_data/` sans sa copie de référence laisserait
+    le savoir sur la machine et le paquet sur l'ancienne version : à la
+    prochaine installation, c'est l'ancienne qui repartirait. Sur un poste
+    sans `_data/chaines`, il n'y a rien à comparer — et c'est dit."""
+    racine = pathlib.Path(__file__).resolve().parents[1]
+    donnees = racine / "_data" / "chaines"
+    if not donnees.is_dir():
+        pytest.skip("pas de _data/chaines sur ce poste : rien à comparer")
+    reference = racine / "comfyui_bridge" / "adapter" / "resources" / "chaines-exemples"
+    ecarts = []
+    for fichier in sorted(donnees.glob("*.json")):
+        jumeau = reference / fichier.name
+        if not jumeau.exists():
+            ecarts.append(f"{fichier.name} : aucune copie de référence")
+            continue
+        a = json.loads(fichier.read_text(encoding="utf-8"))
+        b = json.loads(jumeau.read_text(encoding="utf-8"))
+        if a != b:
+            ecarts.append(f"{fichier.name} : la copie de référence diverge des données")
+    assert not ecarts, " ; ".join(ecarts)

@@ -815,6 +815,30 @@ section ci-dessus) — un graphe ComfyUI (format API) + sa table de bindings
 absent lève une erreur explicite (`workflow-mapping`, `500`) plutôt que d'échouer
 en silence.
 
+## Modifier un flux de création — où, et comment le savoir
+
+Un flux ne vit que dans des **données** ; le code de la passerelle n'en connaît
+aucun par son nom, et le lanceur (maestro) encore moins. La question « où vais-je
+modifier ça ? » a donc une réponse par nature de changement :
+
+| Ce qu'on veut changer | Où c'est écrit | Ce qui le sert |
+|---|---|---|
+| l'EFFET lui-même (l'encre, les taches, la caméra, la fermeture) | le paquet de nœuds ComfyUI (`comfyui-ink-reveal`, `comfyui-direction-de-style`…) | le moteur ; ré-extraire si les entrées changent |
+| le GRAPHE d'un mode (ses nœuds, ses valeurs figées) | `_data/workflows/<nom>.json` + ses liaisons dans `_data/reconciliation.local.json` | `POST /v1/render` |
+| l'ORDRE des étapes, les durées, les contrôles d'un flux composé | `_data/chaines/<nom>.json` (et sa copie `resources/chaines-exemples/`) | le runner de chaînes |
+| une RÉPÉTITION (blocs de boucle, conditions) | le montage `_data/workflows/<montage>.json`, ses blocs `_data/blocs/` | le dépliage |
+| ce que l'utilisateur VOIT (titre, catégorie, résumé, libellés, aides) | `_data/reconciliation.local.json` : `titre`, `categorie`, `menus`, `aides` | `/v1/workflows`, `/io` |
+| le VOCABULAIRE des styles | `styles/*.json` du paquet de direction de style | `/io` (`options` + `choix`) |
+
+Jamais dans un fichier `.py` de la passerelle, jamais dans le lanceur. Ce n'est
+pas une consigne : c'est **gardé**. La règle `flux-hors-du-code` du socle
+(`garde.json`) dérive les noms de tous les flux du catalogue — réconciliation,
+graphes extraits, chaînes — et refuse tout fichier de code qui en nomme un
+(un commentaire ne fait que signaler). Le lanceur porte la même règle, dont le
+vocabulaire est lu chez la passerelle de ce poste. Un cas particulier écrit
+« pour ce flux-là » dans le code ne passe donc plus le commit ; et la copie de
+référence d'une chaîne qui diverge de `_data/` est refusée par les tests.
+
 ## Configuration (variables d'environnement)
 
 | Variable            | Défaut                    | Rôle                                   |
