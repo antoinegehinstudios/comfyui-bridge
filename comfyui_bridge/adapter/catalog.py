@@ -126,10 +126,37 @@ class WorkflowSpec:
     # Paramètres qui pilotent un MONTAGE sans viser de nœud : la durée demandée
     # décide du nombre de blocs, elle ne s'écrit dans aucun d'eux.
     pilote: tuple[str, ...] = ()
+    # Une CHAÎNE au lieu d'un graphe : le fichier qui décrit l'enchaînement.
+    # Une entrée porte l'un OU l'autre — jamais les deux.
+    chaine_path: Path | None = None
+    # Les champs qu'une chaîne expose : son contrat d'entrée, comme les
+    # liaisons le sont pour un graphe.
+    exposes: tuple[str, ...] = ()
+    # La vitrine. Lue sur TOUTE entrée : un lanceur montre par catégorie et par
+    # titre, jamais par nom technique. Sans `categorie`, l'entrée reste interne
+    # (étape de chaîne, utilitaire) et n'est pas publiée.
+    titre: str = ""
+    description: str = ""
+    categorie: str | None = None
+    ordre: int = 100
+
+    @property
+    def est_chaine(self) -> bool:
+        return self.chaine_path is not None
+
+    @property
+    def presentation(self) -> dict[str, Any]:
+        return {"titre": self.titre or self.name, "resume": self.description,
+                "categorie": self.categorie, "ordre": self.ordre,
+                "publie": self.categorie is not None}
 
     @property
     def profile(self) -> WorkflowProfile:
         from .neutral import has_neutral
+        if self.est_chaine:
+            # Une chaîne ne lie aucun nœud : ce qu'elle reçoit, elle le déclare.
+            return WorkflowProfile(self.name, self.kind, dict(self.defaults),
+                                   dict(self.limits), {}, tuple(self.exposes), ())
         return WorkflowProfile(self.name, self.kind, dict(self.defaults),
                                dict(self.limits), dict(self.carried),
                                tuple(sorted(set(self.bindings) | set(self.pilote))),
@@ -145,14 +172,26 @@ class WorkflowCatalog:
     # (méthodes de lecture plus bas ; l'ingestion et le retrait encadrent le cycle
     #  de vie d'un extrait : ce qui s'ajoute doit pouvoir se retirer.)
     def __init__(self, default: str, specs: dict[str, WorkflowSpec],
-                 workflows_dir: Path | None = None) -> None:
+                 workflows_dir: Path | None = None,
+                 categories: dict[str, Any] | None = None,
+                 menus: dict[str, Any] | None = None) -> None:
         self._default = default
         self._specs = specs
         self._workflows_dir = Path(workflows_dir) if workflows_dir else None
         self._templates: dict[str, dict[str, Any]] = {}
+        self._chaines: dict[str, Any] = {}
         # Noms servis par une entrée déclarée alors qu'un graphe enregistré
         # porte le même : ce qui est masqué doit pouvoir être dit.
         self.shadowed: tuple[str, ...] = ()
+        # Des titres déclarés pour un workflow qui n'existe plus : renommé ou
+        # retiré. Un habillage qui n'habille rien doit se voir.
+        self.vitrines_orphelines: tuple[str, ...] = ()
+        # La vitrine, déclarée au fichier de réconciliation : les catégories qui
+        # rangent les entrées, et les libellés des menus. Des DONNÉES, pas du
+        # code : une liste de styles écrite dans un client se serait figée le
+        # jour où le fournisseur en a ajouté un.
+        self.categories: dict[str, Any] = dict(categories or {})
+        self.menus: dict[str, Any] = dict(menus or {})
 
     # -- maintained manifest (provenance + dependencies) ----------------------
 
@@ -269,6 +308,26 @@ class WorkflowCatalog:
             )
         return spec
 
+    def chaine(self, spec: WorkflowSpec):
+        """La chaîne d'une entrée, lue et validée une fois.
+
+        La lecture REFUSE ce qui ne tient pas (renvoi vers l'aval, champ
+        inconnu) : découvert à l'exécution, un renvoi faux faisait échouer la
+        chaîne après avoir dépensé les étapes d'avant.
+        """
+        from ..core import chaine as noyau
+        if not spec.est_chaine:
+            raise WorkflowMappingError(f"{spec.name!r} n'est pas une chaîne", workflow=spec.name)
+        if spec.name not in self._chaines:
+            try:
+                brut = json.loads(Path(spec.chaine_path).read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise WorkflowMappingError(
+                    f"chaîne {spec.name!r} : impossible de lire {spec.chaine_path} : {exc}"
+                ) from exc
+            self._chaines[spec.name] = noyau.lire(brut, spec.name)
+        return self._chaines[spec.name]
+
     def load_template(self, spec: WorkflowSpec,
                       params: dict[str, Any] | None = None) -> dict[str, Any]:
         return self.monter(spec, params)[0]
@@ -282,6 +341,12 @@ class WorkflowCatalog:
         nombre de blocs sort des paramètres, donc les numéros de nœuds n'existent
         qu'après le dépliage, et les liaisons doivent être traduites vers eux.
         """
+        if spec.est_chaine:
+            # Une chaîne n'a pas de graphe : elle enchaîne des runs, dont chacun
+            # a le sien. Rendre un graphe vide ferait croire à un workflow muet.
+            raise WorkflowMappingError(
+                f"{spec.name!r} est une chaîne : elle n'a pas de graphe à monter "
+                f"(voir ses étapes)", workflow=spec.name)
         brut = self._brut(spec)
         if not est_montage(brut):
             return brut, spec.bindings
@@ -303,6 +368,8 @@ class WorkflowCatalog:
         demandeur a commande reste UNE video. La recette est seule a savoir
         laquelle des deux choses elle produit.
         """
+        if spec.est_chaine:
+            return {}                    # une chaîne nomme son livrable elle-même
         brut = self._brut(spec)
         if not est_montage(brut):
             return {}
@@ -437,6 +504,42 @@ def _graph_of(path: Path) -> dict[str, Any]:
     return brut
 
 
+def _spec_de_chaine(name: str, entry: dict[str, Any], catalogue: Path,
+                    vitrine: dict[str, Any]) -> WorkflowSpec:
+    """Une entrée qui déclare une CHAÎNE au lieu d'un graphe.
+
+    Ce qu'elle reçoit vient de la rubrique « expose » de la chaîne, lue ici même
+    : sans cela, le catalogue annoncerait une entrée sans aucun champ, et un
+    formulaire construit dessus serait vide.
+    """
+    from ..core import chaine as noyau
+    chemin = Path(entry["chaine"])
+    if not chemin.is_absolute():
+        chemin = (catalogue.parent / chemin).resolve()
+    expose: tuple[str, ...] = ()
+    defauts: dict[str, Any] = {}
+    try:
+        lue = noyau.lire(json.loads(chemin.read_text(encoding="utf-8")), name)
+        expose = tuple(lue.champs)
+        defauts = noyau.defauts(lue)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise WorkflowMappingError(
+            f"chaîne {name!r} : impossible de lire {chemin} : {exc}") from exc
+    return WorkflowSpec(
+        name=name,
+        kind=str(entry.get("kind", "video")),
+        # Le fichier de la chaîne EST la source de cette entrée : c'est lui que
+        # les vues qui parlent de « source du workflow » doivent montrer.
+        workflow_path=chemin,
+        chaine_path=chemin,
+        bindings={},
+        exposes=expose,
+        defaults={**defauts, **dict(entry.get("defaults", {}))},
+        limits=dict(entry.get("limits", {})),
+        **vitrine,
+    )
+
+
 def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
                  data_dir: str | Path | None = None) -> WorkflowCatalog:
     path = Path(path)
@@ -447,6 +550,7 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
 
     # Les workflows propres à CETTE machine vivent à côté, jamais dans le paquet.
     from .local_overlay import merge, read_overlay
+    livrees = dict(data.get("workflows") or {})
     try:
         data = merge(data, read_overlay(Path(data_dir) if data_dir else None, path), "workflows")
     except (OSError, json.JSONDecodeError) as exc:
@@ -456,9 +560,41 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
     if not isinstance(workflows, dict) or not workflows:
         raise WorkflowMappingError(f"{path}: 'workflows' must be a non-empty object")
 
+    # Une surcharge locale REMPLACE l'entrée de même nom : c'est ce qu'on veut
+    # d'une liaison réécrite à la main. Mais une entrée qui ne porte QUE la
+    # vitrine (titre, catégorie) veut DÉCORER, pas remplacer — sans cette
+    # nuance, donner un titre à un workflow livré effaçait ses liaisons.
+    for nom, entree in list(workflows.items()):
+        if (isinstance(entree, dict) and nom in livrees
+                and not {"workflow", "bindings", "chaine"} & set(entree)):
+            workflows[nom] = {**livrees[nom], **entree}
+
     specs: dict[str, WorkflowSpec] = {}
+    vitrines: dict[str, dict[str, Any]] = {}
     for name, entry in workflows.items():
-        if not isinstance(entry, dict) or "workflow" not in entry or "bindings" not in entry:
+        if not isinstance(entry, dict):
+            raise WorkflowMappingError(f"workflow {name!r}: needs 'workflow' and 'bindings'")
+        # La vitrine se lit sur TOUTE entrée, chaîne ou graphe : c'est ce qui
+        # fait qu'un lanceur montre « Révélation pour podcast » et non
+        # « video-revelation-podcast », et qu'une entrée technique reste hors
+        # de la vue sans avoir à tenir une seconde liste quelque part.
+        vitrine = {
+            "titre": str(entry.get("titre") or ""),
+            "description": str(entry.get("description") or ""),
+            "categorie": (str(entry["categorie"]) if entry.get("categorie") else None),
+            "ordre": int(entry.get("ordre", 100)),
+        }
+        if "chaine" in entry:
+            specs[name] = _spec_de_chaine(name, entry, path, vitrine)
+            continue
+        if "workflow" not in entry and "bindings" not in entry:
+            # Une entrée qui ne porte QUE la vitrine habille un graphe DÉPOSÉ
+            # dans le dossier des workflows : celui-là est auto-lié, il n'a
+            # aucune entrée déclarée où écrire son titre. Le déclarer en entier
+            # ici le masquerait et lui ferait perdre son auto-liaison.
+            vitrines[name] = vitrine
+            continue
+        if "workflow" not in entry or "bindings" not in entry:
             raise WorkflowMappingError(f"workflow {name!r}: needs 'workflow' and 'bindings'")
         bindings = {}
         for k, spec in entry["bindings"].items():
@@ -484,6 +620,7 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
             dependencies=deps,
             carried=_carried_media(_graph_of(wf_path), bindings),
             pilote=_pilotes(wf_path),
+            **vitrine,
         )
 
     default = data.get("default") or next(iter(specs))
@@ -520,7 +657,22 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
                 if autobind.looks_like_api_graph(graph):
                     specs[f.stem] = _spec_from_graph(f.stem, f, graph, index.get(f.stem))
 
+    # La vitrine se pose APRÈS la découverte : elle habille aussi bien un
+    # graphe déposé qu'une entrée déclarée.
+    from dataclasses import replace as _replace
+    orphelines: list[str] = []
+    for nom, vitrine in vitrines.items():
+        if nom not in specs:
+            # Un titre qui n'habille rien ne doit pas disparaître en silence :
+            # c'est un workflow renommé ou retiré, et la vitrine le dira.
+            orphelines.append(nom)
+            continue
+        specs[nom] = _replace(specs[nom], **vitrine)
+
     catalogue = WorkflowCatalog(default=default, specs=specs,
-                                workflows_dir=Path(workflows_dir) if workflows_dir else None)
+                                workflows_dir=Path(workflows_dir) if workflows_dir else None,
+                                categories=data.get("categories"),
+                                menus=data.get("menus"))
     catalogue.shadowed = tuple(masques)
+    catalogue.vitrines_orphelines = tuple(sorted(orphelines))
     return catalogue

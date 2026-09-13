@@ -67,7 +67,8 @@ class Orchestrator:
 
     # -- planning -------------------------------------------------------------
 
-    def resolve_params(self, intent: RenderIntent, defaults: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    def resolve_params(self, intent: RenderIntent, defaults: dict[str, Any],
+                       workflow: str = "") -> tuple[dict[str, Any], str]:
         """Resolve ONLY the parameters that were actually asked for.
 
         The workflow is the authority on its own settings. A value is injected
@@ -117,8 +118,12 @@ class Orchestrator:
 
         # The caller's own name for its output, kept harmless: a flow driving
         # this service finds its files back by it, whatever happens to the job.
+        # Sans nom donné, c'est le WORKFLOW qui nomme : « cortex/video » mettait
+        # tous les runs vidéo du poste sous un seul nom, où plus rien ne se
+        # distinguait — le nom du workflow, lui, dit déjà ce qui a produit quoi.
         label = "".join(c for c in (intent.label or "") if c.isalnum() or c in "-_")[:40]
-        params["filename_prefix"] = f"cortex/{label or kind}"
+        repli = "".join(c for c in workflow if c.isalnum() or c in "-_")[:40]
+        params["filename_prefix"] = f"cortex/{label or repli or kind}"
         return params, kind
 
     def _apply_constraints(
@@ -144,7 +149,7 @@ class Orchestrator:
         profile = self._registry.get_profile(intent.workflow)  # raises if unknown
         # The workflow's declared kind is the default when the caller states none.
         defaults = {"kind": profile.kind, **profile.defaults}
-        params, kind = self.resolve_params(intent, defaults)
+        params, kind = self.resolve_params(intent, defaults, workflow=profile.name)
         self._apply_constraints(params, intent.constraints)
         # A value the workflow cannot receive goes nowhere. Naming it here is
         # the difference between "your 10 frames were applied" and the truth.

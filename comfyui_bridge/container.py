@@ -67,7 +67,10 @@ def build_container(settings: Settings | None = None) -> Container:
     # Un livrable part avec son origine, quel que soit le backend qui l'a
     # produit : la règle est posée ici, une fois, sur le port.
     backend = WithOrigin(backend)
-    store = JobStore()
+    # Les runs sont écrits à côté de la mémoire d'Hermes : un redémarrage
+    # laissait sinon des livrables dans le dossier de sortie dont plus rien ne
+    # disait ce qui les avait produits, ni avec quelle demande.
+    store = JobStore(persist_dir=data_dir / "jobs")
     orchestrator = Orchestrator(
         backend=backend,
         reconciler=reconciler,

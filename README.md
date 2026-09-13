@@ -176,7 +176,9 @@ python -m comfyui_bridge workflows
 | Méthode | Chemin                         | Rôle                                            |
 |---------|--------------------------------|-------------------------------------------------|
 | POST    | `/v1/render`                   | Soumet une intention → `202` + `Location` du job |
-| GET     | `/v1/jobs/{id}`                | État du job + artefacts + **journal (logs)**     |
+| GET     | `/v1/jobs`                     | **Les runs**, du plus récent au plus ancien (mémoire + persistés) |
+| GET     | `/v1/jobs/{id}`                | État du job + artefacts + **journal (logs)** + `etapes` d'une chaîne |
+| POST    | `/v1/jobs/{id}/rejouer`        | **Rejouer** un run, à l'identique ou avec `{"reglages": {…}}` |
 | GET     | `/v1/jobs/{id}/events`         | **Progression live (SSE)** jusqu'à l'état final  |
 | GET     | `/v1/jobs/{id}/artifacts`      | Artefacts seuls (avec `url` servable)            |
 | GET     | `/artifacts/…`                 | **Livraison** : fichiers de sortie servis (aperçu direct) |
@@ -691,6 +693,118 @@ qui produisent un morceau : chacun voit alors `bloc_rang` et `blocs_total`
 dans ses calculs (`{"$calc": "bloc_rang"}`), ce que le tour de boucle ne dit
 pas (l'amorce est hors boucle). Le nœud `DirectionDuBloc` de chaque bloc en
 déduit son temps.
+
+## Chaînes (workflow of workflows)
+
+Beaucoup de livrables ne tiennent pas en un seul run : une révélation PUIS sa
+fermeture, un plan PUIS son prolongement. Écrire cet enchaînement chez
+l'appelant lui rendait la logique métier — l'ordre des étapes, la reprise des
+fichiers, les contrôles — que la passerelle existe pour tenir. Une **chaîne**
+est donc une entrée de catalogue comme une autre, avec `chaine` au lieu de
+`workflow` + `bindings` :
+
+```jsonc
+"video-revelation-podcast": {
+  "kind": "video",
+  "chaine": "…/_data/chaines/video-revelation-podcast.json",
+  "titre": "Révélation pour podcast", "categorie": "reveler-une-image", "ordre": 1
+}
+```
+
+Elle se lance par le **même verbe** que tout le reste : `POST /v1/render` avec
+son nom, et ses champs exposés à la racine du corps. Elle se suit par le même
+`GET /v1/jobs/{id}` (+ SSE), avec ses `etapes`. Une étape `rendre` est un run
+ORDINAIRE : sous-job visible dans `/v1/jobs`, Hermes, journal, estimation,
+reprise — rien n'est réécrit pour elle.
+
+Le fichier de chaîne (copies de référence dans
+[`resources/chaines-exemples/`](comfyui_bridge/adapter/resources/chaines-exemples/)) :
+
+```jsonc
+{
+  "version": 1, "chaine": "video-revelation-podcast", "resume": "…",
+  "expose": {
+    "image":      { "media": "image", "requis": true, "libelle": "L'image à révéler" },
+    "duration_s": { "type": "FLOAT", "defaut": 50, "min": 20, "max": 90, "unite": "s" }
+  },
+  "etapes": [
+    { "id": "revelation", "rendre": { "workflow": "video-reveal-cinematic",
+        "media": { "image": "$image" }, "duration_s": "$duration_s" } },
+    { "id": "queue",   "extraire_queue": { "video": "$revelation.livrable", "images": 50 } },
+    { "id": "final",   "recoller": { "parts": ["$revelation.livrable", "$conclusion.livrable"] } },
+    { "id": "controle", "verifier": [
+        { "id": "duree_tenue", "valeur": "$final.mesure.duration_s",
+          "op": "between", "attendu": [40, 120] } ] }
+  ],
+  "livrable": "$final.livrable"
+}
+```
+
+**Renvois** : `$champ` (une valeur exposée), `$etape.cle` (un résultat d'étape
+PRÉCÉDENTE). Un renvoi vers l'aval ou vers un nom inconnu est refusé **à la
+lecture**, en le nommant : découvert en route, il faisait échouer la chaîne
+après avoir dépensé les étapes d'avant.
+
+**Genres d'étape** et ce que chacun rend :
+
+| genre | ce qu'il fait | résultat |
+|---|---|---|
+| `rendre` | un run de workflow, par les moyens ordinaires | `livrable`, `artefacts`, `mesure`, `job_id` |
+| `extraire_queue` | les N dernières images, en clip SANS PERTE (`-qp 0`, compte revérifié), déposé chez le moteur | `fichier`, `depot`, `images` |
+| `extraire_image` | une image, par son index exact (`first`/`last`/N) | `fichier`, `depot` |
+| `recoller` | joindre des parts (ré-encodage uniforme, piste silencieuse si muet) | `livrable`, `mesure`, `parts` |
+| `mesurer_raccords` | la ressemblance (SSIM) de part en part, aux frontières du montage réel | `paires`, `pire`, `moyenne` |
+| `verifier` | des contrôles `eq/ne/lte/gte/between/exists` sur ce qui a été mesuré | `controles` |
+
+Une part de `recoller` / `mesurer_raccords` s'écrit `"chemin"` ou
+`{"fichier": "…", "depuis_image": 17}` — le rognage de tête jette le
+chevauchement que l'amont a re-rendu.
+
+Un contrôle faux **arrête** la chaîne (`problem_kind: "controle-echoue"`, avec
+le mesuré ET l'attendu) ; les fichiers déjà produits restent dans les artefacts,
+puisque c'est en les regardant qu'on comprend. Les pièces intermédiaires vivent
+sous `<sortie>/cortex/_travail/<job>/` et ne sont jamais listées comme
+livrables. Annuler le parent arrête le sous-job en cours par les moyens du
+moteur et saute le reste.
+
+Trois chaînes sont livrées : `video-revelation-podcast` (révélation cinématique
+→ queue de 50 images → fermeture → recollage → contrôle),
+`video-revelation-poussee` (révélation au mode CHOISI → poussée caméra →
+recollage) et `video-prolongement` (17 dernières images → prolongement →
+mesure du raccord → recollage sans le chevauchement).
+
+## Vitrine : catégories, titres, menus
+
+Un lanceur ne doit tenir aucune liste : ni de noms de workflow, ni de
+catégories, ni de valeurs. Tout cela est **déclaré à la passerelle**, dans le
+fichier de réconciliation, et servi par le réseau.
+
+* `categories` (clé de premier niveau) : `{"reveler-une-image": {"titre": "Révéler
+  une image", "ordre": 1, "icone": "🖌️"}}` — rendu tel quel par `GET /v1/workflows`.
+* Sur **toute entrée** : `titre`, `description`, `categorie`, `ordre`. Le
+  catalogue les rend sous `presentation`. **Pas de `categorie` ⇒ l'entrée est
+  technique** (étape de chaîne, utilitaire) et n'est pas publiée aux lanceurs.
+  Une entrée qui ne porte QUE ces clés **décore** un graphe déposé dans le
+  dossier des workflows, sans lui faire perdre son auto-liaison.
+* `menus` (clé de premier niveau) : les libellés des valeurs d'un champ. La
+  LISTE, elle, vient toujours du fournisseur — le moteur pour un COMBO de nœud,
+  le catalogue pour un mode de chaîne (`"options_depuis": {"catalogue":
+  {"prefixe": "video-reveal-"}}`). Deux formes :
+
+```jsonc
+"menus": {
+  "mode": { "libelle": "Mode", "libelles": { "sumi-e": { "libelle": "Sumi-e", "groupe": "encre" } } },
+  "style_graphique": { "source_fichier": {
+      "chemin": "…/comfyui-direction-de-style/styles/graphiques.json",
+      "table": "styles", "libelle": "libelle", "resume": "resume", "groupe": "famille" } }
+}
+```
+
+`GET /v1/workflows/{nom}/io` rend alors, par champ, `choix` (valeur, libellé,
+résumé, groupe), `libelle` et `unite`. Une valeur sans libellé apparaît telle
+quelle ; une source illisible rend un `manque` plutôt que de dégarnir le menu
+en silence. Pour une **chaîne**, `/io` répond `described: true` même moteur
+éteint : son contrat est écrit, pas découvert.
 
 ## Ajouter un workflow
 

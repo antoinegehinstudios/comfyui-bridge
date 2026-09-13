@@ -17,3 +17,6 @@ comfyui_bridge/adapter/resources/workflows/
 
 # Notes de travail : journal de session, pas de la documentation produit
 tasks/
+
+# Bac d essai jetable : une seconde instance qui ne touche pas la memoire vivante.
+_data_essai/

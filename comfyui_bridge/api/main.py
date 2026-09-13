@@ -28,7 +28,7 @@ from ..core.jobs import JobStatus
 from ..core.intention import intent_fields
 from ..core.orchestrator import Orchestrator, derivable_params
 from .problems import install_problem_handlers
-from .schemas import ArtifactOut, IntentIn, JobOut, WorkflowImportIn
+from .schemas import ArtifactOut, IntentIn, JobOut, RejeuIn, WorkflowImportIn
 
 _DESCRIPTION = """
 Decoupled orchestration for ComfyUI.
@@ -301,7 +301,274 @@ async def _ingest(container, name: str, graph: dict, source: str | None,
             "revised_problems": revision}
 
 
+# -- chaînes et vitrine --------------------------------------------------------
+#
+# Ce qui suit sert deux besoins que le catalogue ne couvrait pas : une entrée
+# qui est une CHAÎNE (pas de graphe, des étapes), et la PRÉSENTATION (titres,
+# catégories, libellés des menus) sans laquelle un lanceur devait tenir sa
+# propre liste — laquelle vieillit dès que le catalogue bouge.
+
+
+def _menu_declare(c, champ: str | None) -> dict:
+    return dict((getattr(c.catalog, "menus", None) or {}).get(champ or "") or {})
+
+
+def _habiller(c, entree: dict, menu: dict | None = None) -> dict:
+    """Ajouter à un champ ce qu'il faut pour l'AFFICHER : choix, libellé, unité.
+
+    La liste des valeurs reste celle du fournisseur (le moteur, ou le catalogue) ;
+    seuls les libellés sont déclarés ici. Recopier la liste dans un client la
+    figeait le jour où le fournisseur en ajoutait une.
+    """
+    from ..adapter import menus as _menus
+    declare = _menu_declare(c, entree.get("field")) if menu is None else menu
+    choix, manque = _menus.choix(entree.get("options"), declare)
+    if choix is not None:
+        entree["choix"] = choix
+    if manque:
+        entree["manque"] = manque
+    libelle = declare.get("libelle") or entree.get("libelle") or entree.get("label")
+    if libelle:
+        entree["libelle"] = libelle
+    unite = _menus.unite(str(entree.get("field") or ""), declare.get("unite")
+                         or entree.get("unite"))
+    if unite:
+        entree["unite"] = unite
+    return entree
+
+
+def _options_du_catalogue(c, filtre: Any) -> tuple[list[str], dict[str, Any]]:
+    """Les entrées PUBLIÉES du catalogue qui répondent au filtre, et leurs titres.
+
+    Une chaîne dont un champ choisit « le mode de révélation » ne doit pas
+    porter la liste des modes : elle vieillirait à chaque ajout. Elle dit d'où
+    la liste vient, et la passerelle la remplit depuis ses propres entrées.
+    """
+    reglage = filtre if isinstance(filtre, dict) else {}
+    prefixe = str(reglage.get("prefixe") or "")
+    categorie = reglage.get("categorie")
+    exclure = set(reglage.get("exclure") or ())
+    trouves: list[tuple[int, str, str]] = []
+    libelles: dict[str, Any] = {}
+    for nom in c.catalog.names():
+        spec = c.catalog.get_spec(nom)
+        if spec.categorie is None or nom in exclure:
+            continue                      # non publiée : technique, pas un choix d'utilisateur
+        if prefixe and not nom.startswith(prefixe):
+            continue
+        if categorie and spec.categorie != categorie:
+            continue
+        trouves.append((spec.ordre, nom, nom))
+        rubrique = (c.catalog.categories or {}).get(spec.categorie) or {}
+        libelles[nom] = {"libelle": spec.titre or nom, "resume": spec.description,
+                         "groupe": rubrique.get("titre")}
+    return [nom for _, _, nom in sorted(trouves)], libelles
+
+
+def _options_exposees(c, chaine) -> dict[str, tuple]:
+    """Les valeurs permises de chaque champ COMBO d'une chaîne."""
+    sorties: dict[str, tuple] = {}
+    for nom, champ in chaine.champs.items():
+        if champ.options_depuis is not None:
+            filtre = champ.options_depuis
+            if isinstance(filtre, dict):
+                filtre = filtre.get("catalogue", filtre)
+            sorties[nom] = tuple(_options_du_catalogue(c, filtre)[0])
+        elif champ.options is not None:
+            sorties[nom] = tuple(champ.options)
+    return sorties
+
+
+def _intent_inputs_chaine(c, chaine) -> list[dict]:
+    """Le formulaire d'une chaîne, lu dans sa rubrique « expose ».
+
+    Décrit sans le moteur : une chaîne n'a pas de graphe à interroger, et son
+    contrat ne doit pas dépendre de ce que ComfyUI répondait ce jour-là.
+    """
+    entrees: list[dict] = []
+    for nom, champ in chaine.champs.items():
+        if champ.media is not None:
+            continue                       # les pièces jointes ont leur propre rubrique
+        menu = _menu_declare(c, nom)
+        options = champ.options
+        if champ.options_depuis is not None:
+            filtre = champ.options_depuis
+            if isinstance(filtre, dict):
+                filtre = filtre.get("catalogue", filtre)
+            options, libelles = _options_du_catalogue(c, filtre)
+            menu = {"libelles": libelles, **menu}
+        entree: dict[str, Any] = {
+            "field": nom, "param": nom, "node": None, "input": None,
+            "type": champ.type, "value": champ.defaut, "derived": False,
+            "requis": champ.requis, "libelle": champ.libelle,
+        }
+        for cle, valeur in (("min", champ.minimum), ("max", champ.maximum),
+                            ("step", champ.pas), ("unite", champ.unite)):
+            if valeur is not None:
+                entree[cle] = valeur
+        if options is not None:
+            entree["options"] = list(options)
+        entrees.append(_habiller(c, entree, menu))
+    return entrees
+
+
+def _media_inputs_chaine(chaine) -> list[dict]:
+    from ..adapter.media_inputs import ACCEPT
+    return [{"param": nom, "category": champ.media, "label": champ.libelle,
+             "accept": ACCEPT.get(champ.media, "*/*"), "neutral": False,
+             "carried": None, "node": None, "input": None, "class_type": None,
+             "requis": champ.requis}
+            for nom, champ in chaine.champs.items() if champ.media is not None]
+
+
+def _etapes_annoncees(chaine) -> list[dict]:
+    return [{"id": e.id, "genre": e.genre, "workflow": e.workflow} for e in chaine.etapes]
+
+
+def _demande_plate(corps: dict) -> dict:
+    """Le corps d'une intention, ramené aux champs que la chaîne peut recevoir.
+
+    Ce que la passerelle possède (le nom du workflow, l'étiquette de sortie) ne
+    lui est pas soumis ; les pièces jointes envoyées sous « media » comptent
+    comme envoyées à la racine, puisque c'est la même chose dite deux façons.
+    """
+    reserves = {"workflow", "label", "kind", "media"}
+    plate = {k: v for k, v in (corps or {}).items() if k not in reserves}
+    plate.update({k: v for k, v in ((corps or {}).get("media") or {}).items()})
+    return plate
+
+
+def _valeurs_chaine(c, chaine, corps: dict) -> dict:
+    from ..core import chaine as _noyau
+    return _noyau.valeurs(chaine, _demande_plate(corps), _options_exposees(c, chaine))
+
+
+def _intention_detape(params: dict, label: str = "") -> Any:
+    """Le run que décrit une étape « rendre », en intention.
+
+    Les renvois non résolus (les résultats d'étapes, qui n'existent pas encore)
+    sont ÉCARTÉS : c'est ce qui permet de décrire et d'estimer une chaîne avant
+    de la lancer, sans inventer de valeur.
+    """
+    from ..core.intention import MediaKind, RenderIntent
+    reglages = {k: v for k, v in params.items()
+                if not (isinstance(v, str) and v.startswith("$"))}
+    nom = str(reglages.pop("workflow", "") or "")
+    media = {k: str(v) for k, v in (reglages.pop("media", None) or {}).items()
+             if v and not (isinstance(v, str) and v.startswith("$"))}
+    reglages.pop("label", None)
+    reglages.pop("constraints", None)
+    genre = reglages.pop("kind", None)
+    return RenderIntent(workflow=nom, media=media, label=label,
+                        kind=MediaKind(genre) if genre else None, **reglages)
+
+
+def _estimation_chaine(c, chaine, valeurs: dict) -> dict:
+    """La somme des étapes « rendre ». Muette dès qu'une seule ne se mesure pas.
+
+    Additionner ce qui est connu en taisant ce qui ne l'est pas donnerait une
+    estimation plus courte que la réalité — pire qu'une absence d'estimation.
+    """
+    from ..core import chaine as _noyau
+    lignes: list[dict] = []
+    total = bas = haut = 0.0
+    manque: str | None = None
+    for etape in chaine.rendus:
+        params = _noyau.resoudre(etape.params, valeurs, {}, strict=False)
+        # Le workflow d'une étape peut être CHOISI à l'appel (« $mode ») : c'est
+        # le nom résolu qui a une mesure, pas le renvoi.
+        vise = str(params.get("workflow") or etape.workflow or "")
+        estimation = None
+        try:
+            plan = c.orchestrator.build_plan(_intention_detape(params, label="estimation"))
+            _with_work(c, plan)
+            estimation = c.registry.estimate_duration(
+                c.settings.host_id, plan.workflow, plan.work, plan.config,
+                work_model=plan.work_model)
+        except Exception as exc:            # noqa: BLE001 — un refus se dit, il n'arrête pas
+            manque = manque or f"étape {etape.id} : {exc}"
+        lignes.append({"id": etape.id, "workflow": vise, "estimate": estimation})
+        if estimation is None:
+            manque = manque or f"étape {etape.id} ({vise}) n'a jamais été mesurée ici"
+        else:
+            total += estimation.get("seconds") or 0
+            bas += estimation.get("min") or estimation.get("seconds") or 0
+            haut += estimation.get("max") or estimation.get("seconds") or 0
+    sortie: dict[str, Any] = {"workflow": chaine.nom, "chaine": True, "etapes": lignes}
+    if manque:
+        sortie["estimate"] = None
+        sortie["manque"] = manque
+    else:
+        sortie["estimate"] = {"seconds": round(total), "min": round(bas), "max": round(haut),
+                              "basis": "somme des étapes"}
+    return sortie
+
+
+def _readiness_chaine(c, chaine) -> dict:
+    """Une chaîne est praticable quand toutes ses étapes le sont."""
+    avertissements: list[dict] = []
+    bloquante: dict | None = None
+    non_juges: list[str] = []
+    for etape in chaine.rendus:
+        nom = etape.workflow or ""
+        if nom.startswith("$"):
+            # Le workflow de cette étape est choisi à l'appel : la mémoire ne
+            # peut rien en dire d'avance. Le taire ferait passer « pas jugé »
+            # pour « rien à signaler ».
+            non_juges.append(f"{etape.id} (le workflow est choisi par « {nom} »)")
+            continue
+        for w in c.registry.known_warnings(c.settings.host_id, nom):
+            avertissements.append({"problem": w.get("problem"), "etape": etape.id,
+                                   "detail": (w.get("detail") or "")[:300],
+                                   "config": w.get("config"), "last_seen": w.get("ts")})
+        blocages = c.registry.blocking_problems(c.settings.host_id, nom)
+        if blocages and bloquante is None:
+            premier = blocages[0]
+            bloquante = {"problem": premier.get("problem"), "etape": etape.id,
+                         "workflow": nom, "detail": (premier.get("detail") or "")[:300],
+                         "config": premier.get("config"), "last_seen": premier.get("ts")}
+    if bloquante is None:
+        return {"workflow": chaine.nom, "chaine": True, "runnable": True,
+                "warnings": avertissements, "revisions": [], "non_juge": non_juges}
+    return {"workflow": chaine.nom, "chaine": True, "runnable": False,
+            "warnings": avertissements, "revisions": [], "non_juge": non_juges,
+            "retry_hint": "POST /v1/render?force=true pour essayer malgré ce souvenir",
+            **bloquante}
+
+
+def _extras_admis(c, intent_in) -> dict:
+    """Les champs hors modèle : admis SEULEMENT par une chaîne qui les expose.
+
+    Le modèle d'intention accepte tout pour pouvoir en juger ici, où l'on sait
+    quel workflow est visé. Sans ce contrôle, un nom mal orthographié repartait
+    avec un 202 et ne pilotait rien.
+    """
+    extras = dict(getattr(intent_in, "model_extra", None) or {})
+    if not extras:
+        return {}
+    try:
+        spec = c.catalog.get_spec(intent_in.workflow)
+    except Exception:
+        spec = None
+    exposes = set(spec.exposes) if spec is not None and spec.est_chaine else set()
+    inconnus = sorted(k for k in extras if k not in exposes)
+    if inconnus:
+        cible = (spec.name if spec is not None else intent_in.workflow) or "(défaut)"
+        raise UnknownWorkflowInputError(
+            f"{cible} n'a pas de champ " + ", ".join(repr(k) for k in inconnus)
+            + (f" — il accepte : {', '.join(sorted(exposes))}" if exposes else ""),
+            workflow=cible, fields=inconnus)
+    return extras
+
+
 def _spec_dict(spec) -> dict:
+    if spec.est_chaine:
+        return {"name": spec.name, "kind": spec.kind, "chaine": True,
+                "presentation": spec.presentation, "accepts": sorted(spec.exposes),
+                "intent_fields": sorted(spec.exposes), "derived": [],
+                "defaults": spec.defaults, "limits": spec.limits,
+                "workflow_source": str(spec.workflow_path), "bindings": {},
+                "dependencies": spec.dependencies, "source": None, "source_hash": None}
     return {
         "name": spec.name,
         "kind": spec.kind,
@@ -316,6 +583,8 @@ def _spec_dict(spec) -> dict:
         "dependencies": spec.dependencies,
         "workflow_source": str(spec.workflow_path),
         "bindings": {k: {"node": b.node, "input": b.input} for k, b in spec.bindings.items()},
+        "chaine": False,
+        "presentation": spec.presentation,
     }
 
 
@@ -359,6 +628,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "engine": c.engine.name,
             "engine_state": c.engine_state.get("state"),
             "output_dir": str(c.settings.comfy_output_dir.resolve()),
+            # The hard ceiling on ONE job here. A caller that plans a longer
+            # wait than this is planning something that cannot happen: the job
+            # is killed at this mark whatever it asked for. Measured cost of not
+            # saying it: a caller waited an hour for a run it had budgeted four
+            # hours for, and learned the ceiling from the failure.
+            "job_max_duration_s": c.settings.comfyui_total_timeout_s,
         }
 
     @app.get("/v1/backend", tags=["backend"])
@@ -373,20 +648,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             info["probe"] = {"available": None, "reason": "backend has no server to probe"}
         return info
 
-    @app.post("/v1/render", status_code=202, response_model=JobOut, tags=["render"])
-    async def render(
-        intent_in: IntentIn,
-        request: Request,
-        response: Response,
-        background: BackgroundTasks,
-        force: bool = False,
-    ) -> JobOut:
-        orch = get_orchestrator(request)
+    def _creer(c, intent_in: IntentIn, corps: dict, background: BackgroundTasks,
+               response: Response, force: bool = False) -> JobOut:
+        """Le seul verbe de création, qu'on vise un graphe ou une chaîne.
+
+        Écrit une fois : le rejeu passe exactement par ici, sinon il aurait
+        fallu tenir deux façons de lancer un run, qui auraient divergé.
+        """
+        _extras_admis(c, intent_in)
+        spec = c.catalog.get_spec(intent_in.workflow)
+        if spec.est_chaine:
+            job = _lancer_chaine(c, spec, corps, background, force)
+            response.headers["Location"] = f"/v1/jobs/{job.id}"
+            return JobOut.of(job)
+        orch = c.orchestrator
         # accept() plans + reconciles synchronously; a strict rejection raises
         # HardwareReconciliationError here and leaves as a 422 problem+json.
-        c = request.app.state.container
         job, plan = orch.accept(intent_in.to_domain(), force=force)
         _with_work(c, plan)
+        # La demande TELLE QUE REÇUE, gardée avec le run : c'est ce qui le rend
+        # rejouable sans que l'appelant réassemble quoi que ce soit.
+        c.store.set_demande(job.id, corps)
         # Ce qui tourne, c'est l'ANALYSE stockée. Si la source a bougé depuis,
         # le run exécute l'ancienne version : mesuré, il a rendu un .flac là où
         # la nouvelle sauve un .mp3, sans un mot.
@@ -401,6 +683,61 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["Location"] = f"/v1/jobs/{job.id}"
         return JobOut.of(job)
 
+    def _lancer_chaine(c, spec, corps: dict, background: BackgroundTasks,
+                       force: bool = False):
+        from ..adapter.chaines import RunnerDeChaines, etapes_initiales
+        from ..core.cost import config_fingerprint
+        chaine = c.catalog.chaine(spec)
+        valeurs = _valeurs_chaine(c, chaine, corps)          # 422 sur l'inconnu, sur le hors-bornes
+        etiquette = "".join(ch for ch in str(corps.get("label") or "")
+                            if ch.isalnum() or ch in "-_")[:40] or spec.name
+        job = c.store.create(kind=spec.kind, workflow=spec.name,
+                             config=config_fingerprint(valeurs), params=valeurs,
+                             demande=dict(corps or {}))
+        c.store.set_etapes(job.id, etapes_initiales(chaine))
+        c.store.append_log(job.id, f"accepted: chaîne '{spec.name}' — "
+                                   f"{len(chaine.etapes)} étapes, sortie « cortex/{etiquette} »")
+        background.add_task(RunnerDeChaines(c).executer, job.id, chaine, valeurs,
+                            etiquette, force)
+        return c.store.get(job.id)
+
+    @app.post("/v1/render", status_code=202, response_model=JobOut, tags=["render"])
+    async def render(
+        intent_in: IntentIn,
+        request: Request,
+        response: Response,
+        background: BackgroundTasks,
+        force: bool = False,
+    ) -> JobOut:
+        c = request.app.state.container
+        corps = await request.json()
+        return _creer(c, intent_in, corps if isinstance(corps, dict) else {},
+                      background, response, force)
+
+    @app.post("/v1/jobs/{job_id}/rejouer", status_code=202, response_model=JobOut,
+              tags=["render"])
+    async def rejouer(job_id: str, request: Request, response: Response,
+                      background: BackgroundTasks, corps: RejeuIn | None = None,
+                      force: bool = False) -> JobOut:
+        """Rejouer un run, à l'identique ou avec des réglages changés.
+
+        Le serveur garde la demande telle qu'il l'a reçue ; rejouer, c'est la
+        renvoyer. Reconstruire la demande à partir des paramètres résolus
+        rendait autre chose que ce qui avait été demandé — et obligeait chaque
+        client à savoir comment la passerelle résout.
+        """
+        c = request.app.state.container
+        job = c.store.get(job_id)                         # 404 si inconnu
+        demande = dict(job.demande or {})
+        if not demande:
+            raise UnknownWorkflowInputError(
+                f"le run {job_id} n'a pas gardé la demande qui l'a produit : "
+                f"il est antérieur à cette mémoire", job_id=job_id)
+        demande.setdefault("workflow", job.workflow)
+        demande.update(dict((corps.reglages if corps else {}) or {}))
+        return _creer(c, IntentIn.model_validate(demande), demande, background,
+                      response, force)
+
     @app.post("/v1/preview", tags=["render"])
     async def preview(intent_in: IntentIn, request: Request) -> dict:
         # Same plan + Hermes reconciliation as /v1/render (can 422), but stops
@@ -409,6 +746,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # for a workflow a past problem stands against. Hermes' opinion is
         # reported alongside instead of blocking the view.
         c = request.app.state.container
+        _extras_admis(c, intent_in)
+        spec = c.catalog.get_spec(intent_in.workflow)
+        if spec.est_chaine:
+            from ..core import chaine as _noyau
+            chaine = c.catalog.chaine(spec)
+            corps = await request.json()
+            valeurs = _valeurs_chaine(c, chaine, corps if isinstance(corps, dict) else {})
+            # Pas de graphe : une chaîne n'en a pas. Ce qu'il y a à voir avant de
+            # dépenser, c'est la SUITE des étapes et les valeurs qu'elles recevront.
+            return {"workflow": spec.name, "chaine": True, "params": valeurs,
+                    "etapes": [{"id": e.id, "genre": e.genre, "workflow": e.workflow,
+                                "params": _noyau.resoudre(e.params, valeurs, {}, strict=False)}
+                               for e in chaine.etapes],
+                    "livrable": chaine.livrable}
         plan = c.orchestrator.build_plan(intent_in.to_domain())
         verdict = c.reconciler.reconcile(plan)
         pv = c.backend.preview(plan)
@@ -440,8 +791,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         items = {}
         for name in cat.names():
             spec = cat.get_spec(name)
+            if spec.est_chaine:
+                chaine = cat.chaine(spec)
+                items[name] = {
+                    "kind": spec.kind,
+                    "chaine": True,
+                    "presentation": spec.presentation,
+                    "resume": chaine.resume,
+                    # Ce qu'elle enchaîne : un appelant doit pouvoir dire ce
+                    # qu'il lance avant de le lancer.
+                    "etapes": _etapes_annoncees(chaine),
+                    "accepts": sorted(spec.exposes),
+                    "intent_fields": sorted(spec.exposes),
+                    # Praticable = toutes ses étapes le sont.
+                    "runnable": _readiness_chaine(c, chaine)["runnable"],
+                    "warned": bool(_readiness_chaine(c, chaine)["warnings"]),
+                    "source_changed": False,
+                    "derived": [],
+                    "carried": {},
+                    "neutral_for": [],
+                    "media_inputs": _media_inputs_chaine(chaine),
+                    "defaults": spec.defaults,
+                    "limits": spec.limits,
+                    "dependencies": spec.dependencies,
+                    "source": None,
+                    "workflow_source": str(spec.workflow_path),
+                    "bindings": {},
+                }
+                continue
             items[name] = {
                 "kind": spec.kind,
+                "chaine": False,
+                # La vitrine : sans `categorie`, l'entrée reste technique et un
+                # lanceur ne la propose pas.
+                "presentation": spec.presentation,
                 # What this workflow can actually receive. A field it does not
                 # bind goes nowhere: offering it would be a lie.
                 "accepts": sorted(spec.profile.accepts),
@@ -479,10 +862,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from ..core.intention import MEDIA_CATEGORIES, ConstraintOp, MediaKind
         return {
             "default": cat.default_name(),
+            # Les rubriques de la vitrine, déclarées au fichier de réconciliation.
+            # Un lanceur qui tiendrait sa propre liste de catégories la verrait
+            # vieillir dès qu'une entrée change de rangement.
+            "categories": cat.categories,
             "workflows": items,
             # Des graphes enregistrés qu'une entrée déclarée du fichier de
             # réconciliation recouvre : ce qui est masqué doit se voir.
             "shadowed_by_declaration": list(getattr(cat, "shadowed", ())),
+            # Des titres déclarés pour un workflow absent : renommé ou retiré.
+            "presentation_sans_workflow": list(getattr(cat, "vitrines_orphelines", ())),
             # Vocabulary comes from the domain enums — the UI must not keep a copy.
             "vocabulary": {
                 "kinds": [k.value for k in MediaKind],
@@ -561,6 +950,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         so the UI does not offer a workflow that is known to fail."""
         c = request.app.state.container
         spec = c.catalog.get_spec(name)
+        if spec.est_chaine:
+            return _readiness_chaine(c, c.catalog.chaine(spec))
         # Same reading of the memory as the reconciler: a problem the host has
         # since overcome no longer stands, and one met on another configuration
         # is named as such instead of condemning the workflow as a whole.
@@ -610,6 +1001,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """How long THIS intent will take here — resolution, frames and steps
         included. Fitted on measured runs; silent when nothing was measured."""
         c = request.app.state.container
+        _extras_admis(c, intent_in)
+        spec = c.catalog.get_spec(intent_in.workflow)
+        if spec.est_chaine:
+            chaine = c.catalog.chaine(spec)
+            corps = await request.json()
+            valeurs = _valeurs_chaine(c, chaine, corps if isinstance(corps, dict) else {})
+            return _estimation_chaine(c, chaine, valeurs)
         plan = c.orchestrator.build_plan(intent_in.to_domain())
         values = _with_work(c, plan)
         return {
@@ -629,20 +1027,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from ..adapter.workflow_io import describe_io
         c = request.app.state.container
         spec = c.catalog.get_spec(name)
+        probe = c.comfyui.probe()
+        if spec.est_chaine:
+            # Une chaîne se décrit MOTEUR ÉTEINT : son contrat est écrit, pas
+            # découvert. Le taire quand le moteur dort aurait rendu un
+            # formulaire vide pour une chaîne parfaitement lançable.
+            chaine = c.catalog.chaine(spec)
+            return {"name": spec.name, "engine": probe, "described": True, "chaine": True,
+                    "resume": chaine.resume,
+                    "intent_inputs": _intent_inputs_chaine(c, chaine),
+                    "media_inputs": _media_inputs_chaine(chaine),
+                    "media_inputs_unbound": [],
+                    "etapes": _etapes_annoncees(chaine),
+                    "inputs": [], "outputs": []}
         # Les liaisons d'un montage visent des rôles (« $commun.style ») : c'est
         # le dépliage qui leur donne un numéro de nœud, et donc des options.
         graph, liaisons = c.catalog.monter(spec)
-        probe = c.comfyui.probe()
         if not probe.get("available"):
             return {"name": spec.name, "engine": probe, "described": False}
         object_info = await run_in_threadpool(c.comfyui.get_object_info)
         io = describe_io(graph, object_info, spec.titles)
         from ..adapter import media_inputs
         from ..adapter.workflow_io import intent_inputs
-        return {"name": spec.name, "engine": probe, "described": True,
+        return {"name": spec.name, "engine": probe, "described": True, "chaine": False,
                 # The contract to program against: field name, bounds, current
-                # value — the join done once, server side.
-                "intent_inputs": intent_inputs(io["inputs"], liaisons, spec.kind),
+                # value — the join done once, server side. Habillé de ce qu'il
+                # faut pour l'afficher : libellés des valeurs, unité.
+                "intent_inputs": [_habiller(c, e)
+                                  for e in intent_inputs(io["inputs"], liaisons, spec.kind)],
                 # Les pièces jointes pilotables…
                 "media_inputs": media_inputs.describe(liaisons, spec.titles,
                                                       spec.carried, graph),
@@ -711,6 +1123,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             pass
         return await _ingest(c, reg_name, graph, name, src_hash, titles)
+
+    # Déclarée AVANT "/v1/jobs/{job_id}" : sinon la liste est lue comme un
+    # identifiant de job et répond 404.
+    @app.get("/v1/jobs", tags=["render"])
+    async def list_jobs(request: Request, limit: int = 50) -> dict:
+        """Les runs, du plus récent au plus ancien — mémoire ET persistés.
+
+        Un appelant qui veut montrer ses livraisons n'a pas à tenir la liste
+        des identifiants qu'il a lancés : elle vit ici, et survit à un
+        redémarrage de la passerelle.
+        """
+        c = request.app.state.container
+        return {"jobs": [_with_engine_state(c, JobOut.of(j).model_dump())
+                         for j in c.store.list(limit)]}
 
     @app.get("/v1/jobs/{job_id}", tags=["render"])
     async def get_job(job_id: str, request: Request) -> dict:
@@ -928,23 +1354,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         Pending in the queue -> ComfyUI drops that prompt (the others keep their
         place). Already running -> ComfyUI's own interrupt. Both are the engine's
-        official operations; we keep no queue of our own to cancel."""
+        official operations; we keep no queue of our own to cancel.
+
+        Une CHAÎNE n'a pas de run à elle : on note l'arrêt sur le parent — les
+        étapes restantes ne seront pas faites — et on arrête le sous-job en
+        cours par ces mêmes moyens."""
+        from ..adapter.chaines import arreter_au_moteur
         c = request.app.state.container
         job = c.store.get(job_id)                     # raises if unknown
-        ref = getattr(job, "engine_ref", None)
-        if not ref:
-            return {"cancelled": False, "reason": "ce job n'a pas encore été pris par le moteur"}
-        q = await run_in_threadpool(c.comfyui.queue)
-        c.store.request_cancel(job_id)
-        if ref in q.get("pending", []):
-            out = await run_in_threadpool(c.comfyui.cancel, [ref])
-            c.store.append_log(job_id, "annulé dans la file du moteur (il n'avait pas commencé)")
-            return {"cancelled": True, "how": "queue-delete", **out}
-        if ref in q.get("running", []):
-            out = await run_in_threadpool(c.comfyui.interrupt)
-            c.store.append_log(job_id, "interruption demandée au moteur (run en cours)")
-            return {"cancelled": True, "how": "interrupt", **out}
-        return {"cancelled": False, "reason": "le moteur ne connaît plus ce run"}
+        if job.etapes:
+            c.store.request_cancel(job_id)
+            courante = next((e for e in job.etapes
+                             if e.get("statut") == "running" and e.get("job_id")), None)
+            if courante is None:
+                c.store.append_log(job_id, "arrêt demandé — la chaîne s'arrêtera à "
+                                           "la fin de l'étape en cours")
+                return {"cancelled": True, "how": "chaine", "etape": None}
+            out = await run_in_threadpool(arreter_au_moteur, c, courante["job_id"])
+            c.store.append_log(job_id, f"arrêt demandé — étape {courante['id']} "
+                                       f"({out.get('how') or out.get('reason')})")
+            return {"cancelled": True, "how": "chaine", "etape": courante["id"],
+                    "sous_job": out}
+        return await run_in_threadpool(arreter_au_moteur, c, job_id)
 
     @app.post("/v1/engine/restart", tags=["backend"])
     async def engine_restart(request: Request, force: bool = False) -> dict:

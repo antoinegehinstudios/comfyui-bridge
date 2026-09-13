@@ -1,0 +1,74 @@
+{
+  "_lire_moi": "Extrait du fichier de réconciliation : ce qu'il faut y ajouter pour que ces chaînes et cette vitrine existent. Les valeurs entre chevrons sont à remplacer par les chemins de LA machine (le dépôt n'en publie aucun). Un chemin de chaîne peut aussi être relatif au fichier de réconciliation.",
+
+  "categories": {
+    "reveler-une-image": { "titre": "Révéler une image", "ordre": 1, "icone": "🖌️",
+      "resume": "L'image apparaît, peinte ou dévoilée, puis la caméra la tient." },
+    "animer-une-image": { "titre": "Image → vidéo", "ordre": 2, "icone": "🎞️",
+      "resume": "Une image de départ, un modèle qui la met en mouvement." },
+    "video-longue": { "titre": "Vidéo longue dirigée", "ordre": 3, "icone": "🎬",
+      "resume": "Plusieurs minutes tenues par un style graphique et des temps de récit." },
+    "prolonger-une-video": { "titre": "Prolonger une vidéo", "ordre": 4, "icone": "⏩",
+      "resume": "Repartir de la fin d'un plan et continuer la scène." },
+    "texte-vers-video": { "titre": "Texte → vidéo", "ordre": 5, "icone": "✍️",
+      "resume": "Rien qu'une consigne écrite." },
+    "son": { "titre": "Son", "ordre": 6, "icone": "🔊", "resume": "Musique et ambiances générées." },
+    "3d": { "titre": "3D", "ordre": 7, "icone": "🧊", "resume": "De la photo au maillage." }
+  },
+
+  "menus": {
+    "style_graphique": {
+      "libelle": "Style graphique",
+      "source_fichier": {
+        "chemin": "<ComfyUI>/custom_nodes/comfyui-direction-de-style/styles/graphiques.json",
+        "table": "styles", "libelle": "libelle", "resume": "resume", "groupe": "famille"
+      }
+    },
+    "style_narratif": {
+      "libelle": "Style narratif",
+      "source_fichier": {
+        "chemin": "<ComfyUI>/custom_nodes/comfyui-direction-de-style/styles/narratifs.json",
+        "table": "styles", "libelle": "libelle", "resume": "resume", "groupe": "famille"
+      }
+    },
+    "prompt": { "libelle": "Sujet" },
+    "negative_prompt": { "libelle": "À éviter" },
+    "seed": { "libelle": "Graine" },
+    "duration_s": { "libelle": "Durée" },
+    "fps": { "libelle": "Images par seconde" },
+    "width": { "libelle": "Largeur" },
+    "height": { "libelle": "Hauteur" },
+    "steps": { "libelle": "Pas de débruitage" },
+    "cfg": { "libelle": "Adhérence à la consigne" },
+    "batch": { "libelle": "Nombre d'images" }
+  },
+
+  "workflows": {
+    "video-revelation-podcast": {
+      "kind": "video",
+      "chaine": "<dossier de données>/chaines/video-revelation-podcast.json",
+      "description": "Analyse, intention et révélation cinématique de l'image, puis la page se referme sur la queue de la révélation ; recollé et contrôlé.",
+      "titre": "Révélation pour podcast", "categorie": "reveler-une-image", "ordre": 1
+    },
+    "video-revelation-poussee": {
+      "kind": "video",
+      "chaine": "<dossier de données>/chaines/video-revelation-poussee.json",
+      "description": "Une révélation au mode choisi, prolongée par une poussée caméra sur la même image (cadrage identique, donc raccord sans couture).",
+      "titre": "Révélation puis poussée caméra", "categorie": "reveler-une-image", "ordre": 2
+    },
+    "video-prolongement": {
+      "kind": "video",
+      "chaine": "<dossier de données>/chaines/video-prolongement.json",
+      "description": "Prolonger une vidéo : ses 17 dernières images sont remises au modèle, le chevauchement re-rendu est jeté au recollage, le raccord est mesuré.",
+      "titre": "Prolonger un plan", "categorie": "prolonger-une-video", "ordre": 1
+    },
+
+    "_vitrine_seule": "Une entrée qui ne porte QUE titre/categorie/ordre DÉCORE un graphe déposé dans le dossier des workflows, sans lui faire perdre son auto-liaison. Exemple ci-dessous.",
+    "video_ltx2_3_i2v": { "titre": "LTX-2.3 image → vidéo (son inclus)",
+                          "categorie": "animer-une-image", "ordre": 1 },
+    "video-reveal-cinematic": { "titre": "Révélation cinématique (analyse + intention)",
+                                "categorie": "reveler-une-image", "ordre": 3 },
+    "video-still-motion": { "titre": "Poussée caméra seule (Ken Burns)",
+                            "categorie": "reveler-une-image", "ordre": 10 }
+  }
+}

@@ -22,10 +22,13 @@ class ConstraintIn(BaseModel):
 
 
 class IntentIn(BaseModel):
-    # A field this model does not know is a caller mistake, and silence made it
-    # a trap: `latent_batch` (the name the catalogue announced) was accepted
-    # with a 200 and dropped. Refusing names the real cause.
-    model_config = ConfigDict(extra="forbid")
+    # Un champ que ce modèle ne connaît pas n'est PAS admis d'office : le
+    # silence en avait fait un piège (« latent_batch », le nom que le catalogue
+    # annonçait, était accepté avec un 200 puis jeté). Il est retenu ici, et la
+    # route le confronte au workflow visé : une CHAÎNE déclare ses propres
+    # champs (« conclusion_s », « mode »), qui s'envoient à la racine du corps ;
+    # tout le reste est refusé en nommant la cause.
+    model_config = ConfigDict(extra="allow")
 
     # Optionnel : tous les workflows n'ont pas de texte (mise à l'échelle,
     # interpolation…). L'exiger obligeait un appelant à inventer "(sans prompt)",
@@ -148,6 +151,14 @@ class JobOut(BaseModel):
     duration_s: float | None = None      # measured by the engine, queue excluded
     problem: dict[str, Any] | None
     logs: list[str]
+    # Les étapes d'une CHAÎNE, avec le sous-job de chacune. Absentes d'un run
+    # ordinaire, qui n'en a pas.
+    etapes: list[dict[str, Any]] = []
+    # Le corps d'intention tel qu'il a été reçu : ce qui rend le run rejouable
+    # sans que l'appelant réassemble quoi que ce soit.
+    demande: dict[str, Any] = {}
+    # La chaîne dont ce run est une étape, s'il y en a une.
+    parent: str | None = None
     created_at: str
     updated_at: str
 
@@ -168,6 +179,23 @@ class JobOut(BaseModel):
             duration_s=job.duration_s,
             problem=job.problem,
             logs=job.logs,
+            etapes=job.etapes,
+            demande=job.demande,
+            parent=job.parent,
             created_at=job.created_at,
             updated_at=job.updated_at,
         )
+
+
+class RejeuIn(BaseModel):
+    """Rejouer un run, à l'identique ou avec des réglages changés.
+
+    Le corps est facultatif : sans lui, c'est exactement la même demande. Ce
+    qui est nommé dans ``reglages`` remplace le champ correspondant — le reste
+    ne bouge pas, et l'appelant n'a rien à réassembler.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reglages: dict[str, Any] = Field(default_factory=dict,
+                                     examples=[{"seed": 4242, "duration_s": 30}])

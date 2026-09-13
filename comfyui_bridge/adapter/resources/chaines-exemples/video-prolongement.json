@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "chaine": "video-prolongement",
+  "resume": "Prolonger une vidéo existante : ses 17 dernières images sont remises au modèle, qui invente la suite ; le chevauchement re-rendu est jeté au recollage, et le raccord est mesuré.",
+  "expose": {
+    "video": { "media": "video", "requis": true, "libelle": "La vidéo à prolonger" },
+    "suite": { "type": "STRING", "defaut": "the scene continues seamlessly", "libelle": "Ce qui doit se passer ensuite" },
+    "duration_s": { "type": "FLOAT", "defaut": 5, "min": 2, "max": 10, "step": 1, "libelle": "Durée du prolongement", "unite": "s" },
+    "seed": { "type": "INT", "defaut": 71, "libelle": "Graine" }
+  },
+  "etapes": [
+    {
+      "id": "queue",
+      "extraire_queue": { "video": "$video", "images": 17 }
+    },
+    {
+      "id": "extension",
+      "rendre": {
+        "workflow": "video_ltx2_3_extend",
+        "media": { "video": "$queue.depot" },
+        "prompt": "$suite",
+        "negative_prompt": "text, watermark, caption, deformed faces, extra limbs, jump cut, cartoon, low quality",
+        "duration_s": "$duration_s",
+        "fps": 25,
+        "width": 1280,
+        "height": 704,
+        "seed": "$seed"
+      }
+    },
+    {
+      "id": "raccord",
+      "mesurer_raccords": {
+        "parts": ["$video", { "fichier": "$extension.livrable", "depuis_image": 17 }]
+      }
+    },
+    {
+      "id": "final",
+      "recoller": {
+        "parts": ["$video", { "fichier": "$extension.livrable", "depuis_image": 17 }],
+        "fps": 25,
+        "largeur": 1280,
+        "hauteur": 704
+      }
+    },
+    {
+      "id": "controle",
+      "verifier": [
+        { "id": "raccord_franc", "valeur": "$raccord.pire", "op": "gte", "attendu": 0.72 },
+        { "id": "duree_tenue", "valeur": "$final.mesure.duration_s", "op": "gte", "attendu": 4 }
+      ]
+    }
+  ],
+  "livrable": "$final.livrable"
+}

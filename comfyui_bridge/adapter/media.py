@@ -59,13 +59,22 @@ DELIVERY_MECHANISM = 2
 # embarquer la leur.
 SIDECAR_SUFFIX = ".origine.json"
 
+# Le dossier où une chaîne pose ses pièces intermédiaires (queues extraites,
+# images de raccord). Ce sont de vrais .mp4 et de vrais .png, indistinguables
+# d'un livrable par leur extension : sans ce nom réservé, la liste des livrables
+# offrait 50 images de travail avant la vidéo commandée.
+DOSSIER_DE_TRAVAIL = "_travail"
+
 
 def is_working_file(path: Path | str) -> bool:
-    nom = Path(path).name
+    p = Path(path)
+    nom = p.name
     return (nom.startswith("_workflow_") or nom.endswith(".manifest.json")
             # L'origine écrite à côté d'un livrable qui ne sait pas la porter
             # accompagne ce livrable : elle n'en est pas un elle-même.
-            or nom.endswith(SIDECAR_SUFFIX))
+            or nom.endswith(SIDECAR_SUFFIX)
+            # Tout ce qui vit sous un dossier de travail, à quelque profondeur.
+            or DOSSIER_DE_TRAVAIL in p.parts[:-1])
 
 
 def output_refs(entry: dict) -> list[dict]:
