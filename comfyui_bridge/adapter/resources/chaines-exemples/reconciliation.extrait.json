@@ -36,6 +36,13 @@
         "table": "styles", "libelle": "libelle", "resume": "resume", "groupe": "famille"
       }
     },
+    "style_approche": {
+      "libelle": "Approche",
+      "source_fichier": {
+        "chemin": "<ComfyUI>/custom_nodes/comfyui-direction-de-style/styles/approches.json",
+        "table": "styles", "libelle": "libelle", "resume": "resume", "groupe": "famille"
+      }
+    },
     "image": { "libelle": "L'image de départ" },
     "video": { "libelle": "La vidéo de départ" },
     "audio": { "libelle": "Le son de départ" },
@@ -59,7 +66,8 @@
       "trait-sec": { "libelle": "Trait sec", "resume": "plus de trait, moins de lavis" },
       "encre-dense": { "libelle": "Encre dense", "resume": "aplats plus noirs, lavis plus large" } } },
     "rendu": { "libelle": "Rendu", "libelles": {
-      "classique": { "libelle": "Classique (le rendu éprouvé)" },
+      "ink-bleed": { "libelle": "Encre qui saigne (le défaut)", "resume": "une tache par temps, qui fleurit, s'étend à bords humides et rejoint les autres : l'image apparaît dedans" },
+      "classique": { "libelle": "Classique (le rendu éprouvé du 13 septembre)", "resume": "des touches d'encre par temps, et une réserve blanche qui garde le climax" },
       "front-organique": { "libelle": "Front organique (essai : le lavis ne suit plus le rectangle de la caméra)" } } },
     "conduite": { "libelle": "Qui commande le déroulement", "libelles": {
       "le plan": { "libelle": "Le plan", "resume": "l'ordre, le rythme et le cadrage viennent du plan ; la caméra les suit" },
@@ -81,7 +89,8 @@
         "style_narratif": "La structure du récit : quels temps, dans quel ordre, et ce que chacun doit faire. La liste est celle du catalogue des structures.",
         "fond": "Le papier et sa lumière : ce sur quoi l'encre se pose.",
         "encre": "Comment l'encre restitue l'image : lavis (défaut), trait sec, encre dense.",
-        "rendu": "Comment le front d'encre avance : le rendu éprouvé, ou l'essai où le lavis ne suit plus le rectangle de la caméra.",
+        "style_approche": "COMMENT la révélation se conduit — c'est l'intention qui la reçoit, pas la peinture. « Peinture calme » (le défaut) : peu de temps, longs, un chemin continu dans l'image sans retour, et une caméra qui glisse sans jamais s'arrêter — c'est l'encre qui révèle. « Visite guidée » : plus de temps, plus courts, une caméra qui va d'élément en élément.",
+        "rendu": "Comment l'encre vient. « Encre qui saigne » (le défaut) : une tache par temps, qui fleurit depuis lui, s'étend à bords humides et rejoint les autres — l'image apparaît dedans, sans réserve blanche découpée. « Classique » : le rendu du 13 septembre, des touches d'encre par temps. « Front organique » : le même, avec un lavis qui ne suit plus le rectangle de la caméra.",
         "conduite": "Qui mène : le PLAN (l'ordre des temps, leur rythme et le cadrage viennent de l'intention, et la caméra est bâtie sur eux — aucun temps n'est écarté, la durée demandée est celle qui est livrée), ou la CAMÉRA (le déroulement d'avant : la géométrie réordonne les temps et plafonne la durée)."
       }
     },

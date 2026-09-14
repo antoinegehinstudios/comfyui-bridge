@@ -37,6 +37,12 @@
       "options_depuis": { "menu": "style_narratif" },
       "libelle": "Structure du récit"
     },
+    "style_approche": {
+      "type": "COMBO",
+      "defaut": "peinture-calme",
+      "options_depuis": { "menu": "style_approche" },
+      "libelle": "Approche"
+    },
     "fond": {
       "type": "COMBO",
       "defaut": "washi",
@@ -51,8 +57,8 @@
     },
     "rendu": {
       "type": "COMBO",
-      "defaut": "classique",
-      "options": ["classique", "front-organique"],
+      "defaut": "ink-bleed",
+      "options": ["ink-bleed", "classique", "front-organique"],
       "libelle": "Rendu"
     },
     "conduite": {
@@ -81,6 +87,7 @@
         "media": { "image": "$image" },
         "style_narratif": "$style_narratif",
         "inputs": {
+          "70.style_approche": "$style_approche",
           "62.markers_json": "$analyse.recit.markers_json",
           "62.culture_json": "$analyse.recit.culture_json",
           "62.anchors_json": "$analyse.recit.anchors_json"
@@ -97,7 +104,9 @@
         { "id": "l_accroche_est_un_detail", "valeur": "$intention.recit.hook_aire", "op": "lte", "attendu": 0.15 },
         { "id": "l_accroche_montre_de_la_matiere", "valeur": "$intention.recit.hook_est_vide", "op": "eq", "attendu": false },
         { "id": "le_climax_est_la_figure_de_l_oeuvre", "valeur": "$intention.recit.climax_est_central", "op": "eq", "attendu": true },
-        { "id": "le_climax_garde_un_coeur_pour_la_fin", "valeur": "$intention.recit.climax_coeur", "op": "exists" }
+        { "id": "le_climax_garde_un_coeur_pour_la_fin", "valeur": "$intention.recit.climax_coeur", "op": "exists" },
+        { "id": "le_trajet_ne_revient_pas", "valeur": "$intention.recit.trajet_retours", "op": "lte", "attendu": 1 },
+        { "id": "le_plan_tient_dans_l_approche", "valeur": "$intention.recit.temps_dans_l_approche", "op": "eq", "attendu": true }
       ]
     },
     {
@@ -129,9 +138,12 @@
         { "id": "les_temps_se_suivent", "valeur": "$deroulement.recit.chevauchement_max_mesure_s", "op": "lte", "attendu": 8 },
         { "id": "l_ordre_du_plan_est_suivi", "valeur": "$deroulement.recit.ordre_du_plan_respecte", "op": "eq", "attendu": true },
         { "id": "chaque_temps_est_cadre_a_son_heure", "valeur": "$deroulement.recit.visibilite_min", "op": "gte", "attendu": 0.9 },
-        { "id": "chaque_temps_est_encre_a_son_heure", "valeur": "$deroulement.recit.encre_min_a_son_heure", "op": "gte", "attendu": 0.8 },
         { "id": "aucun_temps_supprime", "valeur": "$deroulement.recit.nb_hors_champ", "op": "eq", "attendu": 0 },
-        { "id": "le_coeur_du_climax_reste_vierge", "valeur": "$deroulement.recit.climax_encre_avant", "op": "lte", "attendu": 0.05 }
+        { "id": "la_camera_glisse", "valeur": "$deroulement.recit.vitesse_camera_max_mesuree", "op": "lte", "attendu": 0.1 },
+        { "id": "la_camera_ne_saccade_pas", "valeur": "$deroulement.recit.acceleration_camera_max", "op": "lte", "attendu": 1.0 },
+        { "id": "les_temps_sont_lisibles", "valeur": "$deroulement.recit.lisibilite_min", "op": "gte", "attendu": 0.85 },
+        { "id": "l_ordre_d_arrivee_est_celui_du_plan", "valeur": "$deroulement.recit.ordre_d_arrivee_respecte", "op": "eq", "attendu": true },
+        { "id": "le_coeur_vient_en_dernier", "valeur": "$deroulement.recit.coeur_en_dernier", "op": "eq", "attendu": true }
       ]
     },
     {
@@ -187,6 +199,9 @@
     "le_plan_commande": "L'intention est écrite AVANT toute image, et le déroulement la reçoit telle quelle (61.direction_json) : la peinture ne remet aucune mise en scène en cause. Le contrôle « plan_valide » arrête la chaîne avant de dépenser la moindre seconde de rendu quand le plan ne tient pas.",
     "ce_qu_un_plan_doit_tenir": "Un plan peut nommer son accroche et son climax et rester faux : mesuré sur trois documentations parfaites, l'accroche était une bande de plancher large comme le cadre, un temps tombait sur un ciel noir, et le climax s'arrêtait à la figure entière sans jamais révéler son crâne. Quatre grandeurs le disent maintenant : l'AIRE de l'accroche (un détail, pas un pan de l'œuvre), le fait qu'elle montre de la MATIÈRE, le climax arrimé à la figure CENTRALE de l'ancrage, et le CŒUR qu'il garde pour la fin. Le nœud d'intention corrige ce qu'il peut et le dit (« corrections ») ; ces contrôles arrêtent ce qu'il n'a pas pu corriger.",
     "aucune_limite_arbitraire": "Les bornes exposées sont celles que le graphe, la logique ou le média imposent : 1 image par seconde est le plancher d'une vidéo, et 79 s la borne haute d'un média qu'on regarde en défilant (c'était aussi le plafond du nœud tant que la caméra commandait). Sous la conduite « le plan », la durée demandée est celle qui est LIVRÉE : le nœud ne l'allonge que si le minimum logique du plan ne tient pas dedans (tenues, trajets et pauses lisibles), et il dit alors pourquoi (echelon_de_duree, duree_minimale_s, raison_duree). Sous « la camera », elle reste un PLANCHER que le plafond du nœud borne.",
+    "l_approche_pese_sur_l_intention": "Le champ « Approche » ne décore pas : il est REÇU par le réalisateur (approche_json du nœud DirectionDeStyle → RevealDirection), il borne ce que le plan peut demander, et il est recopié dans le plan où le rendu le relit. « peinture-calme » (le défaut) : au plus 6 temps, tenues d'au moins 4 s, un chemin continu dans l'image sans retour, une caméra qui glisse à 0,08 largeur de cadre par seconde au plus et ne s'arrête jamais. « visite-guidee » : le déroulement d'avant le 2026-09-14, borné (10 temps, 1,5 s, caméra libre). Jugé ce soir-là sur des vidéos où le plan était pourtant suivi à la lettre : « la vidéo est calme, telle une peinture qui se dévoile narrativement. Il y a trop d'à-coups, de mouvements de caméra qui se déplacent dans tous les sens. Il manque un ensemble de paramètres du style, de l'approche qui s'injectent au moment du plan, de l'intention. » Mesuré : quatorze temps en quarante-cinq secondes, un mouvement toutes les trois secondes.",
+    "ce_que_le_plan_dit_de_la_camera": "Le réalisateur écrit aussi le MOUVEMENT de caméra (« camera » : mouvement, sens, rythme) : le chemin de la caméra et l'ordre des temps — donc le chemin de la saignée — racontent le même trajet. Le sens déclaré est vérifié sur les centres des temps et réécrit s'il ne leur correspond pas ; le nombre de demi-tours est mesuré (« trajet_retours ») et le contrôle « le_trajet_ne_revient_pas » arrête un plan qui fait l'aller-retour.",
+    "ce_qui_remplace_la_reserve": "Deux contrôles ont été RETIRÉS du plan_tenu, parce que deux règles qui se contredisent ne coexistent pas. « le_coeur_du_climax_reste_vierge » exigeait précisément le TROU qu'on nous reproche : « cacher le climax à la fin fait trop grotesque, ce n'est pas naturel ». « chaque_temps_est_encre_a_son_heure » mesurait la boîte seule, sans son voisinage, d'où des éléments « juste incompréhensibles ». À leur place : la LISIBILITÉ (le halo d'un temps est-il encré à son heure), l'ORDRE D'ARRIVÉE (l'heure médiane d'encrage de chaque boîte croît-elle dans l'ordre du plan) et le CŒUR EN DERNIER (son heure médiane est-elle la plus tardive). Le cœur n'est plus protégé par une réserve : il vient en dernier parce que sa graine naît en dernier.",
     "qui_commande": "Le champ « conduite » dit qui mène le déroulement. « le plan » (le défaut) : l'ordre des temps, leur rythme et le cadrage viennent du plan, et la caméra est bâtie sur eux ; aucun temps n'est supprimé — un temps incadrable refuse le plan avec sa raison. « la camera » : le déroulement d'avant le 2026-09-14, où la géométrie de la caméra réordonnait les temps et plafonnait la durée — mesuré sur trois plans parfaits : ordre réécrit, deux temps jamais cadrés, aucun temps encré à son heure, 79 s pour 20 s demandées.",
     "conclusion_facultative": "À 0 seconde, la fermeture ne dure qu'une image : la scène ne se pose pas, et l'appel final s'écrit directement sur la fin du déroulement. Le montage compte toujours deux parts — le déroulement, puis ce qui le clôt.",
     "ce_qui_est_appele": "La documentation de l'image (image-iconographe, tenue par le service Iconographe et sa bibliothèque), la structure du récit (le catalogue des structures narratives) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : la chaîne les appelle, elle ne les porte pas. Un autre flux peut les appeler aussi, et la documentation déjà écrite n'est pas repayée."

@@ -38,7 +38,11 @@ sha256 exact, puis empreinte perceptuelle ; la CULTURE manque en v1, port écrit
 aucun adaptateur, et le récit le dit), la STRUCTURE du récit (catalogue de
 `comfyui-direction-de-style`, servie au formulaire par
 `"options_depuis": {"menu": "style_narratif"}` et au graphe par le champ
-sémantique `style_narratif`), l'APPEL FINAL (`video-appel-final`, qui vaut pour
+sémantique `style_narratif`), l'APPROCHE (catalogue du même paquet,
+`styles/approches.json`, servi par `"options_depuis": {"menu": "style_approche"}`
+et lié au graphe par `70.style_approche` : elle dit COMMENT la révélation se
+conduit — combien de temps, combien de temps chacun tient, ce que la caméra
+s'autorise), l'APPEL FINAL (`video-appel-final`, qui vaut pour
 n'importe quelle vidéo). Une chaîne ne recopie donc jamais une liste ni une
 documentation : elle dit d'où elles viennent.
 
