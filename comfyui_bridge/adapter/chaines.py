@@ -15,12 +15,13 @@ livrables offrait cinquante images de travail avant la vidéo commandée.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..core import chaine as noyau
 from ..core.errors import (BridgeError, ChainControlFailedError, MediaAssemblyError,
@@ -30,7 +31,7 @@ from ..core.jobs import JobStatus
 from ..core.plan import Artifact
 from . import montage_video
 from .measure import measure
-from .media import DOSSIER_DE_TRAVAIL, artifact_url, media_kind
+from .media import DOSSIER_DE_TRAVAIL, SIDECAR_SUFFIX, artifact_url, media_kind
 
 # Ce que le journal d'un job de chaîne appelle un problème de contrôle. Nommé
 # une fois : la mémoire d'Hermes et la réponse HTTP doivent dire le même mot.
@@ -294,10 +295,15 @@ class RunnerDeChaines:
             raise MediaAssemblyError(
                 f"étape {etape.id!r} ({nom}) : le run a réussi sans livrer de média",
                 job_id=sous.id, workflow=nom)
-        return {"livrable": livrable.path, "job_id": sous.id,
-                "mesure": {**(livrable.measured or {}), "bytes": livrable.bytes},
-                "artefacts": [a.path for a in fini.artifacts],
-                "_duree": fini.duration_s}
+        resultat = {"livrable": livrable.path, "job_id": sous.id,
+                    "mesure": {**(livrable.measured or {}), "bytes": livrable.bytes},
+                    "artefacts": [a.path for a in fini.artifacts],
+                    "_duree": fini.duration_s}
+        recit = _recit(fini.artifacts, lambda raison: c.store.append_log(
+            parent_id, f"étape {etape.id} : récit illisible : {raison}"))
+        if recit is not None:
+            resultat["recit"] = recit
+        return resultat
 
     def _veiller(self, parent_id: str, sous_id: str, etape_id: str, rang: int,
                  total: int, arret: threading.Event) -> None:
@@ -421,6 +427,39 @@ def _principal(artefacts: list[Artifact]) -> Artifact | None:
     return max(choisis, key=lambda a: a.bytes or 0) if choisis else None
 
 
+def _recit(artefacts: list[Artifact], signaler: Callable[[str], None]) -> dict[str, Any] | None:
+    """Ce qu'un run a écrit SUR LUI-MÊME, à côté de son média.
+
+    Un graphe qui met en scène peut livrer, avec sa vidéo, le récit de ce
+    qu'il a décidé : à quelle seconde tel temps commence, ce qui est visible
+    quand. C'est le premier fichier de nombres (JSON) que le run a livré, lu
+    tel quel — une étape « verifier » le contrôle ensuite par
+    « $etape.recit.cle », sans que ce module sache ce que le récit raconte ni
+    quel nœud l'a écrit. Le compagnon d'origine est aussi un JSON, posé à côté
+    de chaque livrable : ce n'est pas un récit, il est écarté par son suffixe.
+
+    Un récit illisible ne se tait pas : il est dit au journal, et la clé reste
+    absente — le contrôle qui la lit échoue alors en nommant ce qui manque,
+    au lieu de passer sur un objet vide que personne n'a écrit.
+    """
+    for art in artefacts:
+        chemin = Path(art.path)
+        if (art.kind != "text" or chemin.suffix.lower() != ".json"
+                or chemin.name.lower().endswith(SIDECAR_SUFFIX)):
+            continue
+        try:
+            contenu = json.loads(chemin.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as exc:
+            signaler(f"{chemin.name} : {exc}")
+            return None
+        if not isinstance(contenu, dict):
+            signaler(f"{chemin.name} : un objet JSON était attendu, "
+                     f"trouvé {type(contenu).__name__}")
+            return None
+        return contenu
+    return None
+
+
 def _resume(resultat: dict[str, Any]) -> dict[str, Any]:
     """Ce qu'on garde d'une étape dans la fiche du job : de quoi comprendre,
     pas la totalité (une mesure de raccords porte une ligne par frontière)."""
@@ -432,6 +471,15 @@ def _resume(resultat: dict[str, Any]) -> dict[str, Any]:
     if "controles" in resultat:
         garde["controles"] = [{"id": l["id"], "ok": l["ok"], "mesure": l["mesure"],
                                "attendu": l["attendu"]} for l in resultat["controles"]]
+    if isinstance(resultat.get("recit"), dict):
+        # Du récit, la fiche ne garde que ce qui se lit d'un coup d'œil : les
+        # valeurs simples de son premier niveau (un nom, une seconde, un
+        # verdict). Son calendrier et sa caméra pèsent des dizaines de milliers
+        # d'octets (mesuré : ≈ 90 Ko sur un récit réel) et restent dans le
+        # résultat complet, là où les étapes suivantes les lisent.
+        garde["recit"] = {k: v for k, v in resultat["recit"].items()
+                          if isinstance(v, (bool, int, float))
+                          or (isinstance(v, str) and len(v) <= 80)}
     return garde
 
 

@@ -2,11 +2,12 @@
   "_lire_moi": "Extrait du fichier de réconciliation : ce qu'il faut y ajouter pour que ces chaînes et cette vitrine existent. Les valeurs entre chevrons sont à remplacer par les chemins de LA machine (le dépôt n'en publie aucun). Un chemin de chaîne peut aussi être relatif au fichier de réconciliation.",
   "_lire_moi_resume": "« description » est ce qu'un utilisateur lit AVANT de choisir : ce que la vidéo va être, en une phrase. Aucun terme de moteur (nom de nœud, nom de modèle, mécanique interne) — le nom du modèle a sa place dans le TITRE, qui est un choix que l'utilisateur fait.",
   "_lire_moi_menus_medias": "Le libellé d'une PIÈCE JOINTE se lit dans « menus » au nom du champ (image, video, audio) quand l'auteur du graphe n'a pas titré son nœud de chargement : sans lui, le formulaire montrait la clé nue « image ».",
+  "_lire_moi_techniques": "Les graphes que la chaîne « Révéler une image » enchaîne (la révélation cinématique, la fermeture) et ceux qu'un processus appelle en direct (la révélation dirigée, la poussée caméra) sont déclarés SANS titre ni catégorie : ce sont des techniques, un lanceur ne les voit pas. Un seul flux est publié dans cette catégorie.",
   "_lire_moi_aides": "« aides » : { \"<champ>\": \"<phrase ou exemple>\" } sur une entrée — rendu par /io sous « aide » sur le champ concerné. Un menu global peut aussi porter « aide » ; l'entrée l'emporte.",
 
   "categories": {
     "reveler-une-image": { "titre": "Révéler une image", "ordre": 1, "icone": "🖌️",
-      "resume": "L'image apparaît, peinte ou dévoilée, puis la caméra la tient." },
+      "resume": "L'image se dévoile à l'encre, en quatre temps, puis la page se referme." },
     "animer-une-image": { "titre": "Image → vidéo", "ordre": 2, "icone": "🎞️",
       "resume": "Une image de départ, un modèle qui la met en mouvement." },
     "video-longue": { "titre": "Vidéo longue dirigée", "ordre": 3, "icone": "🎬",
@@ -46,21 +47,32 @@
     "height": { "libelle": "Hauteur" },
     "steps": { "libelle": "Pas de débruitage" },
     "cfg": { "libelle": "Adhérence à la consigne" },
-    "batch": { "libelle": "Nombre d'images" }
+    "batch": { "libelle": "Nombre d'images" },
+    "fond": { "libelle": "Fond de départ", "libelles": {
+      "washi": { "libelle": "Washi et lampe à huile", "resume": "papier crème, lueur chaude qui scintille" },
+      "washi-sans-lampe": { "libelle": "Washi, lumière plate" },
+      "sepia": { "libelle": "Sépia", "resume": "papier ambré, vignette marquée" },
+      "gris-atelier": { "libelle": "Gris d'atelier", "resume": "papier froid, sans lampe" } } },
+    "encre": { "libelle": "Style de tracé", "libelles": {
+      "lavis": { "libelle": "Lavis", "resume": "aplats et lavis, le défaut" },
+      "trait-sec": { "libelle": "Trait sec", "resume": "plus de trait, moins de lavis" },
+      "encre-dense": { "libelle": "Encre dense", "resume": "aplats plus noirs, lavis plus large" } } },
+    "cta": { "libelle": "Appel final" }
   },
 
   "workflows": {
-    "video-revelation-podcast": {
+    "video-revelation": {
       "kind": "video",
-      "chaine": "<dossier de données>/chaines/video-revelation-podcast.json",
-      "description": "L'image se dévoile à l'encre pendant que la caméra la parcourt, puis la page se referme doucement sur elle.",
-      "titre": "Révélation pour podcast", "categorie": "reveler-une-image", "ordre": 1
-    },
-    "video-revelation-poussee": {
-      "kind": "video",
-      "chaine": "<dossier de données>/chaines/video-revelation-poussee.json",
-      "description": "L'image se dévoile, puis la caméra continue d'avancer dedans sans que la jointure se voie.",
-      "titre": "Révélation puis poussée caméra", "categorie": "reveler-une-image", "ordre": 2
+      "chaine": "<dossier de données>/chaines/video-revelation.json",
+      "description": "L'image se dévoile à l'encre en quatre temps — un hook en 2,5 s, une retenue, le climax gardé pour la fin et tenu — puis la page se referme ; un appel final peut s'écrire à l'encre.",
+      "titre": "Révéler une image", "categorie": "reveler-une-image", "ordre": 1,
+      "aides": {
+        "duration_s": "Au moins cette durée : le plan peut l'allonger, jusqu'à 79 s, pour ne précipiter aucun temps ; la fermeture s'ajoute.",
+        "conclusion_s": "La page se referme sur la zone du climax, la couleur se retire la première.",
+        "cta": "Une phrase courte, écrite à l'encre sur la page refermée (3,5 s). Vide : aucun appel.",
+        "fond": "Le papier et sa lumière : ce sur quoi l'encre se pose.",
+        "encre": "Comment l'encre restitue l'image : lavis (défaut), trait sec, encre dense."
+      }
     },
     "video-prolongement": {
       "kind": "video",
@@ -71,10 +83,6 @@
 
     "_vitrine_seule": "Une entrée qui ne porte QUE titre/categorie/ordre DÉCORE un graphe déposé dans le dossier des workflows, sans lui faire perdre son auto-liaison. Exemple ci-dessous.",
     "video_ltx2_3_i2v": { "titre": "LTX-2.3 image → vidéo (son inclus)",
-                          "categorie": "animer-une-image", "ordre": 1 },
-    "video-reveal-cinematic": { "titre": "Révélation cinématique (analyse + intention)",
-                                "categorie": "reveler-une-image", "ordre": 3 },
-    "video-still-motion": { "titre": "Poussée caméra seule (Ken Burns)",
-                            "categorie": "reveler-une-image", "ordre": 10 }
+                          "categorie": "animer-une-image", "ordre": 1 }
   }
 }

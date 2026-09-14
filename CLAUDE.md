@@ -22,7 +22,9 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
 - `POST /v1/render` (corps plat, `label` = nom de la production),
   `POST /v1/estimate`, `GET /v1/jobs`, `GET /v1/jobs/{id}` + `/events`,
   `POST /v1/jobs/{id}/cancel` et `/rejouer`, `PUT /v1/workflows/{nom}/apercu` ;
-  un job porte `demande`, `etapes`, `artifacts[].{kind,path,url}`, `problem`.
+  un job porte `demande`, `etapes` (chaque étape rendue : `resultat`, dont
+  `recit`, le récit compact écrit par le nœud — ce sur quoi l'étape `verifier`
+  de la chaîne a jugé), `artifacts[].{kind,path,url}`, `problem`.
 Les tests `tests/test_chaines_api.py` tiennent ces formes ; une chaîne modifiée
 dans `_data/chaines/` doit garder sa copie `resources/chaines-exemples/`.
 

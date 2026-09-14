@@ -1449,7 +1449,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Declared engines (where ComfyUI runs) and which one is active."""
         from ..adapter.engines import is_alive, load_engines
         c = request.app.state.container
-        default, profiles = load_engines(c.settings.engines_file)
+        # Le fichier livré ET la surcharge du poste, comme au démarrage
+        # (container.py) : lu sans le dossier de données, ce point d'entrée
+        # n'annonçait que le profil livré « attach » alors que le moteur actif
+        # était « local » (mesuré : default attach, active local) — on ne
+        # pouvait pas y lire qui gère le moteur.
+        default, profiles = load_engines(c.settings.engines_file,
+                                         data_dir=c.settings.hermes_db.parent)
         return {
             "default": default,
             "active": c.engine.name,

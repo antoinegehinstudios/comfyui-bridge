@@ -142,3 +142,44 @@ def test_un_attendu_peut_lui_aussi_renvoyer_a_ce_qui_a_ete_demande():
           "attendu": "$duration_s"}],
         {"duration_s": 4}, {"un": {"mesure": {"duration_s": 4.0}}})
     assert lignes[0]["ok"] is True and lignes[0]["attendu"] == 4
+
+
+def test_un_reglage_de_noeud_peut_renvoyer_a_un_champ_expose():
+    """Une étape « rendre » règle une entrée de nœud par « inputs » : le renvoi
+    qui s'y niche est lu à la lecture et résolu à l'exécution comme un renvoi
+    à la racine. C'est le seul canal par lequel un champ exposé atteint une
+    entrée de nœud sans qu'aucun code ne nomme ce nœud."""
+    chaine = noyau.lire(_minimale(
+        expose={"fond": {"type": "COMBO", "defaut": "washi", "options": ["washi", "sepia"]}},
+        etapes=[{"id": "un", "rendre": {"workflow": "wf", "inputs": {"61.fond": "$fond"}}}]))
+    assert chaine.etapes[0].params["inputs"] == {"61.fond": "$fond"}
+    assert noyau.resoudre(chaine.etapes[0].params, {"fond": "sepia"}, {}) == {
+        "workflow": "wf", "inputs": {"61.fond": "sepia"}}
+
+
+def test_un_renvoi_inconnu_niche_dans_inputs_est_refuse_avec_son_nom():
+    """Découvert à l'exécution, il aurait fait échouer l'étape après avoir
+    dépensé les précédentes ; à la lecture, il est nommé."""
+    with pytest.raises(WorkflowMappingError) as refus:
+        noyau.lire(_minimale(etapes=[{"id": "un", "rendre": {
+            "workflow": "wf", "inputs": {"61.fond": "$inconnu"}}}]))
+    assert "$inconnu" in refus.value.detail
+
+
+def test_un_texte_facultatif_vaut_sa_chaine_vide_et_un_booleen_son_faux():
+    """« "" » et « false » sont des DÉFAUTS, pas des absences : un appel final
+    facultatif laissé vide vaut la chaîne vide dans les valeurs, sinon le
+    « $cta » de l'étape n'a rien à désigner et l'étape échoue. Un champ sans
+    défaut, lui, reste absent."""
+    chaine = noyau.lire(_minimale(
+        expose={"cta": {"type": "STRING", "defaut": "", "libelle": "Appel final"},
+                "signer": {"type": "BOOLEAN", "defaut": False},
+                "libre": {"type": "STRING"}},
+        etapes=[{"id": "un", "rendre": {"workflow": "wf",
+                                        "inputs": {"7.texte": "$cta", "7.signer": "$signer"}}}]))
+    assert noyau.valeurs(chaine, {}) == {"cta": "", "signer": False}
+    assert noyau.valeurs(chaine, {"cta": "Abonnez-vous", "signer": "oui"}) == {
+        "cta": "Abonnez-vous", "signer": True}
+    # …et le renvoi se résout sur la chaîne vide, au lieu de lever.
+    assert noyau.resoudre(chaine.etapes[0].params, noyau.valeurs(chaine, {}), {})["inputs"] == {
+        "7.texte": "", "7.signer": False}

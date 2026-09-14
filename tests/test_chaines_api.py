@@ -30,13 +30,28 @@ SANS_FFMPEG = pytest.mark.skipif(
     reason="ffmpeg/ffprobe absents de ce poste : le recollage ne peut pas être éprouvé")
 
 
+# Le récit qu'un rendu d'essai écrit à côté de son média : des valeurs simples
+# qu'une fiche peut montrer, et des structures lourdes (un calendrier, un objet
+# imbriqué, une phrase longue) qu'elle ne doit pas embarquer.
+RECIT_D_ESSAI = {
+    "hook": "la lanterne", "hook_vu": {"atteint": 0.42}, "temps_retenue": 3,
+    "climax_tenue_s": 2.4, "directed": True,
+    "schedule": [{"t": 0.0, "zone": 1}, {"t": 1.0, "zone": 2}],
+    "intention": "i" * 120,
+}
+
+
 class BackendQuiLivre:
-    """Un backend d'essai qui écrit un vrai fichier, image ou vidéo."""
+    """Un backend d'essai qui écrit un vrai fichier, image ou vidéo — et, à
+    côté, le récit du run en JSON, comme un graphe qui met en scène le fait."""
 
     def __init__(self, sortie: pathlib.Path) -> None:
         self.sortie = pathlib.Path(sortie)
         self.avant = None            # crochet : ce qui arrive PENDANT un run
         self.runs: list[str] = []
+        # Un dict est écrit en JSON ; un texte est écrit tel quel (pour éprouver
+        # un récit illisible) ; None n'écrit rien.
+        self.recit: dict | str | None = dict(RECIT_D_ESSAI)
 
     def preview(self, plan):
         return {"workflow": {}}
@@ -70,7 +85,15 @@ class BackendQuiLivre:
         art = Artifact(kind=media_kind(fichier), path=str(fichier.resolve()),
                        url=artifact_url(self.sortie, fichier), bytes=fichier.stat().st_size,
                        measured=measure(fichier) or None)
-        return BackendResult(artifacts=[art], raw_stdout="essai", execution_s=0.5)
+        artefacts = [art]
+        if self.recit is not None:
+            recit = fichier.with_suffix(".json")
+            recit.write_text(self.recit if isinstance(self.recit, str)
+                             else json.dumps(self.recit, ensure_ascii=False), encoding="utf-8")
+            artefacts.append(Artifact(kind=media_kind(recit), path=str(recit.resolve()),
+                                      url=artifact_url(self.sortie, recit),
+                                      bytes=recit.stat().st_size))
+        return BackendResult(artifacts=artefacts, raw_stdout="essai", execution_s=0.5)
 
 
 CHAINE_SIMPLE = {
@@ -111,6 +134,27 @@ CHAINE_RECOLLEE = {
     "livrable": "$final.livrable",
 }
 
+# Un rendu réglé par un champ exposé (« inputs » vise une entrée de nœud), puis
+# contrôlé sur le récit qu'il a écrit. Définie ICI, dans un fichier temporaire :
+# ce n'est pas une chaîne de référence du paquet.
+CHAINE_AU_RECIT = {
+    "version": 1, "chaine": "chaine-au-recit",
+    "resume": "un rendu réglé par un champ exposé, contrôlé sur le récit qu'il écrit",
+    "expose": {
+        "fond": {"type": "COMBO", "defaut": "washi", "options": ["washi", "sepia"],
+                 "libelle": "Fond de départ"},
+    },
+    "etapes": [
+        {"id": "un", "rendre": {"workflow": "sd15-txt2img", "prompt": "un récit",
+                                "inputs": {"61.fond": "$fond"}}},
+        {"id": "temps", "verifier": [
+            {"id": "hook_nomme", "valeur": "$un.recit.hook", "op": "exists"},
+            {"id": "hook_vu_a_2_5_s", "valeur": "$un.recit.hook_vu.atteint", "op": "gte",
+             "attendu": 0.1}]},
+    ],
+    "livrable": "$un.livrable",
+}
+
 
 @pytest.fixture()
 def atelier():
@@ -118,6 +162,7 @@ def atelier():
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="comfybridge_chaines_"))
     (tmp / "chaine-simple.json").write_text(json.dumps(CHAINE_SIMPLE), encoding="utf-8")
     (tmp / "chaine-recollee.json").write_text(json.dumps(CHAINE_RECOLLEE), encoding="utf-8")
+    (tmp / "chaine-au-recit.json").write_text(json.dumps(CHAINE_AU_RECIT), encoding="utf-8")
     (tmp / "reconciliation.local.json").write_text(json.dumps({
         "categories": {"essais": {"titre": "Essais", "ordre": 1}},
         "menus": {"mode": {"libelle": "Le mode",
@@ -127,6 +172,8 @@ def atelier():
                               "titre": "Chaîne d'essai", "categorie": "essais", "ordre": 1},
             "chaine-recollee": {"kind": "video", "chaine": str(tmp / "chaine-recollee.json"),
                                 "titre": "Chaîne recollée", "categorie": "essais", "ordre": 2},
+            "chaine-au-recit": {"kind": "image", "chaine": str(tmp / "chaine-au-recit.json"),
+                                "titre": "Chaîne au récit", "categorie": "essais", "ordre": 4},
             "video-essai": {"kind": "video", "workflow": "workflow_template.json",
                             "bindings": {"filename_prefix": {"node": "9",
                                                              "input": "filename_prefix"}}},
@@ -213,6 +260,83 @@ def test_un_controle_faux_arrete_la_chaine_et_garde_les_fichiers(atelier):
     assert "largeur_tenue" in job["problem"]["detail"] and "32" in job["problem"]["detail"]
     assert [e["statut"] for e in job["etapes"]] == ["done", "done", "failed"]
     assert job["artifacts"] and pathlib.Path(job["artifacts"][0]["path"]).is_file()
+
+
+def test_le_recit_d_un_rendu_se_controle_et_sa_fiche_le_resume(atelier):
+    """Un graphe qui met en scène livre, avec son média, le récit de ce qu'il
+    a décidé : la chaîne le lit sans savoir qui l'a écrit et le contrôle, et un
+    champ exposé règle l'entrée de nœud visée par « inputs ». La fiche du job
+    n'en garde que les valeurs simples — lire hook et durée sans embarquer le
+    calendrier (≈ 90 Ko sur un récit réel)."""
+    vus = []
+    atelier.faux.avant = lambda plan: vus.append(dict(plan.overrides))
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-au-recit",
+                                                         "fond": "sepia"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    assert vus == [{"61.fond": "sepia"}]                # le champ a atteint le nœud
+    rendu, temps = job["etapes"]
+    assert [ctl["ok"] for ctl in temps["resultat"]["controles"]] == [True, True]
+    assert temps["resultat"]["controles"][1]["mesure"] == 0.42
+    # La fiche : les scalaires du premier niveau — ni le calendrier, ni l'objet
+    # imbriqué, ni la phrase longue.
+    assert rendu["resultat"]["recit"] == {"hook": "la lanterne", "temps_retenue": 3,
+                                          "climax_tenue_s": 2.4, "directed": True}
+    # Le récit est un artefact du sous-job, à côté du média — et ce n'est pas
+    # lui que la chaîne livre.
+    sous = atelier.get("/v1/jobs/" + rendu["job_id"]).json()
+    assert [a["kind"] for a in sous["artifacts"]] == ["image", "text"]
+    assert pathlib.Path(job["artifacts"][0]["path"]).suffix == ".png"
+
+
+def test_un_recit_qui_ne_tient_pas_la_regle_arrete_la_chaine(atelier):
+    """Le contrôle échoue AVANT les étapes suivantes, nomme celui qui a dit
+    non et dit la valeur mesurée : de combien on a raté se lit sans refaire le
+    run."""
+    atelier.faux.recit = {**RECIT_D_ESSAI, "hook_vu": {"atteint": 0.02}}
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-au-recit"}))
+    assert job["status"] == "failed"
+    assert job["problem"]["problem_kind"] == "controle-echoue"
+    assert job["problem"]["etape"] == "temps"
+    assert "hook_vu_a_2_5_s" in job["problem"]["detail"] and "0.02" in job["problem"]["detail"]
+    faux = [ctl for ctl in job["problem"]["controles"] if not ctl["ok"]]
+    assert [ctl["id"] for ctl in faux] == ["hook_vu_a_2_5_s"] and faux[0]["mesure"] == 0.02
+    assert [e["statut"] for e in job["etapes"]] == ["done", "failed"]
+
+
+def test_un_recit_illisible_est_dit_et_la_cle_reste_absente(atelier):
+    """Un JSON cassé ne devient pas un récit vide sur lequel « exists »
+    passerait par hasard : il est dit au journal, la clé reste absente, et le
+    contrôle échoue en nommant ce qui manque."""
+    atelier.faux.recit = "{ pas du json"
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-au-recit"}))
+    assert job["status"] == "failed" and job["problem"]["etape"] == "temps"
+    assert any("récit illisible" in ligne for ligne in job["logs"])
+    assert "recit" not in job["etapes"][0]["resultat"]
+    assert "hook_nomme" in job["problem"]["detail"]
+
+
+def test_le_recit_est_le_premier_json_livre_hors_compagnon_et_doit_etre_un_objet(tmp_path):
+    """Le compagnon d'origine est aussi un JSON, posé à côté de chaque
+    livrable : pris pour le récit, il aurait fait échouer un contrôle sur des
+    clés qu'il n'a pas. Et un JSON valide qui n'est pas un objet n'est pas un
+    récit : « $etape.recit.cle » n'y lirait rien, autant le dire tout de
+    suite."""
+    from comfyui_bridge.adapter.chaines import _recit
+    from comfyui_bridge.adapter.media import SIDECAR_SUFFIX
+    dits = []
+    compagnon = tmp_path / ("image.png" + SIDECAR_SUFFIX)
+    compagnon.write_text(json.dumps({"fichier": "image.png"}), encoding="utf-8")
+    recit = tmp_path / "image.json"
+    recit.write_text(json.dumps({"hook": "x"}), encoding="utf-8")
+    artefacts = [Artifact(kind="image", path=str(tmp_path / "image.png")),
+                 Artifact(kind="text", path=str(compagnon)),
+                 Artifact(kind="text", path=str(recit))]
+    assert _recit(artefacts, dits.append) == {"hook": "x"} and dits == []
+    recit.write_text("[1, 2, 3]", encoding="utf-8")
+    assert _recit(artefacts, dits.append) is None
+    assert dits == ["image.json : un objet JSON était attendu, trouvé list"]
+    # Sans fichier de nombres, pas de récit — et rien à dire.
+    assert _recit(artefacts[:1], dits.append) is None and len(dits) == 1
 
 
 def test_annuler_une_chaine_saute_les_etapes_restantes(atelier):

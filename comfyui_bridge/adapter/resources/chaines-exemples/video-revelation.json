@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "chaine": "video-revelation",
+  "resume": "L'image est lue (ce qu'elle montre, ce qu'elle est), une mise en scène est écrite, puis l'encre la dévoile : un HOOK en 2,5 s, une RETENUE qui donne à découvrir, le CLIMAX gardé pour la fin et tenu, le dézoom et la couleur, la page qui se referme — et, si on le demande, un appel final écrit à l'encre. Chaque temps est contrôlé sur le récit que la révélation écrit.",
+  "expose": {
+    "image": {
+      "media": "image",
+      "requis": true,
+      "libelle": "L'image à révéler"
+    },
+    "duration_s": {
+      "type": "FLOAT",
+      "defaut": 45,
+      "min": 40,
+      "max": 79,
+      "step": 1,
+      "libelle": "Durée de la révélation (au moins)",
+      "unite": "s"
+    },
+    "conclusion_s": {
+      "type": "FLOAT",
+      "defaut": 10,
+      "min": 4,
+      "max": 20,
+      "step": 1,
+      "libelle": "Durée de la fermeture",
+      "unite": "s"
+    },
+    "fond": {
+      "type": "COMBO",
+      "defaut": "washi",
+      "options": ["washi", "washi-sans-lampe", "sepia", "gris-atelier"],
+      "libelle": "Fond de départ"
+    },
+    "encre": {
+      "type": "COMBO",
+      "defaut": "lavis",
+      "options": ["lavis", "trait-sec", "encre-dense"],
+      "libelle": "Style de tracé"
+    },
+    "cta": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Appel final (facultatif)"
+    },
+    "width": { "type": "INT", "defaut": 704, "libelle": "Largeur", "unite": "px" },
+    "height": { "type": "INT", "defaut": 1280, "libelle": "Hauteur", "unite": "px" },
+    "fps": { "type": "INT", "defaut": 25, "libelle": "Images par seconde" },
+    "seed": { "type": "INT", "defaut": 71, "libelle": "Graine" }
+  },
+  "etapes": [
+    {
+      "id": "revelation",
+      "rendre": {
+        "workflow": "video-reveal-cinematic",
+        "media": { "image": "$image" },
+        "duration_s": "$duration_s",
+        "fps": "$fps",
+        "width": "$width",
+        "height": "$height",
+        "seed": "$seed",
+        "inputs": {
+          "61.fond": "$fond",
+          "61.encre": "$encre"
+        }
+      }
+    },
+    {
+      "id": "temps",
+      "verifier": [
+        { "id": "hook_nomme", "valeur": "$revelation.recit.hook", "op": "exists" },
+        { "id": "hook_vu_a_2_5_s", "valeur": "$revelation.recit.hook_vu.atteint", "op": "gte", "attendu": 0.10 },
+        { "id": "retenue_avant_le_climax", "valeur": "$revelation.recit.temps_retenue", "op": "gte", "attendu": 2 },
+        { "id": "climax_hors_du_cadre_d_ouverture", "valeur": "$revelation.recit.climax_a_l_ouverture", "op": "lte", "attendu": 0.12 },
+        { "id": "climax_vierge_jusqu_a_son_heure", "valeur": "$revelation.recit.climax_encre_avant", "op": "lte", "attendu": 0.05 },
+        { "id": "climax_tenu", "valeur": "$revelation.recit.climax_tenue_s", "op": "gte", "attendu": 2.0 },
+        { "id": "chaque_temps_dans_le_champ", "valeur": "$revelation.recit.visibilite_min", "op": "gte", "attendu": 0.9 },
+        { "id": "les_etapes_se_suivent", "valeur": "$revelation.recit.chevauchement_max_mesure_s", "op": "lte", "attendu": 8.0 },
+        { "id": "revelation_pas_plus_longue_que_le_plafond", "valeur": "$revelation.recit.duree_retenue_s", "op": "lte", "attendu": 80 }
+      ]
+    },
+    {
+      "id": "queue",
+      "extraire_queue": { "video": "$revelation.livrable", "images": 50 }
+    },
+    {
+      "id": "conclusion",
+      "rendre": {
+        "workflow": "video-reveal-closing",
+        "media": { "video": "$queue.depot" },
+        "duration_s": "$conclusion_s",
+        "fps": "$fps",
+        "seed": "$seed",
+        "inputs": {
+          "6.fond": "$fond",
+          "7.texte": "$cta"
+        }
+      }
+    },
+    {
+      "id": "final",
+      "recoller": {
+        "parts": ["$revelation.livrable", "$conclusion.livrable"],
+        "fps": "$fps",
+        "largeur": "$width",
+        "hauteur": "$height"
+      }
+    },
+    {
+      "id": "controle",
+      "verifier": [
+        { "id": "les_deux_parts", "valeur": "$final.parts", "op": "eq", "attendu": 2 },
+        { "id": "duree_au_moins_demandee", "valeur": "$final.mesure.duration_s", "op": "gte", "attendu": "$duration_s" },
+        { "id": "duree_sous_le_plafond", "valeur": "$final.mesure.duration_s", "op": "lte", "attendu": 110 },
+        { "id": "livrable_pese", "valeur": "$final.mesure.bytes", "op": "gte", "attendu": 1000000 }
+      ]
+    }
+  ],
+  "livrable": "$final.livrable",
+  "notes": {
+    "duree": "La durée demandée est un plancher : le nœud allonge la révélation (jusqu'à 79 s, plafond du graphe) pour ne précipiter aucun temps — c'est le cadre qui s'allonge, jamais les temps qui se resserrent. La fermeture puis l'appel final (≈ 3,5 s s'il est demandé) s'ajoutent.",
+    "temps": "Les contrôles de l'étape « temps » lisent le récit écrit par le nœud de révélation (artefact .json du run) : ils échouent AVANT la fermeture quand le plan ne tient pas la règle des quatre temps.",
+    "climax": "La fermeture retrouve la zone du climax par la graine commune aux deux rendus (récit le plus récent de cette graine)."
+  }
+}

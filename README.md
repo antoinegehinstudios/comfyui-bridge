@@ -705,10 +705,11 @@ est donc une entrée de catalogue comme une autre, avec `chaine` au lieu de
 `workflow` + `bindings` :
 
 ```jsonc
-"video-revelation-podcast": {
+"video-revelation": {
   "kind": "video",
-  "chaine": "…/_data/chaines/video-revelation-podcast.json",
-  "titre": "Révélation pour podcast", "categorie": "reveler-une-image", "ordre": 1
+  "chaine": "…/_data/chaines/video-revelation.json",
+  "titre": "Révéler une image", "categorie": "reveler-une-image", "ordre": 1,
+  "aides": { "cta": "Une phrase courte, écrite à l'encre sur la page refermée. Vide : aucun appel." }
 }
 ```
 
@@ -723,19 +724,29 @@ Le fichier de chaîne (copies de référence dans
 
 ```jsonc
 {
-  "version": 1, "chaine": "video-revelation-podcast", "resume": "…",
+  "version": 1, "chaine": "video-revelation", "resume": "…",
   "expose": {
     "image":      { "media": "image", "requis": true, "libelle": "L'image à révéler" },
-    "duration_s": { "type": "FLOAT", "defaut": 50, "min": 20, "max": 90, "unite": "s" }
+    "duration_s": { "type": "FLOAT", "defaut": 45, "min": 20, "max": 79, "unite": "s" },
+    "fond":       { "type": "COMBO", "defaut": "washi", "options": ["washi", "sepia"] },
+    "cta":        { "type": "STRING", "defaut": "", "libelle": "Appel final (facultatif)" }
   },
   "etapes": [
     { "id": "revelation", "rendre": { "workflow": "video-reveal-cinematic",
-        "media": { "image": "$image" }, "duration_s": "$duration_s" } },
+        "media": { "image": "$image" }, "duration_s": "$duration_s",
+        "inputs": { "61.fond": "$fond" } } },
+    { "id": "temps", "verifier": [
+        { "id": "hook_vu_a_2_5_s", "valeur": "$revelation.recit.hook_vu.atteint",
+          "op": "gte", "attendu": 0.10 },
+        { "id": "climax_tenu", "valeur": "$revelation.recit.climax_tenue_s",
+          "op": "gte", "attendu": 2.0 } ] },
     { "id": "queue",   "extraire_queue": { "video": "$revelation.livrable", "images": 50 } },
+    { "id": "conclusion", "rendre": { "workflow": "video-reveal-closing",
+        "media": { "video": "$queue.depot" }, "inputs": { "7.texte": "$cta" } } },
     { "id": "final",   "recoller": { "parts": ["$revelation.livrable", "$conclusion.livrable"] } },
     { "id": "controle", "verifier": [
-        { "id": "duree_tenue", "valeur": "$final.mesure.duration_s",
-          "op": "between", "attendu": [40, 120] } ] }
+        { "id": "duree_au_moins_demandee", "valeur": "$final.mesure.duration_s",
+          "op": "gte", "attendu": "$duration_s" } ] }
   ],
   "livrable": "$final.livrable"
 }
@@ -746,11 +757,25 @@ PRÉCÉDENTE). Un renvoi vers l'aval ou vers un nom inconnu est refusé **à la
 lecture**, en le nommant : découvert en route, il faisait échouer la chaîne
 après avoir dépensé les étapes d'avant.
 
+**Réglages de nœud** : une étape `rendre` peut écrire directement une entrée
+du graphe qu'elle vise, `"inputs": {"<nœud>.<entrée>": "$champ"}` — c'est
+ainsi que le fond et l'encre choisis par l'utilisateur atteignent le nœud de
+révélation (`61.fond`, `61.encre`) et l'appel final le nœud d'inscription
+(`7.texte`). L'entrée doit exister en littéral dans le graphe (sinon l'étape
+échoue en la nommant), et jamais une entrée déjà liée par les `bindings`, que
+l'override écraserait en silence.
+
+**Récit** : tout artefact `.json` qu'un run rapporte est parsé sous `recit`
+dans le résultat de l'étape. Une étape `verifier` contrôle alors ce que le
+nœud a MESURÉ — `$revelation.recit.hook_vu.atteint`, `…climax_tenue_s`,
+`…duree_retenue_s` — et arrête la chaîne AVANT de dépenser la fermeture
+quand le plan ne tient pas la règle des quatre temps.
+
 **Genres d'étape** et ce que chacun rend :
 
 | genre | ce qu'il fait | résultat |
 |---|---|---|
-| `rendre` | un run de workflow, par les moyens ordinaires | `livrable`, `artefacts`, `mesure`, `job_id` |
+| `rendre` | un run de workflow, par les moyens ordinaires | `livrable`, `artefacts`, `mesure`, `job_id`, `recit` (tout artefact `.json` du run, parsé) |
 | `extraire_queue` | les N dernières images, en clip SANS PERTE (`-qp 0`, compte revérifié), déposé chez le moteur | `fichier`, `depot`, `images` |
 | `extraire_image` | une image, par son index exact (`first`/`last`/N) | `fichier`, `depot` |
 | `recoller` | joindre des parts (ré-encodage uniforme, piste silencieuse si muet) | `livrable`, `mesure`, `parts` |
@@ -768,11 +793,14 @@ sous `<sortie>/cortex/_travail/<job>/` et ne sont jamais listées comme
 livrables. Annuler le parent arrête le sous-job en cours par les moyens du
 moteur et saute le reste.
 
-Trois chaînes sont livrées : `video-revelation-podcast` (révélation cinématique
-→ queue de 50 images → fermeture → recollage → contrôle),
-`video-revelation-poussee` (révélation au mode CHOISI → poussée caméra →
-recollage) et `video-prolongement` (17 dernières images → prolongement →
-mesure du raccord → recollage sans le chevauchement).
+Deux chaînes sont livrées : `video-revelation` — « Révéler une image »,
+le seul flux publié de sa catégorie : révélation cinématique → contrôle des
+quatre temps sur le récit → queue de 50 images → fermeture et appel final à
+l'encre → recollage → contrôle de durée et de poids ; les graphes qu'elle
+enchaîne (`video-reveal-cinematic`, `video-reveal-closing`) et
+`video-reveal-cinematic-dirige`, `video-still-motion` restent des techniques,
+sans catégorie — et `video-prolongement` (17 dernières images →
+prolongement → mesure du raccord → recollage sans le chevauchement).
 
 ## Vitrine : catégories, titres, menus
 
@@ -789,12 +817,14 @@ fichier de réconciliation, et servi par le réseau.
   dossier des workflows, sans lui faire perdre son auto-liaison.
 * `menus` (clé de premier niveau) : les libellés des valeurs d'un champ. La
   LISTE, elle, vient toujours du fournisseur — le moteur pour un COMBO de nœud,
-  le catalogue pour un mode de chaîne (`"options_depuis": {"catalogue":
-  {"prefixe": "video-reveal-"}}`). Deux formes :
+  la chaîne pour un COMBO à `options` littérales (`fond`, `encre` de
+  `video-revelation`), ou le catalogue quand une chaîne choisit un mode parmi
+  les entrées d'un préfixe (`"options_depuis": {"catalogue": {"prefixe":
+  "…"}}`). Deux formes :
 
 ```jsonc
 "menus": {
-  "mode": { "libelle": "Mode", "libelles": { "sumi-e": { "libelle": "Sumi-e", "groupe": "encre" } } },
+  "encre": { "libelle": "Style de tracé", "libelles": { "lavis": { "libelle": "Lavis", "resume": "aplats et lavis, le défaut" } } },
   "style_graphique": { "source_fichier": {
       "chemin": "…/comfyui-direction-de-style/styles/graphiques.json",
       "table": "styles", "libelle": "libelle", "resume": "resume", "groupe": "famille" } }
@@ -827,6 +857,7 @@ modifier ça ? » a donc une réponse par nature de changement :
 | l'EFFET lui-même (l'encre, les taches, la caméra, la fermeture) | le paquet de nœuds ComfyUI (`comfyui-ink-reveal`, `comfyui-direction-de-style`…) | le moteur ; ré-extraire si les entrées changent |
 | le GRAPHE d'un mode (ses nœuds, ses valeurs figées) | `_data/workflows/<nom>.json` + ses liaisons dans `_data/reconciliation.local.json` | `POST /v1/render` |
 | l'ORDRE des étapes, les durées, les contrôles d'un flux composé | `_data/chaines/<nom>.json` (et sa copie `resources/chaines-exemples/`) | le runner de chaînes |
+| un CONTRÔLE sur ce que le nœud a MESURÉ (hook vu, climax tenu, durée retenue) | l'étape `verifier` de la chaîne, sur `$etape.recit.<clé>` (tout artefact `.json` d'un run est parsé sous `recit`) | le runner de chaînes |
 | une RÉPÉTITION (blocs de boucle, conditions) | le montage `_data/workflows/<montage>.json`, ses blocs `_data/blocs/` | le dépliage |
 | ce que l'utilisateur VOIT (titre, catégorie, résumé, libellés, aides) | `_data/reconciliation.local.json` : `titre`, `categorie`, `menus`, `aides` | `/v1/workflows`, `/io` |
 | le VOCABULAIRE des styles | `styles/*.json` du paquet de direction de style | `/io` (`options` + `choix`) |
