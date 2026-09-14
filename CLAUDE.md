@@ -28,6 +28,22 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
 Les tests `tests/test_chaines_api.py` tiennent ces formes ; une chaîne modifiée
 dans `_data/chaines/` doit garder sa copie `resources/chaines-exemples/`.
 
+**Ce qui est agnostique est APPELÉ, jamais ancré dans un flux.** Une étape
+qu'on peut nommer sans nommer le flux est un mécanisme à part : une entrée de
+catalogue que la chaîne appelle, et qu'un autre flux appellera. Aujourd'hui,
+trois : le SAVOIR d'une image (`image-savoir` → carnet
+`<image>.connaissance.json` posé à côté d'elle, relu la fois d'après, format du
+processus « connaître une image »), la STRUCTURE du récit (catalogue de
+`comfyui-direction-de-style`, servie au formulaire par
+`"options_depuis": {"menu": "style_narratif"}` et au graphe par le champ
+sémantique `style_narratif`), l'APPEL FINAL (`video-appel-final`, qui vaut pour
+n'importe quelle vidéo). Une chaîne ne recopie donc jamais une liste ni un
+savoir : elle dit d'où ils viennent.
+
+**Une étape peut ne livrer aucun média** : un run qui n'écrit qu'un `.json`
+réussit, et ce fichier est son livrable comme son `recit` (`_principal`,
+`adapter/chaines.py`). C'est le cas de `analyse` et `intention`.
+
 **Nommage des fichiers livrés** (règle générale, tenue ici) :
 `cortex/<nom donné>_<type>…` — le type est le workflow, ou la chaîne pour un
 livrable final (`<nom>_<chaine>-final_<id>`), et chaque étape rendue porte

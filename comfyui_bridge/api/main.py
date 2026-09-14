@@ -398,15 +398,29 @@ def _options_du_catalogue(c, filtre: Any) -> tuple[list[str], dict[str, Any]]:
     return [nom for _, _, nom in sorted(trouves)], libelles
 
 
+def _options_declarees(c, depuis: Any) -> tuple[list[str], dict[str, Any]]:
+    """La liste d'un champ qui dit d'OÙ elle vient, et de quoi l'habiller.
+
+    Deux sources, une seule règle : la liste appartient au fournisseur. Le
+    CATALOGUE pour un champ qui choisit un flux publié ; un MENU déclaré pour
+    un champ qui choisit dans un vocabulaire qu'un paquet tient (les structures
+    de récit). Recopier l'une ou l'autre dans la chaîne la figerait.
+    """
+    if isinstance(depuis, dict) and depuis.get("menu"):
+        from ..adapter import menus as _menus
+        declare = _menu_declare(c, str(depuis["menu"]))
+        return _menus.valeurs(declare)[0], declare
+    filtre = depuis.get("catalogue", depuis) if isinstance(depuis, dict) else depuis
+    options, libelles = _options_du_catalogue(c, filtre)
+    return options, {"libelles": libelles}
+
+
 def _options_exposees(c, chaine) -> dict[str, tuple]:
     """Les valeurs permises de chaque champ COMBO d'une chaîne."""
     sorties: dict[str, tuple] = {}
     for nom, champ in chaine.champs.items():
         if champ.options_depuis is not None:
-            filtre = champ.options_depuis
-            if isinstance(filtre, dict):
-                filtre = filtre.get("catalogue", filtre)
-            sorties[nom] = tuple(_options_du_catalogue(c, filtre)[0])
+            sorties[nom] = tuple(_options_declarees(c, champ.options_depuis)[0])
         elif champ.options is not None:
             sorties[nom] = tuple(champ.options)
     return sorties
@@ -425,11 +439,10 @@ def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
         menu = _menu_declare(c, nom)
         options = champ.options
         if champ.options_depuis is not None:
-            filtre = champ.options_depuis
-            if isinstance(filtre, dict):
-                filtre = filtre.get("catalogue", filtre)
-            options, libelles = _options_du_catalogue(c, filtre)
-            menu = {"libelles": libelles, **menu}
+            options, source = _options_declarees(c, champ.options_depuis)
+            # Le menu déclaré AU NOM DU CHAMP reste le plus proche : il peut
+            # retitrer ce que la source rend, jamais l'inverse.
+            menu = {**source, **menu}
         entree: dict[str, Any] = {
             "field": nom, "param": nom, "node": None, "input": None,
             "type": champ.type, "value": champ.defaut, "derived": False,

@@ -108,6 +108,29 @@ def test_une_valeur_hors_menu_est_refusee_et_le_menu_peut_venir_du_dehors():
     assert noyau.valeurs(chaine, {"mode": "z"}, {"mode": ("z",)}) == {"mode": "z"}
 
 
+def test_une_liste_peut_venir_du_catalogue_ou_d_un_menu_declare():
+    """Une chaîne qui recopie une liste la fige au jour où on l'a écrite. Elle
+    dit d'où elle vient — et les deux sources sont lues à la lecture, pas
+    découvertes dans un formulaire aux choix vides."""
+    for depuis in ({"catalogue": {"prefixe": "video-"}}, {"menu": "style_narratif"},
+                   {"prefixe": "video-"}):
+        chaine = noyau.lire(_minimale(expose={
+            "mode": {"type": "COMBO", "defaut": "a", "options_depuis": depuis}},
+            etapes=[{"id": "un", "rendre": {"workflow": "wf"}}]))
+        assert chaine.champs["mode"].options_depuis == depuis
+
+
+def test_une_liste_qui_nomme_deux_sources_ou_un_menu_sans_nom_est_refusee():
+    for depuis, dit in (({"catalogue": {}, "menu": "styles"}, "deux sources"),
+                        ({"menu": "   "}, "sans le nommer"),
+                        ("style_narratif", "doit être un objet")):
+        with pytest.raises(WorkflowMappingError) as refus:
+            noyau.lire(_minimale(expose={
+                "mode": {"type": "COMBO", "options_depuis": depuis}},
+                etapes=[{"id": "un", "rendre": {"workflow": "wf"}}]))
+        assert dit in refus.value.detail
+
+
 def test_resoudre_descend_dans_les_listes_et_les_objets():
     valeurs = {"largeur": 704}
     resultats = {"un": {"livrable": "C:/a.mp4", "mesure": {"duration_s": 4.2}}}

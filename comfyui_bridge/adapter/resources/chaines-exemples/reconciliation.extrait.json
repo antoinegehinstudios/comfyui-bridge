@@ -2,12 +2,13 @@
   "_lire_moi": "Extrait du fichier de réconciliation : ce qu'il faut y ajouter pour que ces chaînes et cette vitrine existent. Les valeurs entre chevrons sont à remplacer par les chemins de LA machine (le dépôt n'en publie aucun). Un chemin de chaîne peut aussi être relatif au fichier de réconciliation.",
   "_lire_moi_resume": "« description » est ce qu'un utilisateur lit AVANT de choisir : ce que la vidéo va être, en une phrase. Aucun terme de moteur (nom de nœud, nom de modèle, mécanique interne) — le nom du modèle a sa place dans le TITRE, qui est un choix que l'utilisateur fait.",
   "_lire_moi_menus_medias": "Le libellé d'une PIÈCE JOINTE se lit dans « menus » au nom du champ (image, video, audio) quand l'auteur du graphe n'a pas titré son nœud de chargement : sans lui, le formulaire montrait la clé nue « image ».",
-  "_lire_moi_techniques": "Les graphes que la chaîne « Révéler une image » enchaîne (la révélation cinématique, la fermeture) et ceux qu'un processus appelle en direct (la révélation dirigée, la poussée caméra) sont déclarés SANS titre ni catégorie : ce sont des techniques, un lanceur ne les voit pas. Un seul flux est publié dans cette catégorie.",
+  "_lire_moi_techniques": "Les graphes que la chaîne « Révéler une image » enchaîne (le savoir de l'image, l'intention, le déroulement, la conclusion, l'appel final) sont déclarés SANS titre ni catégorie : ce sont des techniques, un lanceur ne les voit pas. Un seul flux est publié dans cette catégorie.",
+  "_lire_moi_agnostique": "Ce qui est AGNOSTIQUE est APPELÉ, jamais ancré dans un flux : le savoir d'une image (image-savoir, écrit au carnet posé à côté d'elle et relu ensuite), la structure du récit (le catalogue des structures narratives d'un paquet de nœuds, servi par « options_depuis: {menu} ») et l'appel final (video-appel-final, qui vaut pour n'importe quelle vidéo). Le signe qu'un mécanisme doit sortir d'un flux : on peut le nommer sans nommer le flux.",
   "_lire_moi_aides": "« aides » : { \"<champ>\": \"<phrase ou exemple>\" } sur une entrée — rendu par /io sous « aide » sur le champ concerné. Un menu global peut aussi porter « aide » ; l'entrée l'emporte.",
 
   "categories": {
     "reveler-une-image": { "titre": "Révéler une image", "ordre": 1, "icone": "🖌️",
-      "resume": "L'image se dévoile à l'encre, en quatre temps, puis la page se referme." },
+      "resume": "L'image est lue, une mise en scène est écrite, puis l'encre la dévoile — accroche, mise en place, corps, conclusion, appel final." },
     "animer-une-image": { "titre": "Image → vidéo", "ordre": 2, "icone": "🎞️",
       "resume": "Une image de départ, un modèle qui la met en mouvement." },
     "video-longue": { "titre": "Vidéo longue dirigée", "ordre": 3, "icone": "🎬",
@@ -57,6 +58,9 @@
       "lavis": { "libelle": "Lavis", "resume": "aplats et lavis, le défaut" },
       "trait-sec": { "libelle": "Trait sec", "resume": "plus de trait, moins de lavis" },
       "encre-dense": { "libelle": "Encre dense", "resume": "aplats plus noirs, lavis plus large" } } },
+    "rendu": { "libelle": "Rendu", "libelles": {
+      "classique": { "libelle": "Classique (le rendu éprouvé)" },
+      "front-organique": { "libelle": "Front organique (essai : le lavis ne suit plus le rectangle de la caméra)" } } },
     "cta": { "libelle": "Appel final" }
   },
 
@@ -64,14 +68,46 @@
     "video-revelation": {
       "kind": "video",
       "chaine": "<dossier de données>/chaines/video-revelation.json",
-      "description": "L'image se dévoile à l'encre en quatre temps — un hook en 2,5 s, une retenue, le climax gardé pour la fin et tenu — puis la page se referme ; un appel final peut s'écrire à l'encre.",
+      "description": "L'image est lue et documentée, une intention est écrite, puis l'encre la déroule : une accroche de 2,5 s, une mise en place, un corps qui croît vers le climax et le tient — puis, si on le veut, une conclusion et un appel final écrit à l'encre.",
       "titre": "Révéler une image", "categorie": "reveler-une-image", "ordre": 1,
       "aides": {
-        "duration_s": "Au moins cette durée : le plan peut l'allonger, jusqu'à 79 s, pour ne précipiter aucun temps ; la fermeture s'ajoute.",
-        "conclusion_s": "La page se referme sur la zone du climax, la couleur se retire la première.",
-        "cta": "Une phrase courte, écrite à l'encre sur la page refermée (3,5 s). Vide : aucun appel.",
+        "image": "Le savoir de cette image est écrit à côté d'elle la première fois, et relu ensuite : la même image ne se documente qu'une fois.",
+        "duration_s": "La durée du DÉROULEMENT, au moins : le plan peut l'allonger pour ne précipiter aucun temps. La conclusion et l'appel final s'ajoutent après — un média qui se regarde en défilant tient sous 1 min 30.",
+        "conclusion_s": "La scène se pose et la page se referme sur la zone du climax. À 0, il n'y a pas de conclusion : l'appel final suit le déroulement.",
+        "cta": "Une phrase courte, écrite à l'encre sur les dernières secondes (3,5 s), qui boucle sur le début. Vide : aucun appel.",
+        "style_narratif": "La structure du récit : quels temps, dans quel ordre, et ce que chacun doit faire. La liste est celle du catalogue des structures.",
         "fond": "Le papier et sa lumière : ce sur quoi l'encre se pose.",
-        "encre": "Comment l'encre restitue l'image : lavis (défaut), trait sec, encre dense."
+        "encre": "Comment l'encre restitue l'image : lavis (défaut), trait sec, encre dense.",
+        "rendu": "Comment le front d'encre avance : le rendu éprouvé, ou l'essai où le lavis ne suit plus le rectangle de la caméra."
+      }
+    },
+
+    "_lire_moi_entrees_techniques": "Sans titre ni catégorie, une entrée reste hors de la vue du lanceur. « image-savoir » et « image-intention » ne livrent AUCUN média : leur artefact .json est leur livrable, et la chaîne le lit sous $etape.recit.",
+    "image-savoir": {
+      "kind": "image",
+      "workflow": "<dossier de données>/workflows/image-savoir.json",
+      "description": "Ce que l'on sait d'une image : ce qu'elle contient, ce qu'elle est, ce qu'une encyclopédie en dit, ce que le modèle en sait, et ce qui compte dedans. Le savoir est écrit AU CARNET à côté de l'image et relu tel quel la fois suivante. Ne livre aucun média : un fichier de nombres.",
+      "bindings": { "image": { "node": "1", "input": "image" } }
+    },
+    "image-intention": {
+      "kind": "image",
+      "workflow": "<dossier de données>/workflows/image-intention.json",
+      "description": "La mise en scène : à partir du relevé et de ce que l'on sait de l'œuvre, le réalisateur écrit le plan — l'accroche, les temps retenus, le climax — dans la structure de récit demandée. Ne livre aucun média : le plan, en fichier de nombres.",
+      "bindings": {
+        "image": { "node": "1", "input": "image" },
+        "style_narratif": { "node": "70", "input": "style_narratif" }
+      }
+    },
+    "video-appel-final": {
+      "kind": "video",
+      "workflow": "<dossier de données>/workflows/video-appel-final.json",
+      "description": "L'appel final écrit à l'encre sur la dernière image d'une vidéo, puis tenu quelques secondes. Texte vide : la vidéo repart telle quelle. Entrée : une VIDÉO (media video).",
+      "defaults": { "fps": 25 },
+      "bindings": {
+        "video": { "node": "1", "input": "file" },
+        "fps": { "node": "4", "input": "value" },
+        "seed": { "node": "16", "input": "value" },
+        "filename_prefix": { "node": "18", "input": "filename_prefix" }
       }
     },
     "video-prolongement": {

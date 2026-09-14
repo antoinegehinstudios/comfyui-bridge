@@ -29,6 +29,11 @@ MEDIA_LOADERS: dict[str, tuple[str, str]] = {
     "LoadAudio": ("audio", "audio"),
     "Load3D": ("3d", "model_file"),
     "Load3DAdvanced": ("3d", "model_file"),
+    # Un nœud qui prend une image par son NOM sans être un chargeur d'image :
+    # il ouvre le fichier lui-même (il a besoin du fichier, pas des pixels, pour
+    # écrire ce qu'il en sait à côté). Absent d'ici, il n'apparaissait pas comme
+    # une pièce jointe et le formulaire ne proposait rien à joindre.
+    "ImageSavoir": ("image", "image"),
 }
 
 # Les drapeaux par lesquels ComfyUI annonce qu'une entrée reçoit un fichier.

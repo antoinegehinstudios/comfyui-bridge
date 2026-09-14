@@ -52,6 +52,10 @@ class BackendQuiLivre:
         # Un dict est écrit en JSON ; un texte est écrit tel quel (pour éprouver
         # un récit illisible) ; None n'écrit rien.
         self.recit: dict | str | None = dict(RECIT_D_ESSAI)
+        # Un run qui n'a QUE des nombres à livrer : une étape qui documente une
+        # image, une étape qui écrit un plan. Il réussit, et son livrable est
+        # ce fichier-là.
+        self.sans_media = False
 
     def preview(self, plan):
         return {"workflow": {}}
@@ -69,6 +73,14 @@ class BackendQuiLivre:
         dossier = self.sortie / "cortex"
         dossier.mkdir(parents=True, exist_ok=True)
         nom = str(plan.params.get("filename_prefix", "cortex/essai")).rsplit("/", 1)[-1]
+        if self.sans_media:
+            fichier = dossier / f"{nom}_{len(self.runs)}.json"
+            fichier.write_text(json.dumps(self.recit or {}, ensure_ascii=False),
+                               encoding="utf-8")
+            return BackendResult(artifacts=[Artifact(
+                kind=media_kind(fichier), path=str(fichier.resolve()),
+                url=artifact_url(self.sortie, fichier), bytes=fichier.stat().st_size)],
+                raw_stdout="essai", execution_s=0.5)
         if plan.kind == "video":
             fichier = dossier / f"{nom}_{len(self.runs)}.mp4"
             secondes = float(plan.params.get("duration_s") or 1)
@@ -155,6 +167,28 @@ CHAINE_AU_RECIT = {
     "livrable": "$un.livrable",
 }
 
+# Un champ dont la LISTE n'est pas écrite dans la chaîne : elle est celle d'un
+# menu déclaré, qui n'est lui-même que la projection d'un fichier tenu par un
+# fournisseur (ici un faux paquet de structures). Recopier la liste ici la
+# figerait au jour où on l'a écrite.
+CHAINE_AU_MENU = {
+    "version": 1, "chaine": "chaine-au-menu",
+    "resume": "un menu dont la liste appartient au fournisseur",
+    "expose": {
+        "structure": {"type": "COMBO", "defaut": "en-boucle",
+                      "options_depuis": {"menu": "structure"},
+                      "libelle": "Structure du récit"},
+    },
+    "etapes": [{"id": "un", "rendre": {"workflow": "sd15-txt2img",
+                                       "prompt": "$structure"}}],
+    "livrable": "$un.livrable",
+}
+
+STRUCTURES = {"styles": {
+    "en-boucle": {"libelle": "En boucle", "famille": "structure sociale"},
+    "lente": {"libelle": "Contemplation lente", "famille": "structure longue"},
+}}
+
 
 @pytest.fixture()
 def atelier():
@@ -163,11 +197,20 @@ def atelier():
     (tmp / "chaine-simple.json").write_text(json.dumps(CHAINE_SIMPLE), encoding="utf-8")
     (tmp / "chaine-recollee.json").write_text(json.dumps(CHAINE_RECOLLEE), encoding="utf-8")
     (tmp / "chaine-au-recit.json").write_text(json.dumps(CHAINE_AU_RECIT), encoding="utf-8")
+    (tmp / "chaine-au-menu.json").write_text(json.dumps(CHAINE_AU_MENU), encoding="utf-8")
+    (tmp / "structures.json").write_text(json.dumps(STRUCTURES, ensure_ascii=False),
+                                         encoding="utf-8")
     (tmp / "reconciliation.local.json").write_text(json.dumps({
         "categories": {"essais": {"titre": "Essais", "ordre": 1}},
         "menus": {"mode": {"libelle": "Le mode",
-                           "libelles": {"a": {"libelle": "Le premier", "groupe": "essais"}}}},
+                           "libelles": {"a": {"libelle": "Le premier", "groupe": "essais"}}},
+                  "structure": {"libelle": "La structure",
+                                "source_fichier": {"chemin": str(tmp / "structures.json"),
+                                                   "table": "styles", "libelle": "libelle",
+                                                   "groupe": "famille"}}},
         "workflows": {
+            "chaine-au-menu": {"kind": "image", "chaine": str(tmp / "chaine-au-menu.json"),
+                               "titre": "Chaîne au menu", "categorie": "essais", "ordre": 5},
             "chaine-simple": {"kind": "image", "chaine": str(tmp / "chaine-simple.json"),
                               "titre": "Chaîne d'essai", "categorie": "essais", "ordre": 1},
             "chaine-recollee": {"kind": "video", "chaine": str(tmp / "chaine-recollee.json"),
@@ -190,6 +233,7 @@ def atelier():
     app.state.container.orchestrator._backend = faux
     with TestClient(app) as client:
         client.faux = faux
+        client.tmp = tmp
         yield client
 
 
@@ -286,6 +330,55 @@ def test_le_recit_d_un_rendu_se_controle_et_sa_fiche_le_resume(atelier):
     sous = atelier.get("/v1/jobs/" + rendu["job_id"]).json()
     assert [a["kind"] for a in sous["artifacts"]] == ["image", "text"]
     assert pathlib.Path(job["artifacts"][0]["path"]).suffix == ".png"
+
+
+def test_une_etape_qui_ne_livre_que_des_nombres_reussit_et_son_recit_se_lit(atelier):
+    """Toutes les étapes ne rendent pas un média : documenter une image, écrire
+    un plan, cela ne produit que des nombres. L'étape échouait sur « le run a
+    réussi sans livrer de média » alors que c'est justement son récit que la
+    suite attend."""
+    atelier.faux.sans_media = True
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-au-recit"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    rendu, temps = job["etapes"]
+    assert [ctl["ok"] for ctl in temps["resultat"]["controles"]] == [True, True]
+    # Le livrable de l'étape EST le fichier de nombres : il n'y en a pas d'autre.
+    assert rendu["resultat"]["livrable"].endswith(".json")
+    sous = atelier.get("/v1/jobs/" + rendu["job_id"]).json()
+    assert [a["kind"] for a in sous["artifacts"]] == ["text"]
+
+
+def test_la_liste_d_un_menu_reste_celle_du_fournisseur(atelier):
+    """Une chaîne qui offre un vocabulaire (les structures de récit) ne le
+    recopie pas : elle nomme le menu, et la liste est celle du fichier que le
+    fournisseur tient. Recopiée, elle aurait vieilli au premier ajout."""
+    champ = next(e for e in atelier.get("/v1/workflows/chaine-au-menu/io").json()
+                 ["intent_inputs"] if e["field"] == "structure")
+    assert champ["options"] == ["en-boucle", "lente"]
+    # Le libellé le plus proche (celui de la chaîne) l'emporte sur celui du menu,
+    # mais les CHOIX sont habillés par ce que le fournisseur écrit.
+    assert champ["libelle"] == "Structure du récit"
+    assert champ["choix"] == [
+        {"valeur": "en-boucle", "libelle": "En boucle", "groupe": "structure sociale"},
+        {"valeur": "lente", "libelle": "Contemplation lente", "groupe": "structure longue"}]
+    # Hors de cette liste, la passerelle refuse — c'est elle qui fait autorité.
+    refus = atelier.post("/v1/render", json={"workflow": "chaine-au-menu",
+                                             "structure": "inventee"})
+    assert refus.status_code == 422
+    assert refus.json()["type"].endswith("/input-value-refused")
+    assert refus.json()["options"] == ["en-boucle", "lente"]
+    # Le fournisseur ajoute une structure : elle apparaît sans toucher la chaîne.
+    fichier = atelier.tmp / "structures.json"
+    enrichi = json.loads(fichier.read_text(encoding="utf-8"))
+    enrichi["styles"]["saccadee"] = {"libelle": "Saccadée", "famille": "structure courte"}
+    fichier.write_text(json.dumps(enrichi, ensure_ascii=False), encoding="utf-8")
+    import os
+    os.utime(fichier, (fichier.stat().st_atime, fichier.stat().st_mtime + 10))
+    champ = next(e for e in atelier.get("/v1/workflows/chaine-au-menu/io").json()
+                 ["intent_inputs"] if e["field"] == "structure")
+    assert champ["options"] == ["en-boucle", "lente", "saccadee"]
+    assert atelier.post("/v1/render", json={"workflow": "chaine-au-menu",
+                                            "structure": "saccadee"}).status_code < 400
 
 
 def test_un_recit_qui_ne_tient_pas_la_regle_arrete_la_chaine(atelier):

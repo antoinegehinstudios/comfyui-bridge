@@ -8,7 +8,7 @@ dans `_data/chaines/` et déclarer l'entrée correspondante.
 
 | fichier | ce que c'est |
 |---|---|
-| `video-revelation.json` | « Révéler une image », le seul flux publié de sa catégorie : révélation cinématique (au moins la durée demandée, jusqu'à 79 s) → contrôle des quatre temps sur le récit écrit par le nœud (hook nommé et vu à 2,5 s, retenue, climax gardé pour la fin et tenu, étapes qui se suivent) → queue de 50 images → fermeture « la page se referme » puis appel final à l'encre (facultatif) → recollage → contrôle de durée et de poids. Menus `fond` et `encre`, champ `cta` |
+| `video-revelation.json` | « Révéler une image », le seul flux publié de sa catégorie, en dix étapes qui portent les noms du travail : `analyse` (le savoir de l'image, lu au carnet posé à côté d'elle, ou relevé puis écrit) → `intention` (le plan, dans la structure de récit demandée) → `plan_valide` (le plan tient-il, avant la moindre seconde de rendu) → `deroulement` (la peinture, qui reçoit relevé et plan tels quels) → `plan_tenu` (ce que la peinture a MESURÉ contre ce que le plan promettait) → `raccord` → `conclusion` (0 s = aucune) → `appel` → `montage` → `controle`. Menus `style_narratif`, `fond`, `encre`, `rendu`, champ `cta` |
 | `video-prolongement.json` | 17 dernières images d'une vidéo → prolongement par le modèle → mesure du raccord → recollage sans le chevauchement → contrôle |
 
 Une chaîne se déclare comme une entrée ordinaire du catalogue, avec `chaine`
@@ -19,7 +19,7 @@ au lieu de `workflow` + `bindings` :
   "kind": "video",
   "chaine": "…/_data/chaines/video-revelation.json",
   "titre": "Révéler une image", "categorie": "reveler-une-image", "ordre": 1,
-  "aides": { "cta": "Une phrase courte, écrite à l'encre sur la page refermée. Vide : aucun appel." }
+  "aides": { "cta": "Une phrase courte, écrite à l'encre sur les dernières secondes. Vide : aucun appel." }
 }
 ```
 
@@ -29,6 +29,21 @@ Une étape `rendre` peut régler une entrée du graphe qu'elle vise,
 `"inputs": {"61.fond": "$fond"}` — l'entrée doit exister en littéral dans le
 graphe. Une étape `verifier` lit sous `$etape.recit.<clé>` tout artefact
 `.json` que le run a rapporté : c'est ainsi que les temps sont contrôlés sur
-ce que le nœud a mesuré, avant de dépenser la fermeture.
+ce que le nœud a mesuré, avant de dépenser la suite. Une étape qui ne livre
+QUE des nombres (documenter une image, écrire un plan) réussit : son artefact
+`.json` est son livrable.
+
+Un champ COMBO peut dire d'où vient sa liste au lieu de la recopier :
+`"options_depuis": {"catalogue": {…}}` (les entrées publiées du catalogue) ou
+`"options_depuis": {"menu": "style_narratif"}` (les valeurs d'un menu déclaré,
+lui-même souvent la projection d'un fichier que tient un paquet de nœuds).
+Recopiée, une liste vieillit au premier ajout.
+
+Ce qui est AGNOSTIQUE est appelé, jamais ancré : le savoir d'une image
+(`image-savoir`, écrit au carnet posé à côté d'elle), la structure du récit
+(le catalogue des structures narratives) et l'appel final (`video-appel-final`)
+valent pour n'importe quel flux — la chaîne les appelle, un autre flux le peut
+aussi, et le savoir déjà écrit n'est pas repayé.
+
 Les workflows sont cités par leur NOM au catalogue : ces fichiers ne portent
 aucun chemin de cette machine.

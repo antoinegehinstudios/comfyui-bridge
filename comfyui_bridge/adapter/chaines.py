@@ -416,14 +416,18 @@ class RunnerDeChaines:
 
 
 def _principal(artefacts: list[Artifact]) -> Artifact | None:
-    """Le média d'un run, parmi ce qu'il a écrit.
+    """Ce qu'un run a livré de PRINCIPAL, parmi ce qu'il a écrit.
 
     Un graphe peut livrer une analyse à côté de sa vidéo : c'est le MÉDIA que
-    l'étape suivante reprend, jamais le fichier de nombres.
+    l'étape suivante reprend, jamais le fichier de nombres. Mais un run peut
+    aussi n'avoir QUE des nombres à livrer — une étape qui documente, une étape
+    qui écrit un plan : il a réussi, et son livrable est ce fichier. Le refuser
+    faisait échouer l'étape sur « le run a réussi sans livrer de média », alors
+    que c'est son récit, et non son média, que la suite attend.
     """
     medias = [a for a in artefacts if a.kind in ("video", "image", "audio", "3d")]
     videos = [a for a in medias if a.kind == "video"]
-    choisis = videos or medias
+    choisis = videos or medias or list(artefacts)
     return max(choisis, key=lambda a: a.bytes or 0) if choisis else None
 
 

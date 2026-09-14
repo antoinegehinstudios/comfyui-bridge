@@ -726,31 +726,51 @@ Le fichier de chaîne (copies de référence dans
 {
   "version": 1, "chaine": "video-revelation", "resume": "…",
   "expose": {
-    "image":      { "media": "image", "requis": true, "libelle": "L'image à révéler" },
-    "duration_s": { "type": "FLOAT", "defaut": 45, "min": 20, "max": 79, "unite": "s" },
-    "fond":       { "type": "COMBO", "defaut": "washi", "options": ["washi", "sepia"] },
-    "cta":        { "type": "STRING", "defaut": "", "libelle": "Appel final (facultatif)" }
+    "image":       { "media": "image", "requis": true, "libelle": "L'image à révéler" },
+    "duration_s":  { "type": "FLOAT", "defaut": 45, "min": 5, "max": 79, "unite": "s" },
+    "style_narratif": { "type": "COMBO", "defaut": "reseau-social",
+                        "options_depuis": { "menu": "style_narratif" },
+                        "libelle": "Structure du récit" },
+    "fond":        { "type": "COMBO", "defaut": "washi", "options": ["washi", "sepia"] },
+    "cta":         { "type": "STRING", "defaut": "", "libelle": "Appel final (facultatif)" }
   },
   "etapes": [
-    { "id": "revelation", "rendre": { "workflow": "video-reveal-cinematic",
+    { "id": "analyse",   "rendre": { "workflow": "image-savoir",
+        "media": { "image": "$image" } } },
+    { "id": "intention", "rendre": { "workflow": "image-intention",
+        "media": { "image": "$image" }, "style_narratif": "$style_narratif",
+        "inputs": { "62.markers_json": "$analyse.recit.markers_json" } } },
+    { "id": "plan_valide", "verifier": [
+        { "id": "le_plan_nomme_son_climax", "valeur": "$intention.recit.climax",
+          "op": "exists" } ] },
+    { "id": "deroulement", "rendre": { "workflow": "video-reveal-cinematic-dirige",
         "media": { "image": "$image" }, "duration_s": "$duration_s",
-        "inputs": { "61.fond": "$fond" } } },
-    { "id": "temps", "verifier": [
-        { "id": "hook_vu_a_2_5_s", "valeur": "$revelation.recit.hook_vu.atteint",
-          "op": "gte", "attendu": 0.10 },
-        { "id": "climax_tenu", "valeur": "$revelation.recit.climax_tenue_s",
-          "op": "gte", "attendu": 2.0 } ] },
-    { "id": "queue",   "extraire_queue": { "video": "$revelation.livrable", "images": 50 } },
+        "inputs": { "61.direction_json": "$intention.recit.direction_json",
+                    "61.fond": "$fond" } } },
+    { "id": "plan_tenu", "verifier": [
+        { "id": "l_accroche_est_vue_a_2_5_s",
+          "valeur": "$deroulement.recit.hook_vu.atteint", "op": "gte", "attendu": 0.10 } ] },
+    { "id": "raccord",    "extraire_queue": { "video": "$deroulement.livrable", "images": 50 } },
     { "id": "conclusion", "rendre": { "workflow": "video-reveal-closing",
-        "media": { "video": "$queue.depot" }, "inputs": { "7.texte": "$cta" } } },
-    { "id": "final",   "recoller": { "parts": ["$revelation.livrable", "$conclusion.livrable"] } },
-    { "id": "controle", "verifier": [
-        { "id": "duree_au_moins_demandee", "valeur": "$final.mesure.duration_s",
-          "op": "gte", "attendu": "$duration_s" } ] }
+        "media": { "video": "$raccord.depot" }, "duration_s": "$conclusion_s" } },
+    { "id": "appel",      "rendre": { "workflow": "video-appel-final",
+        "media": { "video": "$conclusion.livrable" }, "inputs": { "7.texte": "$cta" } } },
+    { "id": "montage",    "recoller": { "parts": ["$deroulement.livrable", "$appel.livrable"] } },
+    { "id": "controle",   "verifier": [
+        { "id": "les_deux_parts", "valeur": "$montage.parts", "op": "eq", "attendu": 2 } ] }
   ],
-  "livrable": "$final.livrable"
+  "livrable": "$montage.livrable"
 }
 ```
+
+**Menus dont la liste n'est pas écrite** : un champ peut dire d'OÙ viennent ses
+valeurs plutôt que les recopier — `"options_depuis": {"catalogue": {…}}` (les
+entrées publiées du catalogue, filtrées) ou `"options_depuis": {"menu": "<nom>"}`
+(les valeurs d'un menu déclaré, qui peut n'être que la projection d'un fichier
+tenu par un fournisseur). Recopiée, une liste vieillit au premier ajout ; ici
+elle reste celle du fournisseur, et la passerelle refuse tout ce qui n'y est
+pas. Nommer deux sources à la fois, ou un menu sans le nommer, est refusé **à
+la lecture**.
 
 **Renvois** : `$champ` (une valeur exposée), `$etape.cle` (un résultat d'étape
 PRÉCÉDENTE). Un renvoi vers l'aval ou vers un nom inconnu est refusé **à la
@@ -765,7 +785,7 @@ révélation (`61.fond`, `61.encre`) et l'appel final le nœud d'inscription
 échoue en la nommant), et jamais une entrée déjà liée par les `bindings`, que
 l'override écraserait en silence.
 
-**Récit** : tout artefact `.json` qu'un run rapporte est parsé sous `recit`
+**Récit** : le premier artefact `.json` qu'un run rapporte (hors compagnon `.origine.json`) est parsé sous `recit`
 dans le résultat de l'étape. Une étape `verifier` contrôle alors ce que le
 nœud a MESURÉ — `$revelation.recit.hook_vu.atteint`, `…climax_tenue_s`,
 `…duree_retenue_s` — et arrête la chaîne AVANT de dépenser la fermeture
@@ -775,7 +795,7 @@ quand le plan ne tient pas la règle des quatre temps.
 
 | genre | ce qu'il fait | résultat |
 |---|---|---|
-| `rendre` | un run de workflow, par les moyens ordinaires | `livrable`, `artefacts`, `mesure`, `job_id`, `recit` (tout artefact `.json` du run, parsé) |
+| `rendre` | un run de workflow, par les moyens ordinaires | `livrable`, `artefacts`, `mesure`, `job_id`, `recit` (le premier artefact `.json` du run, hors compagnon, parsé ; la fiche du job n'en garde que les valeurs simples du premier niveau, le récit entier reste lisible par les étapes `verifier`) |
 | `extraire_queue` | les N dernières images, en clip SANS PERTE (`-qp 0`, compte revérifié), déposé chez le moteur | `fichier`, `depot`, `images` |
 | `extraire_image` | une image, par son index exact (`first`/`last`/N) | `fichier`, `depot` |
 | `recoller` | joindre des parts (ré-encodage uniforme, piste silencieuse si muet) | `livrable`, `mesure`, `parts` |
@@ -793,14 +813,49 @@ sous `<sortie>/cortex/_travail/<job>/` et ne sont jamais listées comme
 livrables. Annuler le parent arrête le sous-job en cours par les moyens du
 moteur et saute le reste.
 
-Deux chaînes sont livrées : `video-revelation` — « Révéler une image »,
-le seul flux publié de sa catégorie : révélation cinématique → contrôle des
-quatre temps sur le récit → queue de 50 images → fermeture et appel final à
-l'encre → recollage → contrôle de durée et de poids ; les graphes qu'elle
-enchaîne (`video-reveal-cinematic`, `video-reveal-closing`) et
-`video-reveal-cinematic-dirige`, `video-still-motion` restent des techniques,
-sans catégorie — et `video-prolongement` (17 dernières images →
-prolongement → mesure du raccord → recollage sans le chevauchement).
+Deux chaînes sont livrées.
+
+`video-revelation` — « Révéler une image », le seul flux publié de sa
+catégorie, **dix étapes** qui portent les noms du travail :
+
+| étape | ce qu'elle fait |
+|---|---|
+| `analyse` | ce que l'on sait de l'image — relevé, identité, notice, savoir du modèle, ancres — LU AU CARNET posé à côté d'elle quand il existe déjà, relevé et écrit sinon. Ne livre aucun média : son artefact `.json` EST son résultat |
+| `intention` | le plan : accroche, temps retenus, climax, dans la structure de récit demandée. Artefact `.json` lui aussi |
+| `plan_valide` | le plan tient-il ? accroche et climax nommés, l'accroche ne recouvre pas le climax, au moins trois temps — avant de dépenser la moindre seconde de rendu |
+| `deroulement` | la peinture, qui reçoit le relevé et le plan tels quels |
+| `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait |
+| `raccord` | les 50 dernières images, en clip sans perte |
+| `conclusion` | la page se referme (0 s = pas de conclusion) |
+| `appel` | l'appel final écrit à l'encre sur la fin |
+| `montage` | déroulement + fin, recollés |
+| `controle` | deux parts, un livrable qui pèse |
+
+Les graphes qu'elle enchaîne (`image-savoir`, `image-intention`,
+`video-reveal-cinematic-dirige`, `video-reveal-closing`, `video-appel-final`)
+et `video-still-motion` restent des **techniques**, sans catégorie : le
+lanceur ne les montre pas.
+
+`video-prolongement` — 17 dernières images → prolongement → mesure du raccord
+→ recollage sans le chevauchement.
+
+### Ce qui est agnostique est APPELÉ, jamais ancré
+
+Une étape qui ne regarde pas ce flux-ci n'a rien à faire dedans. Trois
+mécanismes de la chaîne ci-dessus valent pour n'importe quel flux, et sont
+donc des entrées de catalogue qu'elle APPELLE — un autre flux les appellera
+sans rien dupliquer :
+
+| mécanisme | où il vit | ce qu'il rend |
+|---|---|---|
+| le SAVOIR d'une image | graphe `image-savoir` (nœud `ImageSavoir` du paquet d'encre) → carnet `<image>.connaissance.json`, format du processus « connaître une image » | relevé, identité, notice, savoir du modèle, ancres — payés une seule fois par image, quel que soit ce qu'on en fera |
+| la STRUCTURE du récit | catalogue de structures du paquet `comfyui-direction-de-style` (`styles/narratifs.json`), servi au formulaire par `options_depuis: {"menu": "style_narratif"}` et au graphe `image-intention` par le champ sémantique `style_narratif` | les temps, leur ordre, ce que chacun doit faire (`reseau-social` : hook · setup · corps · conclusion facultative · appel) |
+| l'APPEL FINAL | graphe `video-appel-final` | le texte écrit à l'encre sur la fin d'une vidéo — de n'importe quelle vidéo, pas seulement d'une révélation |
+
+Le signe qu'un mécanisme doit sortir d'un flux : on peut le nommer sans
+nommer le flux. La conclusion et l'appel final vivaient dans le même graphe ;
+on ne pouvait pas avoir l'un sans l'autre. Ils sont maintenant deux étapes,
+et deux graphes.
 
 ## Vitrine : catégories, titres, menus
 
@@ -857,7 +912,7 @@ modifier ça ? » a donc une réponse par nature de changement :
 | l'EFFET lui-même (l'encre, les taches, la caméra, la fermeture) | le paquet de nœuds ComfyUI (`comfyui-ink-reveal`, `comfyui-direction-de-style`…) | le moteur ; ré-extraire si les entrées changent |
 | le GRAPHE d'un mode (ses nœuds, ses valeurs figées) | `_data/workflows/<nom>.json` + ses liaisons dans `_data/reconciliation.local.json` | `POST /v1/render` |
 | l'ORDRE des étapes, les durées, les contrôles d'un flux composé | `_data/chaines/<nom>.json` (et sa copie `resources/chaines-exemples/`) | le runner de chaînes |
-| un CONTRÔLE sur ce que le nœud a MESURÉ (hook vu, climax tenu, durée retenue) | l'étape `verifier` de la chaîne, sur `$etape.recit.<clé>` (tout artefact `.json` d'un run est parsé sous `recit`) | le runner de chaînes |
+| un CONTRÔLE sur ce que le nœud a MESURÉ (hook vu, climax tenu, durée retenue) | l'étape `verifier` de la chaîne, sur `$etape.recit.<clé>` (le premier artefact `.json` d'un run est parsé sous `recit`) | le runner de chaînes |
 | une RÉPÉTITION (blocs de boucle, conditions) | le montage `_data/workflows/<montage>.json`, ses blocs `_data/blocs/` | le dépliage |
 | ce que l'utilisateur VOIT (titre, catégorie, résumé, libellés, aides) | `_data/reconciliation.local.json` : `titre`, `categorie`, `menus`, `aides` | `/v1/workflows`, `/io` |
 | le VOCABULAIRE des styles | `styles/*.json` du paquet de direction de style | `/io` (`options` + `choix`) |

@@ -55,6 +55,14 @@ _OPS: tuple[str, ...] = ("eq", "ne", "lte", "gte", "between", "exists")
 
 _TYPES: tuple[str, ...] = ("INT", "FLOAT", "STRING", "COMBO", "BOOLEAN")
 
+# D'où une liste de choix peut venir quand la chaîne ne l'écrit pas. Une chaîne
+# qui recopie une liste la fige au jour où on l'a écrite : elle dit d'où elle
+# vient, et le fournisseur reste la source.
+_SOURCES_D_OPTIONS: tuple[str, ...] = (
+    "catalogue",   # les entrées PUBLIÉES du catalogue, filtrées
+    "menu",        # les valeurs d'un menu déclaré (table écrite, ou fichier projeté)
+)
+
 
 @dataclass(frozen=True)
 class Champ:
@@ -74,7 +82,9 @@ class Champ:
     pas: float | None = None
     options: tuple[Any, ...] | None = None
     # D'où viennent les options quand ce n'est pas une liste écrite : « catalogue »
-    # laisse la passerelle les remplir depuis ses propres entrées publiées.
+    # laisse la passerelle les remplir depuis ses propres entrées publiées,
+    # « menu » depuis la table d'un menu déclaré (qui peut elle-même être la
+    # projection d'un fichier que tient un fournisseur).
     options_depuis: Any = None
     libelle: str = ""
     unite: str | None = None
@@ -112,6 +122,36 @@ class Chaine:
 # -- lecture ------------------------------------------------------------------
 
 
+def _options_depuis(nom: str, brut: Any, chaine: str) -> Any:
+    """D'où la liste d'un menu vient, quand la chaîne ne l'écrit pas.
+
+    ``{"catalogue": {…}}`` : les entrées publiées du catalogue, filtrées.
+    ``{"menu": "<nom>"}`` : les valeurs du menu déclaré à la passerelle — qui
+    peut lui-même n'être que la projection d'un fichier tenu par un fournisseur
+    (les structures de récit vivent dans le paquet qui les sert). Un objet qui
+    ne nomme aucune source reste un filtre de catalogue, la forme d'origine.
+
+    Ce qui est refusé ici est ce qu'une lecture peut prouver : deux sources à
+    la fois (laquelle l'emporterait ?), un menu sans nom. Découvert plus tard,
+    ce serait un formulaire aux choix silencieusement vides.
+    """
+    if brut is None:
+        return None
+    if not isinstance(brut, dict):
+        raise WorkflowMappingError(
+            f"chaîne {chaine!r} : « options_depuis » de {nom!r} doit être un objet "
+            f"({', '.join(_SOURCES_D_OPTIONS)})")
+    nommees = [source for source in _SOURCES_D_OPTIONS if source in brut]
+    if len(nommees) > 1:
+        raise WorkflowMappingError(
+            f"chaîne {chaine!r} : {nom!r} nomme deux sources d'options à la fois "
+            f"({', '.join(nommees)}) — une seule peut faire la liste")
+    if "menu" in brut and not str(brut["menu"]).strip():
+        raise WorkflowMappingError(
+            f"chaîne {chaine!r} : {nom!r} tire ses options d'un « menu » sans le nommer")
+    return brut
+
+
 def _champ(nom: str, brut: Any, chaine: str) -> Champ:
     if not isinstance(brut, dict):
         raise WorkflowMappingError(f"chaîne {chaine!r} : le champ exposé {nom!r} doit être un objet")
@@ -136,7 +176,7 @@ def _champ(nom: str, brut: Any, chaine: str) -> Champ:
         nom=nom, type=genre, defaut=brut.get("defaut"),
         minimum=brut.get("min"), maximum=brut.get("max"), pas=brut.get("step"),
         options=tuple(options) if options is not None else None,
-        options_depuis=brut.get("options_depuis"),
+        options_depuis=_options_depuis(nom, brut.get("options_depuis"), chaine),
         libelle=str(brut.get("libelle") or nom),
         unite=brut.get("unite"),
         requis=bool(brut.get("requis", False)),

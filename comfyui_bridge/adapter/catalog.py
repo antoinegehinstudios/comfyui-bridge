@@ -601,8 +601,8 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
         if not isinstance(entry, dict):
             raise WorkflowMappingError(f"workflow {name!r}: needs 'workflow' and 'bindings'")
         # La vitrine se lit sur TOUTE entrée, chaîne ou graphe : c'est ce qui
-        # fait qu'un lanceur montre « Révélation pour podcast » et non
-        # « video-revelation-podcast », et qu'une entrée technique reste hors
+        # fait qu'un lanceur montre le titre déclaré (« Révéler une image »)
+        # et non l'identifiant technique, et qu'une entrée technique reste hors
         # de la vue sans avoir à tenir une seconde liste quelque part.
         vitrine = {
             "titre": str(entry.get("titre") or ""),
