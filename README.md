@@ -735,7 +735,7 @@ Le fichier de chaîne (copies de référence dans
     "cta":         { "type": "STRING", "defaut": "", "libelle": "Appel final (facultatif)" }
   },
   "etapes": [
-    { "id": "analyse",   "rendre": { "workflow": "image-savoir",
+    { "id": "analyse",   "rendre": { "workflow": "image-iconographe",
         "media": { "image": "$image" } } },
     { "id": "intention", "rendre": { "workflow": "image-intention",
         "media": { "image": "$image" }, "style_narratif": "$style_narratif",
@@ -824,7 +824,7 @@ catégorie, **dix étapes** qui portent les noms du travail :
 
 | étape | ce qu'elle fait |
 |---|---|
-| `analyse` | ce que l'on sait de l'image — relevé, identité, notice, savoir du modèle, ancres — LU AU CARNET posé à côté d'elle quand il existe déjà, relevé et écrit sinon. Ne livre aucun média : son artefact `.json` EST son résultat |
+| `analyse` | la DOCUMENTATION de l'image par **Iconographe** (`image-iconographe`) — carte d'attention, éléments découpés au pixel, hiérarchie mesurée, noms et textes — servie par sa bibliothèque si l'œuvre y est déjà (verdict « repris », 15,9 s mesurées), calculée sinon (≈ 18 min, une fois). Ne livre aucun média : son artefact `.json` EST son résultat |
 | `intention` | le plan : accroche, temps retenus, climax, dans la structure de récit demandée. Artefact `.json` lui aussi |
 | `plan_valide` | le plan tient-il ? accroche et climax nommés, l'accroche ne recouvre pas le climax, au moins trois temps — avant de dépenser la moindre seconde de rendu |
 | `deroulement` | la peinture, qui reçoit le relevé et le plan tels quels — et, depuis le 2026-09-14, qui les SUIT : le champ `conduite` vaut « le plan », l'ordre des temps, leur rythme et le cadrage viennent de l'intention (« la camera » rejoue le déroulement d'avant) |
@@ -835,7 +835,7 @@ catégorie, **dix étapes** qui portent les noms du travail :
 | `montage` | déroulement + fin, recollés |
 | `controle` | deux parts, un livrable qui pèse |
 
-Les graphes qu'elle enchaîne (`image-savoir`, `image-intention`,
+Les graphes qu'elle enchaîne (`image-iconographe`, `image-intention`,
 `video-reveal-cinematic-dirige`, `video-reveal-closing`, `video-appel-final`)
 et `video-still-motion` restent des **techniques**, sans catégorie : le
 lanceur ne les montre pas.
@@ -852,7 +852,7 @@ sans rien dupliquer :
 
 | mécanisme | où il vit | ce qu'il rend |
 |---|---|---|
-| le SAVOIR d'une image | graphe `image-savoir` (nœud `ImageSavoir` du paquet d'encre) → carnet `<image>.connaissance.json`, format du processus « connaître une image » | relevé, identité, notice, savoir du modèle, ancres — payés une seule fois par image, quel que soit ce qu'on en fera |
+| la DOCUMENTATION d'une image | graphe `image-iconographe` (nœud `IconographeDocumentation`, paquet `comfyui-iconographe`) → le service **Iconographe** (`E:/Claude Code/Programmes/Iconographe`, `127.0.0.1:7940`) et sa BIBLIOTHÈQUE, schéma `iconographe/documentation` | où l'œil va, ce qu'il y a et où, ce qui compte (attraction, accroche, central), les noms — payés une seule fois par œuvre (sha256 exact puis empreinte perceptuelle), quel que soit ce qu'on en fera. La CULTURE manque en v1 : port écrit, aucun adaptateur |
 | la STRUCTURE du récit | catalogue de structures du paquet `comfyui-direction-de-style` (`styles/narratifs.json`), servi au formulaire par `options_depuis: {"menu": "style_narratif"}` et au graphe `image-intention` par le champ sémantique `style_narratif` | les temps, leur ordre, ce que chacun doit faire (`reseau-social` : hook · setup · corps · conclusion facultative · appel) |
 | l'APPEL FINAL | graphe `video-appel-final` | le texte écrit à l'encre sur la fin d'une vidéo — de n'importe quelle vidéo, pas seulement d'une révélation |
 
@@ -913,7 +913,8 @@ modifier ça ? » a donc une réponse par nature de changement :
 
 | Ce qu'on veut changer | Où c'est écrit | Ce qui le sert |
 |---|---|---|
-| l'EFFET lui-même (l'encre, les taches, la caméra, la fermeture) | le paquet de nœuds ComfyUI (`comfyui-ink-reveal`, `comfyui-direction-de-style`…) | le moteur ; ré-extraire si les entrées changent |
+| l'EFFET lui-même (l'encre, les taches, la caméra, la fermeture) | le paquet de nœuds ComfyUI (`comfyui-ink-reveal`, `comfyui-direction-de-style`, `comfyui-iconographe`…) | le moteur ; ré-extraire si les entrées changent |
+| ce qu'on SAIT d'une image (éléments détectés, hiérarchie, noms, culture) | **pas ici** : le service Iconographe (`E:/Claude Code/Programmes/Iconographe` — profils, seuils, adaptateurs de ports) ; ici on ne règle que la TRADUCTION (`elements_max`, `profil` du graphe `image-iconographe`) | l'étape `analyse` d'une chaîne |
 | le GRAPHE d'un mode (ses nœuds, ses valeurs figées) | `_data/workflows/<nom>.json` + ses liaisons dans `_data/reconciliation.local.json` | `POST /v1/render` |
 | l'ORDRE des étapes, les durées, les contrôles d'un flux composé | `_data/chaines/<nom>.json` (et sa copie `resources/chaines-exemples/`) | le runner de chaînes |
 | un CONTRÔLE sur ce que le nœud a MESURÉ (hook vu, climax tenu, durée retenue) | l'étape `verifier` de la chaîne, sur `$etape.recit.<clé>` (le premier artefact `.json` d'un run est parsé sous `recit`) | le runner de chaînes |

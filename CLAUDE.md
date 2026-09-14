@@ -31,14 +31,16 @@ dans `_data/chaines/` doit garder sa copie `resources/chaines-exemples/`.
 **Ce qui est agnostique est APPELÉ, jamais ancré dans un flux.** Une étape
 qu'on peut nommer sans nommer le flux est un mécanisme à part : une entrée de
 catalogue que la chaîne appelle, et qu'un autre flux appellera. Aujourd'hui,
-trois : le SAVOIR d'une image (`image-savoir` → carnet
-`<image>.connaissance.json` posé à côté d'elle, relu la fois d'après, format du
-processus « connaître une image »), la STRUCTURE du récit (catalogue de
+trois : la DOCUMENTATION d'une image (`image-iconographe` → le service
+**Iconographe**, `E:/Claude Code/Programmes/Iconographe`, `127.0.0.1:7940` : il
+documente, et sa BIBLIOTHÈQUE fait qu'une œuvre n'est jamais analysée deux fois —
+sha256 exact, puis empreinte perceptuelle ; la CULTURE manque en v1, port écrit et
+aucun adaptateur, et le récit le dit), la STRUCTURE du récit (catalogue de
 `comfyui-direction-de-style`, servie au formulaire par
 `"options_depuis": {"menu": "style_narratif"}` et au graphe par le champ
 sémantique `style_narratif`), l'APPEL FINAL (`video-appel-final`, qui vaut pour
-n'importe quelle vidéo). Une chaîne ne recopie donc jamais une liste ni un
-savoir : elle dit d'où ils viennent.
+n'importe quelle vidéo). Une chaîne ne recopie donc jamais une liste ni une
+documentation : elle dit d'où elles viennent.
 
 **Une étape peut ne livrer aucun média** : un run qui n'écrit qu'un `.json`
 réussit, et ce fichier est son livrable comme son `recit` (`_principal`,

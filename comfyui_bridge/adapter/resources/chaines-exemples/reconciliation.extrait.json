@@ -2,8 +2,8 @@
   "_lire_moi": "Extrait du fichier de réconciliation : ce qu'il faut y ajouter pour que ces chaînes et cette vitrine existent. Les valeurs entre chevrons sont à remplacer par les chemins de LA machine (le dépôt n'en publie aucun). Un chemin de chaîne peut aussi être relatif au fichier de réconciliation.",
   "_lire_moi_resume": "« description » est ce qu'un utilisateur lit AVANT de choisir : ce que la vidéo va être, en une phrase. Aucun terme de moteur (nom de nœud, nom de modèle, mécanique interne) — le nom du modèle a sa place dans le TITRE, qui est un choix que l'utilisateur fait.",
   "_lire_moi_menus_medias": "Le libellé d'une PIÈCE JOINTE se lit dans « menus » au nom du champ (image, video, audio) quand l'auteur du graphe n'a pas titré son nœud de chargement : sans lui, le formulaire montrait la clé nue « image ».",
-  "_lire_moi_techniques": "Les graphes que la chaîne « Révéler une image » enchaîne (le savoir de l'image, l'intention, le déroulement, la conclusion, l'appel final) sont déclarés SANS titre ni catégorie : ce sont des techniques, un lanceur ne les voit pas. Un seul flux est publié dans cette catégorie.",
-  "_lire_moi_agnostique": "Ce qui est AGNOSTIQUE est APPELÉ, jamais ancré dans un flux : le savoir d'une image (image-savoir, écrit au carnet posé à côté d'elle et relu ensuite), la structure du récit (le catalogue des structures narratives d'un paquet de nœuds, servi par « options_depuis: {menu} ») et l'appel final (video-appel-final, qui vaut pour n'importe quelle vidéo). Le signe qu'un mécanisme doit sortir d'un flux : on peut le nommer sans nommer le flux.",
+  "_lire_moi_techniques": "Les graphes que la chaîne « Révéler une image » enchaîne (la documentation de l'image, l'intention, le déroulement, la conclusion, l'appel final) sont déclarés SANS titre ni catégorie : ce sont des techniques, un lanceur ne les voit pas. Un seul flux est publié dans cette catégorie.",
+  "_lire_moi_agnostique": "Ce qui est AGNOSTIQUE est APPELÉ, jamais ancré dans un flux : la documentation d'une image (image-iconographe : le service Iconographe la documente, sa bibliothèque à 127.0.0.1:7940 fait qu'une œuvre n'est jamais analysée deux fois), la structure du récit (le catalogue des structures narratives d'un paquet de nœuds, servi par « options_depuis: {menu} ») et l'appel final (video-appel-final, qui vaut pour n'importe quelle vidéo). Le signe qu'un mécanisme doit sortir d'un flux : on peut le nommer sans nommer le flux.",
   "_lire_moi_aides": "« aides » : { \"<champ>\": \"<phrase ou exemple>\" } sur une entrée — rendu par /io sous « aide » sur le champ concerné. Un menu global peut aussi porter « aide » ; l'entrée l'emporte.",
 
   "categories": {
@@ -74,7 +74,7 @@
       "description": "L'image est lue et documentée, une intention est écrite, puis l'encre la déroule : une accroche de 2,5 s, une mise en place, un corps qui croît vers le climax et le tient — puis, si on le veut, une conclusion et un appel final écrit à l'encre.",
       "titre": "Révéler une image", "categorie": "reveler-une-image", "ordre": 1,
       "aides": {
-        "image": "Le savoir de cette image est écrit à côté d'elle la première fois, et relu ensuite : la même image ne se documente qu'une fois.",
+        "image": "Iconographe documente cette image UNE fois et la garde en bibliothèque : la même œuvre, ou la même réencodée, revient en quelques secondes au lieu d'une vingtaine de minutes.",
         "duration_s": "La durée du DÉROULEMENT, au moins : le plan peut l'allonger pour ne précipiter aucun temps. La conclusion et l'appel final s'ajoutent après — un média qui se regarde en défilant tient sous 1 min 30.",
         "conclusion_s": "La scène se pose et la page se referme sur la zone du climax. À 0, il n'y a pas de conclusion : l'appel final suit le déroulement.",
         "cta": "Une phrase courte, écrite à l'encre sur les dernières secondes (3,5 s), qui boucle sur le début. Vide : aucun appel.",
@@ -86,11 +86,11 @@
       }
     },
 
-    "_lire_moi_entrees_techniques": "Sans titre ni catégorie, une entrée reste hors de la vue du lanceur. « image-savoir » et « image-intention » ne livrent AUCUN média : leur artefact .json est leur livrable, et la chaîne le lit sous $etape.recit.",
-    "image-savoir": {
+    "_lire_moi_entrees_techniques": "Sans titre ni catégorie, une entrée reste hors de la vue du lanceur. « image-iconographe » et « image-intention » ne livrent AUCUN média : leur artefact .json est leur livrable, et la chaîne le lit sous $etape.recit.",
+    "image-iconographe": {
       "kind": "image",
-      "workflow": "<dossier de données>/workflows/image-savoir.json",
-      "description": "Ce que l'on sait d'une image : ce qu'elle contient, ce qu'elle est, ce qu'une encyclopédie en dit, ce que le modèle en sait, et ce qui compte dedans. Le savoir est écrit AU CARNET à côté de l'image et relu tel quel la fois suivante. Ne livre aucun média : un fichier de nombres.",
+      "workflow": "<dossier de données>/workflows/image-iconographe.json",
+      "description": "La documentation d'une image, servie par Iconographe (127.0.0.1:7940) : où l'œil va, ce qu'il y a, où exactement au pixel, et ce qui compte — traduit dans la langue du réalisateur (marqueurs, ancres, parties). Une œuvre déjà dans la bibliothèque n'est jamais réanalysée. Ne livre aucun média : un fichier de nombres.",
       "bindings": { "image": { "node": "1", "input": "image" } }
     },
     "image-intention": {

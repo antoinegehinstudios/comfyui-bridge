@@ -39,11 +39,11 @@ Un champ COMBO peut dire d'où vient sa liste au lieu de la recopier :
 lui-même souvent la projection d'un fichier que tient un paquet de nœuds).
 Recopiée, une liste vieillit au premier ajout.
 
-Ce qui est AGNOSTIQUE est appelé, jamais ancré : le savoir d'une image
-(`image-savoir`, écrit au carnet posé à côté d'elle), la structure du récit
-(le catalogue des structures narratives) et l'appel final (`video-appel-final`)
-valent pour n'importe quel flux — la chaîne les appelle, un autre flux le peut
-aussi, et le savoir déjà écrit n'est pas repayé.
+Ce qui est AGNOSTIQUE est appelé, jamais ancré : la documentation d'une image
+(`image-iconographe`, tenue par le service Iconographe et sa bibliothèque), la
+structure du récit (le catalogue des structures narratives) et l'appel final
+(`video-appel-final`) valent pour n'importe quel flux — la chaîne les appelle, un
+autre flux le peut aussi, et la documentation déjà écrite n'est pas repayée.
 
 Les workflows sont cités par leur NOM au catalogue : ces fichiers ne portent
 aucun chemin de cette machine.

@@ -34,6 +34,11 @@ MEDIA_LOADERS: dict[str, tuple[str, str]] = {
     # écrire ce qu'il en sait à côté). Absent d'ici, il n'apparaissait pas comme
     # une pièce jointe et le formulaire ne proposait rien à joindre.
     "ImageSavoir": ("image", "image"),
+    # Même cas, pour la même raison poussée plus loin : celui-ci ne lit même pas
+    # le fichier — il en envoie le CHEMIN à un service qui le documente, parce
+    # que c'est l'empreinte du fichier de cette machine qui doit reconnaître
+    # l'œuvre en bibliothèque.
+    "IconographeDocumentation": ("image", "image"),
 }
 
 # Les drapeaux par lesquels ComfyUI annonce qu'une entrée reçoit un fichier.
