@@ -1,5 +1,5 @@
 {
-  "commentaire": "Règles qui tiennent ce projet. Chemins résolus dans le projet, puis dans le socle (E:/Programmes/garde). Ajouter ici les règles propres au projet ; retirer celles qui ne le concernent pas, en écrivant pourquoi.",
+  "commentaire": "Règles qui tiennent ce projet. Chemins résolus dans le projet, puis dans le socle (E:/Claude Code/Programmes/garde). Ajouter ici les règles propres au projet ; retirer celles qui ne le concernent pas, en écrivant pourquoi.",
   "regles": [
     {
       "id": "controle-qui-ne-peut-pas-echouer",
