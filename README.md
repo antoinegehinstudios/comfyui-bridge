@@ -827,8 +827,8 @@ catégorie, **dix étapes** qui portent les noms du travail :
 | `analyse` | ce que l'on sait de l'image — relevé, identité, notice, savoir du modèle, ancres — LU AU CARNET posé à côté d'elle quand il existe déjà, relevé et écrit sinon. Ne livre aucun média : son artefact `.json` EST son résultat |
 | `intention` | le plan : accroche, temps retenus, climax, dans la structure de récit demandée. Artefact `.json` lui aussi |
 | `plan_valide` | le plan tient-il ? accroche et climax nommés, l'accroche ne recouvre pas le climax, au moins trois temps — avant de dépenser la moindre seconde de rendu |
-| `deroulement` | la peinture, qui reçoit le relevé et le plan tels quels |
-| `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait |
+| `deroulement` | la peinture, qui reçoit le relevé et le plan tels quels — et, depuis le 2026-09-14, qui les SUIT : le champ `conduite` vaut « le plan », l'ordre des temps, leur rythme et le cadrage viennent de l'intention (« la camera » rejoue le déroulement d'avant) |
+| `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait : accroche vue, climax hors de l'ouverture et tenu, étapes qui se suivent, **ordre du plan suivi, chaque temps cadré (≥ 0,9) et encré (≥ 0,8) à son heure, aucun temps supprimé, cœur du climax vierge (≤ 0,05)** |
 | `raccord` | les 50 dernières images, en clip sans perte |
 | `conclusion` | la page se referme (0 s = pas de conclusion) |
 | `appel` | l'appel final écrit à l'encre sur la fin |

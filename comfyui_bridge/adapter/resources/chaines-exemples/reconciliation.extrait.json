@@ -61,6 +61,9 @@
     "rendu": { "libelle": "Rendu", "libelles": {
       "classique": { "libelle": "Classique (le rendu éprouvé)" },
       "front-organique": { "libelle": "Front organique (essai : le lavis ne suit plus le rectangle de la caméra)" } } },
+    "conduite": { "libelle": "Qui commande le déroulement", "libelles": {
+      "le plan": { "libelle": "Le plan", "resume": "l'ordre, le rythme et le cadrage viennent du plan ; la caméra les suit" },
+      "la camera": { "libelle": "La caméra", "resume": "le déroulement d'avant : la géométrie réordonne les temps" } } },
     "cta": { "libelle": "Appel final" }
   },
 
@@ -78,7 +81,8 @@
         "style_narratif": "La structure du récit : quels temps, dans quel ordre, et ce que chacun doit faire. La liste est celle du catalogue des structures.",
         "fond": "Le papier et sa lumière : ce sur quoi l'encre se pose.",
         "encre": "Comment l'encre restitue l'image : lavis (défaut), trait sec, encre dense.",
-        "rendu": "Comment le front d'encre avance : le rendu éprouvé, ou l'essai où le lavis ne suit plus le rectangle de la caméra."
+        "rendu": "Comment le front d'encre avance : le rendu éprouvé, ou l'essai où le lavis ne suit plus le rectangle de la caméra.",
+        "conduite": "Qui mène : le PLAN (l'ordre des temps, leur rythme et le cadrage viennent de l'intention, et la caméra est bâtie sur eux — aucun temps n'est écarté, la durée demandée est celle qui est livrée), ou la CAMÉRA (le déroulement d'avant : la géométrie réordonne les temps et plafonne la durée)."
       }
     },
 

@@ -55,6 +55,12 @@
       "options": ["classique", "front-organique"],
       "libelle": "Rendu"
     },
+    "conduite": {
+      "type": "COMBO",
+      "defaut": "le plan",
+      "options": ["le plan", "la camera"],
+      "libelle": "Qui commande le déroulement"
+    },
     "width": { "type": "INT", "defaut": 704, "libelle": "Largeur", "unite": "px" },
     "height": { "type": "INT", "defaut": 1280, "libelle": "Hauteur", "unite": "px" },
     "fps": { "type": "INT", "defaut": 25, "min": 1, "libelle": "Images par seconde" },
@@ -109,7 +115,8 @@
           "61.direction_json": "$intention.recit.direction_json",
           "61.fond": "$fond",
           "61.encre": "$encre",
-          "61.rendu": "$rendu"
+          "61.rendu": "$rendu",
+          "61.conduite": "$conduite"
         }
       }
     },
@@ -119,7 +126,12 @@
         { "id": "l_accroche_est_vue_a_2_5_s", "valeur": "$deroulement.recit.hook_vu.atteint", "op": "gte", "attendu": 0.10 },
         { "id": "le_climax_est_hors_du_cadre_d_ouverture", "valeur": "$deroulement.recit.climax_a_l_ouverture", "op": "lte", "attendu": 0.12 },
         { "id": "le_climax_est_tenu", "valeur": "$deroulement.recit.climax_tenue_s", "op": "gte", "attendu": 2 },
-        { "id": "les_temps_se_suivent", "valeur": "$deroulement.recit.chevauchement_max_mesure_s", "op": "lte", "attendu": 8 }
+        { "id": "les_temps_se_suivent", "valeur": "$deroulement.recit.chevauchement_max_mesure_s", "op": "lte", "attendu": 8 },
+        { "id": "l_ordre_du_plan_est_suivi", "valeur": "$deroulement.recit.ordre_du_plan_respecte", "op": "eq", "attendu": true },
+        { "id": "chaque_temps_est_cadre_a_son_heure", "valeur": "$deroulement.recit.visibilite_min", "op": "gte", "attendu": 0.9 },
+        { "id": "chaque_temps_est_encre_a_son_heure", "valeur": "$deroulement.recit.encre_min_a_son_heure", "op": "gte", "attendu": 0.8 },
+        { "id": "aucun_temps_supprime", "valeur": "$deroulement.recit.nb_hors_champ", "op": "eq", "attendu": 0 },
+        { "id": "le_coeur_du_climax_reste_vierge", "valeur": "$deroulement.recit.climax_encre_avant", "op": "lte", "attendu": 0.05 }
       ]
     },
     {
@@ -173,7 +185,8 @@
     "etapes": "Les étapes portent les noms du travail : ANALYSE (ce que l'on sait de l'image, écrit au carnet), INTENTION (le plan), PLAN_VALIDE (le plan tient-il), DÉROULEMENT (la peinture), PLAN_TENU (la peinture a-t-elle tenu le plan), RACCORD, CONCLUSION, APPEL, MONTAGE, CONTRÔLE. Ce que la chaîne annonce est ce qu'elle fait.",
     "le_plan_commande": "L'intention est écrite AVANT toute image, et le déroulement la reçoit telle quelle (61.direction_json) : la peinture ne remet aucune mise en scène en cause. Le contrôle « plan_valide » arrête la chaîne avant de dépenser la moindre seconde de rendu quand le plan ne tient pas.",
     "ce_qu_un_plan_doit_tenir": "Un plan peut nommer son accroche et son climax et rester faux : mesuré sur trois documentations parfaites, l'accroche était une bande de plancher large comme le cadre, un temps tombait sur un ciel noir, et le climax s'arrêtait à la figure entière sans jamais révéler son crâne. Quatre grandeurs le disent maintenant : l'AIRE de l'accroche (un détail, pas un pan de l'œuvre), le fait qu'elle montre de la MATIÈRE, le climax arrimé à la figure CENTRALE de l'ancrage, et le CŒUR qu'il garde pour la fin. Le nœud d'intention corrige ce qu'il peut et le dit (« corrections ») ; ces contrôles arrêtent ce qu'il n'a pas pu corriger.",
-    "aucune_limite_arbitraire": "Les bornes exposées sont celles que le graphe ou la logique imposent : 79 s est le plafond du nœud de révélation, 1 image par seconde le plancher d'une vidéo. La durée demandée reste un PLANCHER — le nœud allonge le déroulement pour ne précipiter aucun temps.",
+    "aucune_limite_arbitraire": "Les bornes exposées sont celles que le graphe, la logique ou le média imposent : 1 image par seconde est le plancher d'une vidéo, et 79 s la borne haute d'un média qu'on regarde en défilant (c'était aussi le plafond du nœud tant que la caméra commandait). Sous la conduite « le plan », la durée demandée est celle qui est LIVRÉE : le nœud ne l'allonge que si le minimum logique du plan ne tient pas dedans (tenues, trajets et pauses lisibles), et il dit alors pourquoi (echelon_de_duree, duree_minimale_s, raison_duree). Sous « la camera », elle reste un PLANCHER que le plafond du nœud borne.",
+    "qui_commande": "Le champ « conduite » dit qui mène le déroulement. « le plan » (le défaut) : l'ordre des temps, leur rythme et le cadrage viennent du plan, et la caméra est bâtie sur eux ; aucun temps n'est supprimé — un temps incadrable refuse le plan avec sa raison. « la camera » : le déroulement d'avant le 2026-09-14, où la géométrie de la caméra réordonnait les temps et plafonnait la durée — mesuré sur trois plans parfaits : ordre réécrit, deux temps jamais cadrés, aucun temps encré à son heure, 79 s pour 20 s demandées.",
     "conclusion_facultative": "À 0 seconde, la fermeture ne dure qu'une image : la scène ne se pose pas, et l'appel final s'écrit directement sur la fin du déroulement. Le montage compte toujours deux parts — le déroulement, puis ce qui le clôt.",
     "ce_qui_est_appele": "Le savoir de l'image (image-savoir, au carnet), la structure du récit (le catalogue des structures narratives) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : la chaîne les appelle, elle ne les porte pas. Un autre flux peut les appeler aussi, et le savoir déjà écrit n'est pas repayé."
   }
