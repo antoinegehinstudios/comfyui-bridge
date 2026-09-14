@@ -87,7 +87,11 @@
         { "id": "le_plan_nomme_son_accroche", "valeur": "$intention.recit.hook", "op": "exists" },
         { "id": "le_plan_nomme_son_climax", "valeur": "$intention.recit.climax", "op": "exists" },
         { "id": "l_accroche_ne_devoile_pas_le_climax", "valeur": "$intention.recit.hook_recouvre_climax", "op": "eq", "attendu": false },
-        { "id": "le_plan_a_de_quoi_croitre", "valeur": "$intention.recit.nb_temps", "op": "gte", "attendu": 3 }
+        { "id": "le_plan_a_de_quoi_croitre", "valeur": "$intention.recit.nb_temps", "op": "gte", "attendu": 3 },
+        { "id": "l_accroche_est_un_detail", "valeur": "$intention.recit.hook_aire", "op": "lte", "attendu": 0.15 },
+        { "id": "l_accroche_montre_de_la_matiere", "valeur": "$intention.recit.hook_est_vide", "op": "eq", "attendu": false },
+        { "id": "le_climax_est_la_figure_de_l_oeuvre", "valeur": "$intention.recit.climax_est_central", "op": "eq", "attendu": true },
+        { "id": "le_climax_garde_un_coeur_pour_la_fin", "valeur": "$intention.recit.climax_coeur", "op": "exists" }
       ]
     },
     {
@@ -168,6 +172,7 @@
   "notes": {
     "etapes": "Les étapes portent les noms du travail : ANALYSE (ce que l'on sait de l'image, écrit au carnet), INTENTION (le plan), PLAN_VALIDE (le plan tient-il), DÉROULEMENT (la peinture), PLAN_TENU (la peinture a-t-elle tenu le plan), RACCORD, CONCLUSION, APPEL, MONTAGE, CONTRÔLE. Ce que la chaîne annonce est ce qu'elle fait.",
     "le_plan_commande": "L'intention est écrite AVANT toute image, et le déroulement la reçoit telle quelle (61.direction_json) : la peinture ne remet aucune mise en scène en cause. Le contrôle « plan_valide » arrête la chaîne avant de dépenser la moindre seconde de rendu quand le plan ne tient pas.",
+    "ce_qu_un_plan_doit_tenir": "Un plan peut nommer son accroche et son climax et rester faux : mesuré sur trois documentations parfaites, l'accroche était une bande de plancher large comme le cadre, un temps tombait sur un ciel noir, et le climax s'arrêtait à la figure entière sans jamais révéler son crâne. Quatre grandeurs le disent maintenant : l'AIRE de l'accroche (un détail, pas un pan de l'œuvre), le fait qu'elle montre de la MATIÈRE, le climax arrimé à la figure CENTRALE de l'ancrage, et le CŒUR qu'il garde pour la fin. Le nœud d'intention corrige ce qu'il peut et le dit (« corrections ») ; ces contrôles arrêtent ce qu'il n'a pas pu corriger.",
     "aucune_limite_arbitraire": "Les bornes exposées sont celles que le graphe ou la logique imposent : 79 s est le plafond du nœud de révélation, 1 image par seconde le plancher d'une vidéo. La durée demandée reste un PLANCHER — le nœud allonge le déroulement pour ne précipiter aucun temps.",
     "conclusion_facultative": "À 0 seconde, la fermeture ne dure qu'une image : la scène ne se pose pas, et l'appel final s'écrit directement sur la fin du déroulement. Le montage compte toujours deux parts — le déroulement, puis ce qui le clôt.",
     "ce_qui_est_appele": "Le savoir de l'image (image-savoir, au carnet), la structure du récit (le catalogue des structures narratives) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : la chaîne les appelle, elle ne les porte pas. Un autre flux peut les appeler aussi, et le savoir déjà écrit n'est pas repayé."
