@@ -2,23 +2,38 @@
   "_lire_moi": "Extrait du fichier de réconciliation : ce qu'il faut y ajouter pour que ces chaînes et cette vitrine existent. Les valeurs entre chevrons sont à remplacer par les chemins de LA machine (le dépôt n'en publie aucun). Un chemin de chaîne peut aussi être relatif au fichier de réconciliation.",
   "_lire_moi_resume": "« description » est ce qu'un utilisateur lit AVANT de choisir : ce que la vidéo va être, en une phrase. Aucun terme de moteur (nom de nœud, nom de modèle, mécanique interne) — le nom du modèle a sa place dans le TITRE, qui est un choix que l'utilisateur fait.",
   "_lire_moi_menus_medias": "Le libellé d'une PIÈCE JOINTE se lit dans « menus » au nom du champ (image, video, audio) quand l'auteur du graphe n'a pas titré son nœud de chargement : sans lui, le formulaire montrait la clé nue « image ».",
-  "_lire_moi_techniques": "Les graphes que la chaîne « Révéler une image » enchaîne (la documentation de l'image, l'intention, le déroulement, la conclusion, l'appel final) sont déclarés SANS titre ni catégorie : ce sont des techniques, un lanceur ne les voit pas. Un seul flux est publié dans cette catégorie.",
-  "_lire_moi_agnostique": "Ce qui est AGNOSTIQUE est APPELÉ, jamais ancré dans un flux : la documentation d'une image (image-iconographe : le service Iconographe la documente, sa bibliothèque à 127.0.0.1:7940 fait qu'une œuvre n'est jamais analysée deux fois), la structure du récit (le catalogue des structures narratives d'un paquet de nœuds, servi par « options_depuis: {menu} ») et l'appel final (video-appel-final, qui vaut pour n'importe quelle vidéo). Le signe qu'un mécanisme doit sortir d'un flux : on peut le nommer sans nommer le flux.",
+  "_lire_moi_techniques": "Les graphes que la chaîne « Révéler une image » enchaîne (la documentation de l'image, sa culture, l'intention, le déroulement, la conclusion, l'appel final) sont déclarés SANS titre ni catégorie : ce sont des techniques, un lanceur ne les voit pas. Un seul flux est publié dans cette catégorie.",
+  "_lire_moi_agnostique": "Ce qui est AGNOSTIQUE est APPELÉ, jamais ancré dans un flux : la documentation d'une image (image-iconographe : le service Iconographe la documente, sa bibliothèque à 127.0.0.1:7940 fait qu'une œuvre n'est jamais analysée deux fois), la culture d'une œuvre (image-iconologue : le service Iconologue enquête sur des sources publiques et dit ce que l'œuvre EST, son catalogue à 127.0.0.1:7950 fait qu'une œuvre n'est jamais enquêtée deux fois), la structure du récit (le catalogue des structures narratives d'un paquet de nœuds, servi par « options_depuis: {menu} ») et l'appel final (video-appel-final, qui vaut pour n'importe quelle vidéo). Le signe qu'un mécanisme doit sortir d'un flux : on peut le nommer sans nommer le flux.",
   "_lire_moi_aides": "« aides » : { \"<champ>\": \"<phrase ou exemple>\" } sur une entrée — rendu par /io sous « aide » sur le champ concerné. Un menu global peut aussi porter « aide » ; l'entrée l'emporte.",
 
   "categories": {
-    "reveler-une-image": { "titre": "Révéler une image", "ordre": 1, "icone": "🖌️",
-      "resume": "L'image est lue, une mise en scène est écrite, puis l'encre la dévoile — accroche, mise en place, corps, conclusion, appel final." },
-    "animer-une-image": { "titre": "Image → vidéo", "ordre": 2, "icone": "🎞️",
-      "resume": "Une image de départ, un modèle qui la met en mouvement." },
-    "video-longue": { "titre": "Vidéo longue dirigée", "ordre": 3, "icone": "🎬",
-      "resume": "Plusieurs minutes tenues par un style graphique et des temps de récit." },
-    "prolonger-une-video": { "titre": "Prolonger une vidéo", "ordre": 4, "icone": "⏩",
-      "resume": "Repartir de la fin d'un plan et continuer la scène." },
-    "texte-vers-video": { "titre": "Texte → vidéo", "ordre": 5, "icone": "✍️",
-      "resume": "Rien qu'une consigne écrite." },
-    "son": { "titre": "Son", "ordre": 6, "icone": "🔊", "resume": "Musique et ambiances générées." },
-    "3d": { "titre": "3D", "ordre": 7, "icone": "🧊", "resume": "De la photo au maillage." }
+    "reveler-une-image": {
+      "titre": "Révéler une image",
+      "ordre": 1,
+      "icone": "🖌️",
+      "resume": "L'image est lue, une mise en scène est écrite, puis l'encre la dévoile — accroche, mise en place, corps, conclusion, appel final."
+    },
+    "animer-une-image": {
+      "titre": "Image → vidéo",
+      "ordre": 2,
+      "icone": "🎞️",
+      "resume": "Une image de départ, un modèle qui la met en mouvement."
+    },
+    "video-longue": {
+      "titre": "Vidéo longue dirigée",
+      "ordre": 3,
+      "icone": "🎬",
+      "resume": "Plusieurs minutes tenues par un style graphique et des temps de récit."
+    },
+    "prolonger-une-video": {
+      "titre": "Prolonger une vidéo",
+      "ordre": 4,
+      "icone": "⏩",
+      "resume": "Repartir de la fin d'un plan et continuer la scène."
+    },
+    "texte-vers-video": { "titre": "Texte → vidéo", "ordre": 5, "icone": "✍️", "resume": "Rien qu'une consigne écrite."} ,
+    "son": { "titre": "Son", "ordre": 6, "icone": "🔊", "resume": "Musique et ambiances générées."} ,
+    "3d": { "titre": "3D", "ordre": 7, "icone": "🧊", "resume": "De la photo au maillage."} 
   },
 
   "menus": {
@@ -26,53 +41,123 @@
       "libelle": "Style graphique",
       "source_fichier": {
         "chemin": "<ComfyUI>/custom_nodes/comfyui-direction-de-style/styles/graphiques.json",
-        "table": "styles", "libelle": "libelle", "resume": "resume", "groupe": "famille"
+        "table": "styles",
+        "libelle": "libelle",
+        "resume": "resume",
+        "groupe": "famille"
       }
     },
     "style_narratif": {
       "libelle": "Style narratif",
       "source_fichier": {
         "chemin": "<ComfyUI>/custom_nodes/comfyui-direction-de-style/styles/narratifs.json",
-        "table": "styles", "libelle": "libelle", "resume": "resume", "groupe": "famille"
+        "table": "styles",
+        "libelle": "libelle",
+        "resume": "resume",
+        "groupe": "famille"
       }
     },
     "style_approche": {
       "libelle": "Approche",
       "source_fichier": {
         "chemin": "<ComfyUI>/custom_nodes/comfyui-direction-de-style/styles/approches.json",
-        "table": "styles", "libelle": "libelle", "resume": "resume", "groupe": "famille"
+        "table": "styles",
+        "libelle": "libelle",
+        "resume": "resume",
+        "groupe": "famille"
       }
     },
-    "image": { "libelle": "L'image de départ" },
-    "video": { "libelle": "La vidéo de départ" },
-    "audio": { "libelle": "Le son de départ" },
-    "prompt": { "libelle": "Sujet" },
-    "negative_prompt": { "libelle": "À éviter" },
-    "seed": { "libelle": "Graine" },
-    "duration_s": { "libelle": "Durée" },
-    "fps": { "libelle": "Images par seconde" },
-    "width": { "libelle": "Largeur" },
-    "height": { "libelle": "Hauteur" },
-    "steps": { "libelle": "Pas de débruitage" },
-    "cfg": { "libelle": "Adhérence à la consigne" },
-    "batch": { "libelle": "Nombre d'images" },
-    "fond": { "libelle": "Fond de départ", "libelles": {
-      "washi": { "libelle": "Washi et lampe à huile", "resume": "papier crème, lueur chaude qui scintille" },
-      "washi-sans-lampe": { "libelle": "Washi, lumière plate" },
-      "sepia": { "libelle": "Sépia", "resume": "papier ambré, vignette marquée" },
-      "gris-atelier": { "libelle": "Gris d'atelier", "resume": "papier froid, sans lampe" } } },
-    "encre": { "libelle": "Style de tracé", "libelles": {
-      "lavis": { "libelle": "Lavis", "resume": "aplats et lavis, le défaut" },
-      "trait-sec": { "libelle": "Trait sec", "resume": "plus de trait, moins de lavis" },
-      "encre-dense": { "libelle": "Encre dense", "resume": "aplats plus noirs, lavis plus large" } } },
-    "rendu": { "libelle": "Rendu", "libelles": {
-      "ink-bleed": { "libelle": "Encre qui saigne (le défaut)", "resume": "une tache par temps, qui fleurit, s'étend à bords humides et rejoint les autres : l'image apparaît dedans" },
-      "classique": { "libelle": "Classique (le rendu éprouvé du 13 septembre)", "resume": "des touches d'encre par temps, et une réserve blanche qui garde le climax" },
-      "front-organique": { "libelle": "Front organique (essai : le lavis ne suit plus le rectangle de la caméra)" } } },
-    "conduite": { "libelle": "Qui commande le déroulement", "libelles": {
-      "le plan": { "libelle": "Le plan", "resume": "l'ordre, le rythme et le cadrage viennent du plan ; la caméra les suit" },
-      "la camera": { "libelle": "La caméra", "resume": "le déroulement d'avant : la géométrie réordonne les temps" } } },
-    "cta": { "libelle": "Appel final" }
+    "image": { "libelle": "L'image de départ"} ,
+    "video": { "libelle": "La vidéo de départ"} ,
+    "audio": { "libelle": "Le son de départ"} ,
+    "prompt": { "libelle": "Sujet"} ,
+    "negative_prompt": { "libelle": "À éviter"} ,
+    "seed": { "libelle": "Graine"} ,
+    "duration_s": { "libelle": "Durée"} ,
+    "fps": { "libelle": "Images par seconde"} ,
+    "width": { "libelle": "Largeur"} ,
+    "height": { "libelle": "Hauteur"} ,
+    "steps": { "libelle": "Pas de débruitage"} ,
+    "cfg": { "libelle": "Adhérence à la consigne"} ,
+    "batch": { "libelle": "Nombre d'images"} ,
+    "fond": {
+      "libelle": "Fond de départ",
+      "libelles": {
+        "washi": {
+          "libelle": "Washi",
+          "resume": "papier crème ; sa lampe à huile ne s'allume que sous l'ambiance « Selon le fond »"
+        },
+        "washi-sans-lampe": {
+          "libelle": "Washi, sans lampe",
+          "resume": "le même papier, dont la lampe reste éteinte même sous « Selon le fond »"
+        },
+        "sepia": { "libelle": "Sépia", "resume": "papier ambré, vignette marquée"} ,
+        "gris-atelier": { "libelle": "Gris d'atelier", "resume": "papier froid, sans lampe"} ,
+        "brume-blanche": { "libelle": "Brume blanche", "resume": "un jour pâle ; la nappe est claire et calme"} ,
+        "brume-grise": {
+          "libelle": "Brume grise",
+          "resume": "un temps couvert ; la nappe est plus dense et plus courte de lobes"
+        },
+        "brume-dorée": {
+          "libelle": "Brume dorée",
+          "resume": "une lanterne dans la brume ; nappe chaude, éclairée par le haut du cadre"
+        }
+      }
+    },
+    "encre": {
+      "libelle": "Style de tracé",
+      "libelles": {
+        "lavis": { "libelle": "Lavis", "resume": "aplats et lavis, le défaut"} ,
+        "trait-sec": { "libelle": "Trait sec", "resume": "plus de trait, moins de lavis"} ,
+        "encre-dense": { "libelle": "Encre dense", "resume": "aplats plus noirs, lavis plus large"} 
+      }
+    },
+    "rendu": {
+      "libelle": "Rendu",
+      "libelles": {
+        "ink-bleed": {
+          "libelle": "Encre qui saigne (le défaut)",
+          "resume": "une tache par temps, qui fleurit, s'étend à bords humides et rejoint les autres : l'image apparaît dedans"
+        },
+        "classique": {
+          "libelle": "Classique (le rendu éprouvé du 13 septembre)",
+          "resume": "des touches d'encre par temps, et une réserve blanche qui garde le climax"
+        },
+        "front-organique": { "libelle": "Front organique (essai : le lavis ne suit plus le rectangle de la caméra)"} 
+      }
+    },
+    "conduite": {
+      "libelle": "Qui commande le déroulement",
+      "libelles": {
+        "le plan": {
+          "libelle": "Le plan",
+          "resume": "l'ordre, le rythme et le cadrage viennent du plan ; la caméra les suit"
+        },
+        "la camera": {
+          "libelle": "La caméra",
+          "resume": "le déroulement d'avant : la géométrie réordonne les temps"
+        }
+      }
+    },
+    "ambiance": {
+      "libelle": "Ambiance",
+      "libelles": {
+        "lanterne": {
+          "libelle": "Lanterne (le défaut)",
+          "resume": "une flaque de lumière chaude qui dérive, une flamme qui respire, le grain du papier qui accroche les rayons rasants"
+        },
+        "chandelle": { "libelle": "Chandelle", "resume": "la même flamme, plus étroite, plus vive et plus chaude"} ,
+        "atelier": {
+          "libelle": "Lumière du jour",
+          "resume": "la page nue : uniforme, immobile, sans lampe ni relief"
+        },
+        "selon-le-fond": {
+          "libelle": "Selon le fond",
+          "resume": "la lampe fixe que le fond porte, et rien de plus — le rendu d'avant"
+        }
+      }
+    },
+    "cta": { "libelle": "Appel final"} 
   },
 
   "workflows": {
@@ -80,58 +165,102 @@
       "kind": "video",
       "chaine": "<dossier de données>/chaines/video-revelation.json",
       "description": "L'image est lue et documentée, une intention est écrite, puis l'encre la déroule : une accroche de 2,5 s, une mise en place, un corps qui croît vers le climax et le tient — puis, si on le veut, une conclusion et un appel final écrit à l'encre.",
-      "titre": "Révéler une image", "categorie": "reveler-une-image", "ordre": 1,
+      "titre": "Révéler une image",
+      "categorie": "reveler-une-image",
+      "ordre": 1,
       "aides": {
         "image": "Iconographe documente cette image UNE fois et la garde en bibliothèque : la même œuvre, ou la même réencodée, revient en quelques secondes au lieu d'une vingtaine de minutes.",
         "duration_s": "La durée du DÉROULEMENT, au moins : le plan peut l'allonger pour ne précipiter aucun temps. La conclusion et l'appel final s'ajoutent après — un média qui se regarde en défilant tient sous 1 min 30.",
         "conclusion_s": "La scène se pose et la page se referme sur la zone du climax. À 0, il n'y a pas de conclusion : l'appel final suit le déroulement.",
         "cta": "Une phrase courte, écrite à l'encre sur les dernières secondes (3,5 s), qui boucle sur le début. Vide : aucun appel.",
         "style_narratif": "La structure du récit : quels temps, dans quel ordre, et ce que chacun doit faire. La liste est celle du catalogue des structures.",
-        "fond": "Le papier et sa lumière : ce sur quoi l'encre se pose.",
+        "fond": "Le papier sur lequel l'encre se pose : sa teinte, son grain, sa vignette. Sa lampe, elle, ne s'allume plus que sous l'ambiance « Selon le fond » — partout ailleurs, c'est l'ambiance qui tient la lumière.",
+        "ambiance": "Sous quelle lumière la page se dessine. « Lanterne » (le défaut) : une lanterne posée hors champ — sa flaque chaude dérive lentement, sa flamme respire, et les fibres du papier accrochent ses rayons rasants : la surface se VIT pendant que l'encre la couvre. « Chandelle » : la même flamme, plus étroite, plus vive, plus chaude. « Lumière du jour » : la page nue, sans lampe ni relief. « Selon le fond » : la lampe fixe que le fond porte, et rien de plus — le rendu d'avant. La conclusion reprend la même flamme à la seconde où le déroulement s'arrête : le raccord ne bouge pas.",
         "encre": "Comment l'encre restitue l'image : lavis (défaut), trait sec, encre dense.",
         "style_approche": "COMMENT la révélation se conduit — c'est l'intention qui la reçoit, pas la peinture. « Peinture calme » (le défaut) : peu de temps, longs, un chemin continu dans l'image sans retour, et une caméra qui glisse sans jamais s'arrêter — c'est l'encre qui révèle. « Visite guidée » : plus de temps, plus courts, une caméra qui va d'élément en élément.",
         "rendu": "Comment l'encre vient. « Encre qui saigne » (le défaut) : une tache par temps, qui fleurit depuis lui, s'étend à bords humides et rejoint les autres — l'image apparaît dedans, sans réserve blanche découpée. « Classique » : le rendu du 13 septembre, des touches d'encre par temps. « Front organique » : le même, avec un lavis qui ne suit plus le rectangle de la caméra.",
         "conduite": "Qui mène : le PLAN (l'ordre des temps, leur rythme et le cadrage viennent de l'intention, et la caméra est bâtie sur eux — aucun temps n'est écarté, la durée demandée est celle qui est livrée), ou la CAMÉRA (le déroulement d'avant : la géométrie réordonne les temps et plafonne la durée)."
       }
     },
-
-    "_lire_moi_entrees_techniques": "Sans titre ni catégorie, une entrée reste hors de la vue du lanceur. « image-iconographe » et « image-intention » ne livrent AUCUN média : leur artefact .json est leur livrable, et la chaîne le lit sous $etape.recit.",
+    "video-revelation-brume": {
+      "kind": "video",
+      "chaine": "<dossier de données>/chaines/video-revelation-brume.json",
+      "description": "ESSAI D'UNE AUTRE TECHNIQUE que l'encre. L'image est lue et documentée, une intention est écrite — tout l'amont est celui de « Révéler une image » —, puis la peinture apparaît AUTREMENT : elle est déjà là, entière et en couleur, sous une brume vivante qui se dissipe le long du chemin narratif, de l'accroche au cœur du climax. Pas de conclusion : une brume qui reviendrait ne refermerait rien. Un appel final peut s'écrire à l'encre sur la fin.",
+      "titre": "Révéler une image par la brume",
+      "categorie": "reveler-une-image",
+      "ordre": 2,
+      "aides": {
+        "image": "Iconographe documente cette image UNE fois et la garde en bibliothèque : la même œuvre, ou la même réencodée, revient en quelques secondes au lieu d'une vingtaine de minutes.",
+        "duration_s": "La durée du DÉROULEMENT, au moins : le plan peut l'allonger pour ne précipiter aucun temps, et il dit alors pourquoi. L'appel final s'ajoute après — un média qui se regarde en défilant tient sous 1 min 30.",
+        "cta": "Une phrase courte, écrite à l'encre sur les dernières secondes (3,5 s), qui boucle sur le début. Vide : aucun appel.",
+        "style_narratif": "La structure du récit : quels temps, dans quel ordre, et ce que chacun doit faire. La liste est celle du catalogue des structures.",
+        "style_approche": "COMMENT la révélation se conduit — c'est l'intention qui la reçoit, pas la peinture. « Peinture calme » (le défaut) : peu de temps, longs, un chemin continu dans l'image sans retour, et une caméra qui glisse sans jamais s'arrêter.",
+        "fond": "La teinte de la brume, et donc l'heure de l'image : blanche pour un jour pâle, grise pour un temps couvert, dorée pour une lanterne dans la brume.",
+        "conduite": "Le PLAN, et lui seul : l'ordre des temps, leur rythme et le cadrage viennent de l'intention, la caméra est bâtie sur eux, et aucun temps n'est écarté. La brume ne sait pas se dissiper sans chemin narratif — sans plan, elle refuse."
+      }
+    },
+    "_lire_moi_entrees_techniques": "Sans titre ni catégorie, une entrée reste hors de la vue du lanceur. « image-iconographe », « image-iconologue » et « image-intention » ne livrent AUCUN média : leur artefact .json est leur livrable, et la chaîne le lit sous $etape.recit.",
     "image-iconographe": {
       "kind": "image",
       "workflow": "<dossier de données>/workflows/image-iconographe.json",
       "description": "La documentation d'une image, servie par Iconographe (127.0.0.1:7940) : où l'œil va, ce qu'il y a, où exactement au pixel, et ce qui compte — traduit dans la langue du réalisateur (marqueurs, ancres, parties). Une œuvre déjà dans la bibliothèque n'est jamais réanalysée. Ne livre aucun média : un fichier de nombres.",
-      "bindings": { "image": { "node": "1", "input": "image" } }
+      "bindings": {
+        "image": { "node": "1", "input": "image"} 
+      }
+    },
+    "image-iconologue": {
+      "kind": "image",
+      "workflow": "<dossier de données>/workflows/image-iconologue.json",
+      "description": "La culture d'une œuvre, servie par Iconologue (127.0.0.1:7950) : ce que l'œuvre EST — identité prouvée, notice, récit représenté, sens des motifs — et une attestation par élément, qui dit sur quelle base publique il est là. L'ancrage du relevé ressort enrichi, et la figure que les bases déclarent sujet de l'œuvre y reprend sa place. Une œuvre déjà au catalogue n'est jamais réenquêtée. Ne livre aucun média : un fichier de nombres.",
+      "bindings": {
+        "image": { "node": "1", "input": "image"} 
+      }
     },
     "image-intention": {
       "kind": "image",
       "workflow": "<dossier de données>/workflows/image-intention.json",
       "description": "La mise en scène : à partir du relevé et de ce que l'on sait de l'œuvre, le réalisateur écrit le plan — l'accroche, les temps retenus, le climax — dans la structure de récit demandée. Ne livre aucun média : le plan, en fichier de nombres.",
       "bindings": {
-        "image": { "node": "1", "input": "image" },
-        "style_narratif": { "node": "70", "input": "style_narratif" }
+        "image": { "node": "1", "input": "image"} ,
+        "style_narratif": { "node": "70", "input": "style_narratif"} 
       }
     },
     "video-appel-final": {
       "kind": "video",
       "workflow": "<dossier de données>/workflows/video-appel-final.json",
       "description": "L'appel final écrit à l'encre sur la dernière image d'une vidéo, puis tenu quelques secondes. Texte vide : la vidéo repart telle quelle. Entrée : une VIDÉO (media video).",
-      "defaults": { "fps": 25 },
+      "defaults": { "fps": 25} ,
       "bindings": {
-        "video": { "node": "1", "input": "file" },
-        "fps": { "node": "4", "input": "value" },
-        "seed": { "node": "16", "input": "value" },
-        "filename_prefix": { "node": "18", "input": "filename_prefix" }
+        "video": { "node": "1", "input": "file"} ,
+        "fps": { "node": "4", "input": "value"} ,
+        "seed": { "node": "16", "input": "value"} ,
+        "filename_prefix": { "node": "18", "input": "filename_prefix"} 
+      }
+    },
+    "video-reveal-brume-dirige": {
+      "kind": "video",
+      "workflow": "<dossier de données>/workflows/video-reveal-brume-dirige.json",
+      "description": "LE DÉROULEMENT PAR LA BRUME : révéler une image DÉJÀ mise en scène — le relevé et le plan sont remis par l'appelant (61.markers_json et 61.direction_json). La peinture est là en couleur sous une nappe de bruit fractal animé qui se dissipe selon le champ d'heures du plan ; sous elle l'image est floue et désaturée d'autant qu'elle est couverte. `fond` choisit la teinte de la brume. Sans plan exploitable, le nœud REFUSE : il n'a pas de conduite de repli.",
+      "defaults": { "duration_s": 24.0, "fps": 25, "width": 704, "height": 1280} ,
+      "bindings": {
+        "image": { "node": "1", "input": "image"} ,
+        "duration_s": { "node": "2", "input": "value"} ,
+        "fps": { "node": "3", "input": "value"} ,
+        "width": { "node": "5", "input": "value"} ,
+        "height": { "node": "6", "input": "value"} ,
+        "seed": { "node": "16", "input": "value"} ,
+        "filename_prefix": { "node": "18", "input": "filename_prefix"} 
       }
     },
     "video-prolongement": {
       "kind": "video",
       "chaine": "<dossier de données>/chaines/video-prolongement.json",
       "description": "Votre plan repart exactement là où il s'arrête et continue la scène, sans saut visible.",
-      "titre": "Prolonger un plan", "categorie": "prolonger-une-video", "ordre": 1
+      "titre": "Prolonger un plan",
+      "categorie": "prolonger-une-video",
+      "ordre": 1
     },
-
     "_vitrine_seule": "Une entrée qui ne porte QUE titre/categorie/ordre DÉCORE un graphe déposé dans le dossier des workflows, sans lui faire perdre son auto-liaison. Exemple ci-dessous.",
-    "video_ltx2_3_i2v": { "titre": "LTX-2.3 image → vidéo (son inclus)",
-                          "categorie": "animer-une-image", "ordre": 1 }
+    "video_ltx2_3_i2v": { "titre": "LTX-2.3 image → vidéo (son inclus)", "categorie": "animer-une-image", "ordre": 1} 
   }
 }

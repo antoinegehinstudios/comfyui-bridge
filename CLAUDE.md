@@ -31,11 +31,16 @@ dans `_data/chaines/` doit garder sa copie `resources/chaines-exemples/`.
 **Ce qui est agnostique est APPELÉ, jamais ancré dans un flux.** Une étape
 qu'on peut nommer sans nommer le flux est un mécanisme à part : une entrée de
 catalogue que la chaîne appelle, et qu'un autre flux appellera. Aujourd'hui,
-trois : la DOCUMENTATION d'une image (`image-iconographe` → le service
+cinq : la DOCUMENTATION d'une image (`image-iconographe` → le service
 **Iconographe**, `E:/Claude Code/Programmes/Iconographe`, `127.0.0.1:7940` : il
-documente, et sa BIBLIOTHÈQUE fait qu'une œuvre n'est jamais analysée deux fois —
-sha256 exact, puis empreinte perceptuelle ; la CULTURE manque en v1, port écrit et
-aucun adaptateur, et le récit le dit), la STRUCTURE du récit (catalogue de
+documente ce que l'image MONTRE, et sa BIBLIOTHÈQUE fait qu'une œuvre n'est jamais
+analysée deux fois — sha256 exact, puis empreinte perceptuelle), la CULTURE d'une
+œuvre (`image-iconologue` → le service **Iconologue**, `E:/Claude
+Code/Programmes/Iconologue`, `127.0.0.1:7950` : il enquête sur des sources
+publiques et dit ce que l'œuvre EST — identité prouvée, notice, récit, sens des
+motifs, une attestation par élément — et son CATALOGUE fait qu'une œuvre n'est
+jamais enquêtée deux fois ; l'ancrage en ressort enrichi, et le climax retombe
+sur la figure que les bases déclarent sujet), la STRUCTURE du récit (catalogue de
 `comfyui-direction-de-style`, servie au formulaire par
 `"options_depuis": {"menu": "style_narratif"}` et au graphe par le champ
 sémantique `style_narratif`), l'APPROCHE (catalogue du même paquet,

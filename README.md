@@ -817,42 +817,63 @@ sous `<sortie>/cortex/_travail/<job>/` et ne sont jamais listées comme
 livrables. Annuler le parent arrête le sous-job en cours par les moyens du
 moteur et saute le reste.
 
-Deux chaînes sont livrées.
+Trois chaînes sont livrées.
 
 `video-revelation` — « Révéler une image », le seul flux publié de sa
-catégorie, **dix étapes** qui portent les noms du travail :
+catégorie, **onze étapes** qui portent les noms du travail :
 
 | étape | ce qu'elle fait |
 |---|---|
 | `analyse` | la DOCUMENTATION de l'image par **Iconographe** (`image-iconographe`) — carte d'attention, éléments découpés au pixel, hiérarchie mesurée, noms et textes — servie par sa bibliothèque si l'œuvre y est déjà (verdict « repris », 15,9 s mesurées), calculée sinon (≈ 18 min, une fois). Ne livre aucun média : son artefact `.json` EST son résultat |
+| `culture` | la CULTURE de l'œuvre par **Iconologue** (`image-iconologue`) — identité prouvée, notice, passage du récit représenté, sens des motifs, et une **attestation par élément** du relevé. Elle rend l'ancrage **enrichi**, et son central re-décidé sur la figure que les bases déclarent sujet : sur l'Uccello, le climax passe du cheval blanc au **dragon** (rang 6 + 3 contre 7). Œuvre inconnue des bases : `reconnu: false`, l'ancrage ressort intact, rien ne casse |
 | `intention` | le plan : accroche, temps retenus, climax, dans la structure de récit demandée. Artefact `.json` lui aussi |
 | `plan_valide` | le plan tient-il ? accroche et climax nommés, l'accroche ne recouvre pas le climax, au moins trois temps, **le plan tient dans son APPROCHE et son trajet ne revient pas sur ses pas** — avant de dépenser la moindre seconde de rendu |
-| `deroulement` | la peinture, qui reçoit le relevé et le plan tels quels — et, depuis le 2026-09-14, qui les SUIT : le champ `conduite` vaut « le plan », l'ordre des temps, leur rythme et le cadrage viennent de l'intention (« la camera » rejoue le déroulement d'avant). Le champ `rendu` vaut « ink-bleed » : une tache d'encre par temps, qui fleurit, s'étend à bords humides et rejoint les autres |
-| `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait : accroche vue, climax hors de l'ouverture et tenu, étapes qui se suivent, **ordre du plan suivi, chaque temps cadré (≥ 0,9) à son heure, aucun temps supprimé, caméra qui glisse (≤ 0,1 largeur/s) sans saccade, temps lisibles (halo encré ≥ 0,85), ordre d'ARRIVÉE de l'encre conforme au plan, cœur du climax en dernier** |
+| `deroulement` | la peinture, qui reçoit le relevé et le plan tels quels — et, depuis le 2026-09-14, qui les SUIT : le champ `conduite` vaut « le plan », l'ordre des temps, leur rythme et le cadrage viennent de l'intention (« la camera » rejoue le déroulement d'avant). Le champ `rendu` vaut « ink-bleed » : une tache d'encre par temps, qui fleurit, s'étend à bords humides et rejoint les autres. Le champ `ambiance` vaut « lanterne » depuis le 2026-09-15 : une flaque de lumière chaude posée hors champ, dont le centre dérive et dont la flamme respire, et dont les rayons rasants font accrocher les fibres du papier — la page se VIT pendant qu'on dessine dessus (« selon-le-fond » rejoue la lampe fixe d'avant, « atelier » la page nue) |
+| `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait : accroche vue, climax hors de l'ouverture et tenu, étapes qui se suivent, **ordre du plan suivi, chaque temps cadré (≥ 0,9) à son heure, aucun temps supprimé, caméra qui glisse (≤ 0,1 largeur/s) sans saccade (accélération ≤ 0,5 largeur/s²), page qui ne s'achève pas d'un coup (≤ 0,25 au dézoom), temps lisibles (halo encré ≥ 0,85), ordre d'ARRIVÉE de l'encre conforme au plan, cœur du climax en dernier** |
 | `raccord` | les 50 dernières images, en clip sans perte |
-| `conclusion` | la page se referme (0 s = pas de conclusion) |
+| `conclusion` | la page se referme (0 s = pas de conclusion) — sous la MÊME ambiance, et à la seconde où le déroulement s'arrête (`6.depart_s` = `$deroulement.recit.duree_retenue_s`) : la flamme y reprend sa phase, et la luminance ne bouge pas de plus de 1 % au raccord |
 | `appel` | l'appel final écrit à l'encre sur la fin |
 | `montage` | déroulement + fin, recollés |
 | `controle` | deux parts, un livrable qui pèse |
 
-Les graphes qu'elle enchaîne (`image-iconographe`, `image-intention`,
-`video-reveal-cinematic-dirige`, `video-reveal-closing`, `video-appel-final`)
-et `video-still-motion` restent des **techniques**, sans catégorie : le
-lanceur ne les montre pas.
+Les graphes qu'elle enchaîne (`image-iconographe`, `image-iconologue`,
+`image-intention`, `video-reveal-cinematic-dirige`, `video-reveal-closing`,
+`video-appel-final`) et `video-still-motion` restent des **techniques**, sans
+catégorie : le lanceur ne les montre pas.
+
+`video-revelation-brume` — « Révéler une image par la brume », **l'essai d'une
+autre technique** dans la même catégorie (ordre 2), en **huit étapes**. Elle
+PARTAGE tout l'amont avec la précédente — mêmes `analyse`, `intention`,
+`plan_valide`, mêmes appels, même plan remis tel quel — et ne change que la
+peinture : son `deroulement` appelle `video-reveal-brume-dirige` (nœud
+`RevealBrume`) au lieu du nœud d'encre. L'image est déjà là, **entière et en
+couleur**, sous une nappe de bruit fractal animé qui se dissipe selon le même
+champ d'heures narratif ; sous la brume elle est floue et désaturée d'autant
+qu'elle est couverte. Deux étapes disparaissent — `raccord` et `conclusion` :
+une brume qui reviendrait ne refermerait rien, il n'y a donc pas de
+`conclusion_s`, l'`appel` part du déroulement, et le `montage` n'a qu'une part
+(il ré-encode et nomme le livrable). Le champ `fond` y choisit la teinte de la
+brume (blanche, grise, dorée) ; ni `encre` ni `rendu`. Son `plan_tenu` mesure
+les mêmes grandeurs que l'encre quand elles ont un sens, **sur la carte de
+densité que le nœud vient de rendre** : accroche vue, climax hors de
+l'ouverture et tenu, caméra qui glisse sans saccade, temps lisibles (boîte et
+halo sous 0,3 de densité à leur heure), ordre d'arrivée, cœur en dernier,
+aucun temps supprimé.
 
 `video-prolongement` — 17 dernières images → prolongement → mesure du raccord
 → recollage sans le chevauchement.
 
 ### Ce qui est agnostique est APPELÉ, jamais ancré
 
-Une étape qui ne regarde pas ce flux-ci n'a rien à faire dedans. Trois
+Une étape qui ne regarde pas ce flux-ci n'a rien à faire dedans. Cinq
 mécanismes de la chaîne ci-dessus valent pour n'importe quel flux, et sont
 donc des entrées de catalogue qu'elle APPELLE — un autre flux les appellera
 sans rien dupliquer :
 
 | mécanisme | où il vit | ce qu'il rend |
 |---|---|---|
-| la DOCUMENTATION d'une image | graphe `image-iconographe` (nœud `IconographeDocumentation`, paquet `comfyui-iconographe`) → le service **Iconographe** (`E:/Claude Code/Programmes/Iconographe`, `127.0.0.1:7940`) et sa BIBLIOTHÈQUE, schéma `iconographe/documentation` | où l'œil va, ce qu'il y a et où, ce qui compte (attraction, accroche, central), les noms — payés une seule fois par œuvre (sha256 exact puis empreinte perceptuelle), quel que soit ce qu'on en fera. La CULTURE manque en v1 : port écrit, aucun adaptateur |
+| la DOCUMENTATION d'une image | graphe `image-iconographe` (nœud `IconographeDocumentation`, paquet `comfyui-iconographe`) → le service **Iconographe** (`E:/Claude Code/Programmes/Iconographe`, `127.0.0.1:7940`) et sa BIBLIOTHÈQUE, schéma `iconographe/documentation` | où l'œil va, ce qu'il y a et où, ce qui compte (attraction, accroche, central), les noms — payés une seule fois par œuvre (sha256 exact puis empreinte perceptuelle), quel que soit ce qu'on en fera. Il ne dit PAS ce que l'œuvre est : son port `culture` n'a aucun adaptateur, et c'est l'étape suivante qui l'apporte |
+| la CULTURE d'une œuvre | graphe `image-iconologue` (nœud `IconologueCulture`, paquet `comfyui-iconologue`) → le service **Iconologue** (`E:/Claude Code/Programmes/Iconologue`, `127.0.0.1:7950`) et son CATALOGUE, schéma `iconologue/dossier` | ce que l'œuvre EST, sourcé : identité et degré de la preuve, notice, passage du récit représenté, sens des motifs, et une **attestation par élément** (qui l'affirme, sur quelle base). L'ancrage en ressort enrichi : une figure attestée par le titre ou par les sujets déclarés pèse 3 de plus, et le central est re-décidé sur elle |
 | la STRUCTURE du récit | catalogue de structures du paquet `comfyui-direction-de-style` (`styles/narratifs.json`), servi au formulaire par `options_depuis: {"menu": "style_narratif"}` et au graphe `image-intention` par le champ sémantique `style_narratif` | les temps, leur ordre, ce que chacun doit faire (`reseau-social` : hook · setup · corps · conclusion facultative · appel) |
 | l'APPROCHE | catalogue d'approches du MÊME paquet (`styles/approches.json`), servi au formulaire par `options_depuis: {"menu": "style_approche"}` et au graphe par `70.style_approche` | COMMENT la révélation se conduit : combien de temps au plus, combien de temps chacun tient, ce que la caméra s'autorise, par quel geste l'encre vient (`peinture-calme` : au plus 6 temps, un chemin continu sans retour, une caméra qui glisse à 0,08 largeur/s et ne s'arrête jamais) |
 | l'APPEL FINAL | graphe `video-appel-final` | le texte écrit à l'encre sur la fin d'une vidéo — de n'importe quelle vidéo, pas seulement d'une révélation |
@@ -915,7 +936,8 @@ modifier ça ? » a donc une réponse par nature de changement :
 | Ce qu'on veut changer | Où c'est écrit | Ce qui le sert |
 |---|---|---|
 | l'EFFET lui-même (l'encre, les taches, la caméra, la fermeture) | le paquet de nœuds ComfyUI (`comfyui-ink-reveal`, `comfyui-direction-de-style`, `comfyui-iconographe`…) | le moteur ; ré-extraire si les entrées changent |
-| ce qu'on SAIT d'une image (éléments détectés, hiérarchie, noms, culture) | **pas ici** : le service Iconographe (`E:/Claude Code/Programmes/Iconographe` — profils, seuils, adaptateurs de ports) ; ici on ne règle que la TRADUCTION (`elements_max`, `profil` du graphe `image-iconographe`) | l'étape `analyse` d'une chaîne |
+| ce qu'on SAIT d'une image (éléments détectés, hiérarchie, noms) | **pas ici** : le service Iconographe (`E:/Claude Code/Programmes/Iconographe` — profils, seuils, adaptateurs de ports) ; ici on ne règle que la TRADUCTION (`elements_max`, `profil` du graphe `image-iconographe`) | l'étape `analyse` d'une chaîne |
+| ce qu'on SAIT d'une ŒUVRE (identité, notice, récit, motifs, attestations) | **pas ici** : le service Iconologue (`E:/Claude Code/Programmes/Iconologue` — profils, sources, seuils d'identification) ; ici on ne règle que la TRADUCTION et le POIDS d'un sujet attesté (`POIDS_DU_SUJET_ATTESTE` du paquet `comfyui-iconologue`) | l'étape `culture` d'une chaîne |
 | le GRAPHE d'un mode (ses nœuds, ses valeurs figées) | `_data/workflows/<nom>.json` + ses liaisons dans `_data/reconciliation.local.json` | `POST /v1/render` |
 | l'ORDRE des étapes, les durées, les contrôles d'un flux composé | `_data/chaines/<nom>.json` (et sa copie `resources/chaines-exemples/`) | le runner de chaînes |
 | un CONTRÔLE sur ce que le nœud a MESURÉ (hook vu, climax tenu, durée retenue) | l'étape `verifier` de la chaîne, sur `$etape.recit.<clé>` (le premier artefact `.json` d'un run est parsé sous `recit`) | le runner de chaînes |

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "chaine": "video-revelation",
-  "resume": "L'image est d'abord DOCUMENTÉE par Iconographe — une fois pour toutes, dans sa bibliothèque. Une INTENTION est ensuite écrite dans la structure d'un média qu'on regarde en défilant, et c'est ELLE qui commande : le DÉROULEMENT peint l'accroche (2,5 s), la mise en place, puis le corps qui croît vers le climax et le tient sans arrêter l'animation. Une CONCLUSION pose la scène (on peut s'en passer), un APPEL FINAL s'écrit à l'encre, et le MONTAGE réunit le tout. Deux contrôles jugent : le plan avant de le peindre, la peinture avant de la clore.",
+  "resume": "L'image est d'abord DOCUMENTÉE par Iconographe — une fois pour toutes, dans sa bibliothèque — puis sa CULTURE est documentée par Iconologue : ce que l'œuvre EST, sourcé, et la figure que les bases déclarent sujet reprend sa place. Une INTENTION est ensuite écrite dans la structure d'un média qu'on regarde en défilant, et c'est ELLE qui commande : le DÉROULEMENT peint l'accroche (2,5 s), la mise en place, puis le corps qui croît vers le climax et le tient sans arrêter l'animation. Une CONCLUSION pose la scène (on peut s'en passer), un APPEL FINAL s'écrit à l'encre, et le MONTAGE réunit le tout. Deux contrôles jugent : le plan avant de le peindre, la peinture avant de la clore.",
   "expose": {
     "image": {
       "media": "image",
@@ -49,6 +49,12 @@
       "options": ["washi", "washi-sans-lampe", "sepia", "gris-atelier"],
       "libelle": "Fond de départ"
     },
+    "ambiance": {
+      "type": "COMBO",
+      "defaut": "lanterne",
+      "options": ["lanterne", "chandelle", "atelier", "selon-le-fond"],
+      "libelle": "Ambiance"
+    },
     "encre": {
       "type": "COMBO",
       "defaut": "lavis",
@@ -81,6 +87,18 @@
       }
     },
     {
+      "id": "culture",
+      "rendre": {
+        "workflow": "image-iconologue",
+        "media": { "image": "$image" },
+        "inputs": {
+          "1.markers_json": "$analyse.recit.markers_json",
+          "1.anchors_json": "$analyse.recit.anchors_json",
+          "1.empreinte_iconographe": "$analyse.recit.empreinte"
+        }
+      }
+    },
+    {
       "id": "intention",
       "rendre": {
         "workflow": "image-intention",
@@ -89,8 +107,8 @@
         "inputs": {
           "70.style_approche": "$style_approche",
           "62.markers_json": "$analyse.recit.markers_json",
-          "62.culture_json": "$analyse.recit.culture_json",
-          "62.anchors_json": "$analyse.recit.anchors_json"
+          "62.culture_json": "$culture.recit.culture_json",
+          "62.anchors_json": "$culture.recit.anchors_json"
         }
       }
     },
@@ -123,6 +141,7 @@
           "61.markers_json": "$analyse.recit.markers_json",
           "61.direction_json": "$intention.recit.direction_json",
           "61.fond": "$fond",
+          "61.ambiance": "$ambiance",
           "61.encre": "$encre",
           "61.rendu": "$rendu",
           "61.conduite": "$conduite"
@@ -140,7 +159,8 @@
         { "id": "chaque_temps_est_cadre_a_son_heure", "valeur": "$deroulement.recit.visibilite_min", "op": "gte", "attendu": 0.9 },
         { "id": "aucun_temps_supprime", "valeur": "$deroulement.recit.nb_hors_champ", "op": "eq", "attendu": 0 },
         { "id": "la_camera_glisse", "valeur": "$deroulement.recit.vitesse_camera_max_mesuree", "op": "lte", "attendu": 0.1 },
-        { "id": "la_camera_ne_saccade_pas", "valeur": "$deroulement.recit.acceleration_camera_max", "op": "lte", "attendu": 1.0 },
+        { "id": "la_camera_ne_saccade_pas", "valeur": "$deroulement.recit.acceleration_camera_max", "op": "lte", "attendu": 0.5 },
+        { "id": "la_page_ne_s_acheve_pas_d_un_coup", "valeur": "$deroulement.recit.achevement_part", "op": "lte", "attendu": 0.25 },
         { "id": "les_temps_sont_lisibles", "valeur": "$deroulement.recit.lisibilite_min", "op": "gte", "attendu": 0.85 },
         { "id": "l_ordre_d_arrivee_est_celui_du_plan", "valeur": "$deroulement.recit.ordre_d_arrivee_respecte", "op": "eq", "attendu": true },
         { "id": "le_coeur_vient_en_dernier", "valeur": "$deroulement.recit.coeur_en_dernier", "op": "eq", "attendu": true }
@@ -159,7 +179,9 @@
         "fps": "$fps",
         "seed": "$seed",
         "inputs": {
-          "6.fond": "$fond"
+          "6.fond": "$fond",
+          "6.ambiance": "$ambiance",
+          "6.depart_s": "$deroulement.recit.duree_retenue_s"
         }
       }
     },
@@ -194,8 +216,9 @@
   ],
   "livrable": "$montage.livrable",
   "notes": {
-    "etapes": "Les étapes portent les noms du travail : ANALYSE (la documentation de l'image, tenue par Iconographe), INTENTION (le plan), PLAN_VALIDE (le plan tient-il), DÉROULEMENT (la peinture), PLAN_TENU (la peinture a-t-elle tenu le plan), RACCORD, CONCLUSION, APPEL, MONTAGE, CONTRÔLE. Ce que la chaîne annonce est ce qu'elle fait.",
-    "analyse_par_iconographe": "L'étape ANALYSE est tenue par ICONOGRAPHE depuis le 2026-09-14 (flux « image-iconographe », service local 127.0.0.1:7940). C'est lui qui documente l'image — carte d'attention, éléments découpés au pixel, hiérarchie mesurée (ce qui attire, ce qui accroche, le central), noms et textes — et c'est sa BIBLIOTHÈQUE qui garantit qu'une œuvre n'est jamais analysée deux fois (sha256 exact, puis empreinte perceptuelle) : une œuvre déjà documentée revient en quelques secondes (15,9 s mesurées sur l'Uccello, verdict « repris »), une œuvre neuve coûte une vingtaine de minutes, UNE fois. Le nœud, lui, ne mesure rien : il TRADUIT — les boîtes passent du coin au centre, les éléments qui comptent sont sélectionnés (attraction, plus toutes les accroches et le central), et ce qu'une figure contient devient sa PARTIE, notion qu'Iconographe n'a pas. CE QUI MANQUE PAR CONSTRUCTION, C'EST LA CULTURE : Iconographe v1 n'a aucun adaptateur sur son port « culture » (references/ports/culture.md ; la documentation le déclare elle-même, attestations.mesure = false), donc ni titre, ni auteur, ni notice — « culture_json.reconnu » et « identity_json.nomme » sont faux et disent pourquoi, et l'intention se joue sur ce que l'image MONTRE. Cela se réglera chez Iconographe, par un adaptateur de ce port, pas dans cette chaîne.",
+    "etapes": "Les étapes portent les noms du travail : ANALYSE (la documentation de l'image, tenue par Iconographe), CULTURE (ce que l'œuvre EST, tenue par Iconologue), INTENTION (le plan), PLAN_VALIDE (le plan tient-il), DÉROULEMENT (la peinture), PLAN_TENU (la peinture a-t-elle tenu le plan), RACCORD, CONCLUSION, APPEL, MONTAGE, CONTRÔLE. Ce que la chaîne annonce est ce qu'elle fait.",
+    "analyse_par_iconographe": "L'étape ANALYSE est tenue par ICONOGRAPHE depuis le 2026-09-14 (flux « image-iconographe », service local 127.0.0.1:7940). C'est lui qui documente l'image — carte d'attention, éléments découpés au pixel, hiérarchie mesurée (ce qui attire, ce qui accroche, le central), noms et textes — et c'est sa BIBLIOTHÈQUE qui garantit qu'une œuvre n'est jamais analysée deux fois (sha256 exact, puis empreinte perceptuelle) : une œuvre déjà documentée revient en quelques secondes (15,9 s mesurées sur l'Uccello, verdict « repris »), une œuvre neuve coûte une vingtaine de minutes, UNE fois. Le nœud, lui, ne mesure rien : il TRADUIT — les boîtes passent du coin au centre, les éléments qui comptent sont sélectionnés (attraction, plus toutes les accroches et le central), et ce qu'une figure contient devient sa PARTIE, notion qu'Iconographe n'a pas. CE QU'ICONOGRAPHE NE MESURE PAS, C'EST LA CULTURE : son port « culture » est écrit et aucun adaptateur ne le tient (la documentation le déclare elle-même, attestations.mesure = false), donc ses sorties « culture_json » et « identity_json » sont muettes et disent pourquoi. Elles ne servent plus à l'intention : depuis le 2026-09-15, c'est l'étape CULTURE qui apporte ce savoir, par un AUTRE service — voir « culture_par_iconologue ».",
+    "culture_par_iconologue": "L'étape CULTURE est tenue par ICONOLOGUE depuis le 2026-09-15 (flux « image-iconologue », service local 127.0.0.1:7950). Elle vient APRÈS l'analyse et lui répond : Iconographe dit ce que l'image MONTRE, Iconologue dit ce que l'œuvre EST — l'identité et le degré de sa preuve (identifiée, hypothèse, inconnue), la notice encyclopédique, le passage du récit que l'œuvre illustre (cité, borné, sourcé), le sens des motifs, et une ATTESTATION par élément : qui affirme que cet élément-là est dans l'œuvre, et sur quelle base publique. Elle reçoit le relevé et l'ancrage de l'analyse (1.markers_json, 1.anchors_json, 1.empreinte_iconographe) et rend l'ancrage ENRICHI, que l'intention lit à la place de celui de l'analyse. CE QU'ELLE CORRIGE, MESURÉ : sur l'Uccello, sans culture, le central est le « cheval blanc armé » — la plus grande masse d'attention (0,213 des fixations attendues) — et le réalisateur en fait le climax ; le sujet de l'œuvre est pourtant saint Georges tuant le dragon, et ce n'est pas une impression : Wikidata le DÉCLARE (P180, « déclaré parmi les sujets de l'entité : dragon »). Une ancre attestée par le TITRE ou par les SUJETS déclarés pèse 3 de plus, et le central devient la FIGURE la mieux pesée d'entre elles : le dragon (rang 6 + 3 = 9) passe devant le cheval (7), et le récit dit de quoi vers quoi. POUR UNE ŒUVRE QUE LES BASES NE CONNAISSENT PAS, RIEN NE CASSE : « reconnu » et « nomme » sont faux, l'ancrage de l'analyse ressort INTACT, le récit dit « oeuvre-inedite », et l'intention se joue sur ce que l'image montre — exactement comme avant cette étape. C'est pourquoi AUCUN contrôle de « plan_valide » ne se fonde sur la culture : un contrôle qui exigerait un sujet attesté arrêterait la chaîne sur toute œuvre inédite, et une donnée absente n'est pas un plan faux. Le nœud, lui, ne cherche rien : il TRADUIT ce qu'Iconologue a établi, et son catalogue fait qu'une œuvre n'est jamais enquêtée deux fois.",
     "le_plan_commande": "L'intention est écrite AVANT toute image, et le déroulement la reçoit telle quelle (61.direction_json) : la peinture ne remet aucune mise en scène en cause. Le contrôle « plan_valide » arrête la chaîne avant de dépenser la moindre seconde de rendu quand le plan ne tient pas.",
     "ce_qu_un_plan_doit_tenir": "Un plan peut nommer son accroche et son climax et rester faux : mesuré sur trois documentations parfaites, l'accroche était une bande de plancher large comme le cadre, un temps tombait sur un ciel noir, et le climax s'arrêtait à la figure entière sans jamais révéler son crâne. Quatre grandeurs le disent maintenant : l'AIRE de l'accroche (un détail, pas un pan de l'œuvre), le fait qu'elle montre de la MATIÈRE, le climax arrimé à la figure CENTRALE de l'ancrage, et le CŒUR qu'il garde pour la fin. Le nœud d'intention corrige ce qu'il peut et le dit (« corrections ») ; ces contrôles arrêtent ce qu'il n'a pas pu corriger.",
     "aucune_limite_arbitraire": "Les bornes exposées sont celles que le graphe, la logique ou le média imposent : 1 image par seconde est le plancher d'une vidéo, et 79 s la borne haute d'un média qu'on regarde en défilant (c'était aussi le plafond du nœud tant que la caméra commandait). Sous la conduite « le plan », la durée demandée est celle qui est LIVRÉE : le nœud ne l'allonge que si le minimum logique du plan ne tient pas dedans (tenues, trajets et pauses lisibles), et il dit alors pourquoi (echelon_de_duree, duree_minimale_s, raison_duree). Sous « la camera », elle reste un PLANCHER que le plafond du nœud borne.",
@@ -203,7 +226,8 @@
     "ce_que_le_plan_dit_de_la_camera": "Le réalisateur écrit aussi le MOUVEMENT de caméra (« camera » : mouvement, sens, rythme) : le chemin de la caméra et l'ordre des temps — donc le chemin de la saignée — racontent le même trajet. Le sens déclaré est vérifié sur les centres des temps et réécrit s'il ne leur correspond pas ; le nombre de demi-tours est mesuré (« trajet_retours ») et le contrôle « le_trajet_ne_revient_pas » arrête un plan qui fait l'aller-retour.",
     "ce_qui_remplace_la_reserve": "Deux contrôles ont été RETIRÉS du plan_tenu, parce que deux règles qui se contredisent ne coexistent pas. « le_coeur_du_climax_reste_vierge » exigeait précisément le TROU qu'on nous reproche : « cacher le climax à la fin fait trop grotesque, ce n'est pas naturel ». « chaque_temps_est_encre_a_son_heure » mesurait la boîte seule, sans son voisinage, d'où des éléments « juste incompréhensibles ». À leur place : la LISIBILITÉ (le halo d'un temps est-il encré à son heure), l'ORDRE D'ARRIVÉE (l'heure médiane d'encrage de chaque boîte croît-elle dans l'ordre du plan) et le CŒUR EN DERNIER (son heure médiane est-elle la plus tardive). Le cœur n'est plus protégé par une réserve : il vient en dernier parce que sa graine naît en dernier.",
     "qui_commande": "Le champ « conduite » dit qui mène le déroulement. « le plan » (le défaut) : l'ordre des temps, leur rythme et le cadrage viennent du plan, et la caméra est bâtie sur eux ; aucun temps n'est supprimé — un temps incadrable refuse le plan avec sa raison. « la camera » : le déroulement d'avant le 2026-09-14, où la géométrie de la caméra réordonnait les temps et plafonnait la durée — mesuré sur trois plans parfaits : ordre réécrit, deux temps jamais cadrés, aucun temps encré à son heure, 79 s pour 20 s demandées.",
+    "la_lumiere_de_la_page": "Le champ « Ambiance » dit sous quelle lumière la page se dessine, et il vaut « Lanterne » par défaut : une flaque de lumière chaude posée hors champ, dont le centre dérive lentement (jusqu'à 6 % du cadre) et dont la flamme respire — une composante lente (± 6 %) et un frémissement fin (± 2 %) — pendant que les fibres du papier accrochent ses rayons rasants : la surface se VIT sous le dessin au lieu de le subir. « Chandelle » est la même flamme, plus étroite, plus vive et plus chaude ; « Atelier » rend la page nue, en lumière du jour, sans lampe ni relief. « Selon le fond » est le comportement d'avant — la lampe FIXE que le fond porte, et rien de plus : c'est le défaut du NŒUD, celui que l'identité au pixel près protège, jamais celui de cette chaîne. La conclusion reçoit la MÊME ambiance et l'instant où le déroulement s'arrête (« 6.depart_s » = la durée retenue) : la flamme y reprend sa phase exacte, et la luminance ne bouge pas de plus de 1 % au raccord (0,35 % mesuré).",
     "conclusion_facultative": "À 0 seconde, la fermeture ne dure qu'une image : la scène ne se pose pas, et l'appel final s'écrit directement sur la fin du déroulement. Le montage compte toujours deux parts — le déroulement, puis ce qui le clôt.",
-    "ce_qui_est_appele": "La documentation de l'image (image-iconographe, tenue par le service Iconographe et sa bibliothèque), la structure du récit (le catalogue des structures narratives) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : la chaîne les appelle, elle ne les porte pas. Un autre flux peut les appeler aussi, et la documentation déjà écrite n'est pas repayée."
+    "ce_qui_est_appele": "La documentation de l'image (image-iconographe, tenue par le service Iconographe et sa bibliothèque), la CULTURE de l'œuvre (image-iconologue, tenue par le service Iconologue et son catalogue), la structure du récit (le catalogue des structures narratives) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : la chaîne les appelle, elle ne les porte pas. Un autre flux peut les appeler aussi, et la documentation déjà écrite n'est pas repayée."
   }
 }
