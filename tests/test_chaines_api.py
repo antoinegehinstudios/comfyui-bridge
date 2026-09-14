@@ -189,6 +189,22 @@ STRUCTURES = {"styles": {
     "lente": {"libelle": "Contemplation lente", "famille": "structure longue"},
 }}
 
+# Le livrable d'une étape « rendre » est un CHEMIN local ; une étape suivante
+# qui le reprend en média (ici « deux » lit « $une.livrable ») ne doit jamais
+# le voir tel quel. « image_2 » n'est déjà pas un fichier d'ici : rien à
+# déposer, elle passe telle quelle.
+CHAINE_MEDIA_LIVRABLE = {
+    "version": 1, "chaine": "chaine-media-livrable",
+    "resume": "un rendu qui reprend en média le livrable d'un rendu précédent",
+    "etapes": [
+        {"id": "une", "rendre": {"workflow": "sd15-txt2img", "prompt": "une"}},
+        {"id": "deux", "rendre": {"workflow": "sd15-txt2img", "prompt": "deux",
+                                  "media": {"image": "$une.livrable",
+                                            "image_2": "deja-depose.png"}}},
+    ],
+    "livrable": "$deux.livrable",
+}
+
 
 @pytest.fixture()
 def atelier():
@@ -198,6 +214,8 @@ def atelier():
     (tmp / "chaine-recollee.json").write_text(json.dumps(CHAINE_RECOLLEE), encoding="utf-8")
     (tmp / "chaine-au-recit.json").write_text(json.dumps(CHAINE_AU_RECIT), encoding="utf-8")
     (tmp / "chaine-au-menu.json").write_text(json.dumps(CHAINE_AU_MENU), encoding="utf-8")
+    (tmp / "chaine-media-livrable.json").write_text(json.dumps(CHAINE_MEDIA_LIVRABLE),
+                                                     encoding="utf-8")
     (tmp / "structures.json").write_text(json.dumps(STRUCTURES, ensure_ascii=False),
                                          encoding="utf-8")
     (tmp / "reconciliation.local.json").write_text(json.dumps({
@@ -211,6 +229,10 @@ def atelier():
         "workflows": {
             "chaine-au-menu": {"kind": "image", "chaine": str(tmp / "chaine-au-menu.json"),
                                "titre": "Chaîne au menu", "categorie": "essais", "ordre": 5},
+            "chaine-media-livrable": {"kind": "image",
+                                      "chaine": str(tmp / "chaine-media-livrable.json"),
+                                      "titre": "Chaîne média livrable",
+                                      "categorie": "essais", "ordre": 6},
             "chaine-simple": {"kind": "image", "chaine": str(tmp / "chaine-simple.json"),
                               "titre": "Chaîne d'essai", "categorie": "essais", "ordre": 1},
             "chaine-recollee": {"kind": "video", "chaine": str(tmp / "chaine-recollee.json"),
@@ -290,6 +312,47 @@ def test_une_chaine_enchaine_ses_etapes_et_livre(atelier):
     sous = atelier.get("/v1/jobs/" + job["etapes"][0]["job_id"]).json()
     assert sous["parent"] == job["id"] and sous["status"] == "succeeded"
     assert job["progress"]["value"] == job["progress"]["max"] == 3
+
+
+def test_un_rendre_qui_reprend_un_livrable_le_depose_chez_le_moteur(atelier, monkeypatch):
+    """Le livrable d'une étape précédente est un CHEMIN local ; l'étape suivante
+    qui le reprend en média doit le déposer chez le moteur et citer le nom
+    rendu — jamais le chemin. Une valeur qui n'est déjà pas un fichier d'ici
+    (un nom déjà déposé) n'a rien à déposer : elle passe telle quelle."""
+    from comfyui_bridge.adapter import neutral
+
+    class _Reponse:
+        def __init__(self, corps):
+            self._corps = corps
+
+        def read(self):
+            return self._corps
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    depose_sous = "moteur-a-depose-ceci.png"
+    monkeypatch.setattr(neutral.urllib.request, "urlopen", lambda req, timeout=None:
+                        _Reponse(json.dumps({"name": depose_sous}).encode()))
+
+    vus = []
+    atelier.faux.avant = lambda plan: vus.append(dict(plan.params))
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-media-livrable"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    livrable_local = job["etapes"][0]["resultat"]["livrable"]
+    # Le CHEMIN local produit par la première étape est devenu le NOM que le
+    # moteur a rendu — jamais le chemin lui-même — dans ce que reçoit la
+    # deuxième.
+    assert vus[1]["image"] == depose_sous
+    assert vus[1]["image"] != livrable_local
+    attendu = (f"livrable {pathlib.Path(livrable_local).name} déposé chez le "
+              f"moteur sous « {depose_sous} »")
+    assert any(attendu in ligne for ligne in job["logs"])
+    # « image_2 » n'était déjà pas un fichier d'ici : rien à déposer.
+    assert vus[1]["image_2"] == "deja-depose.png"
 
 
 def test_un_controle_faux_arrete_la_chaine_et_garde_les_fichiers(atelier):

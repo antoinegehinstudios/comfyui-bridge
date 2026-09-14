@@ -262,6 +262,21 @@ class RunnerDeChaines:
         reglages = dict(params)
         nom = str(reglages.pop("workflow"))
         media = {k: str(v) for k, v in (reglages.pop("media", None) or {}).items() if v}
+        for cle, valeur in media.items():
+            fichier = Path(valeur)
+            if fichier.is_file():
+                # Le livrable d'une étape précédente est un CHEMIN local : un
+                # « rendre » qui le reprend en média doit le déposer chez le
+                # moteur et citer le nom rendu, comme `extraire_queue` et
+                # `extraire_image` le font déjà pour ce qu'ils produisent —
+                # mesuré (run 98d75906), sans quoi le moteur refusait le
+                # graphe en 40 ms.
+                depose = self._deposer(fichier)
+                c.store.append_log(
+                    parent_id,
+                    f"étape {etape.id} : livrable {fichier.name} déposé chez "
+                    f"le moteur sous « {depose} »")
+                media[cle] = depose
         reglages.pop("label", None)
         reglages.pop("constraints", None)
         genre = reglages.pop("kind", None)

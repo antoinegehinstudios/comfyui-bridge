@@ -785,6 +785,10 @@ révélation (`61.fond`, `61.encre`) et l'appel final le nœud d'inscription
 échoue en la nommant), et jamais une entrée déjà liée par les `bindings`, que
 l'override écraserait en silence.
 
+**Média depuis un livrable** : un `rendre` peut consommer `$etape.livrable` en
+média — la passerelle le dépose chez le moteur, comme elle le fait déjà pour
+ce que `extraire_queue`/`extraire_image` produisent.
+
 **Récit** : le premier artefact `.json` qu'un run rapporte (hors compagnon `.origine.json`) est parsé sous `recit`
 dans le résultat de l'étape. Une étape `verifier` contrôle alors ce que le
 nœud a MESURÉ — `$revelation.recit.hook_vu.atteint`, `…climax_tenue_s`,
