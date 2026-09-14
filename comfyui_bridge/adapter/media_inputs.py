@@ -30,14 +30,10 @@ MEDIA_LOADERS: dict[str, tuple[str, str]] = {
     "Load3D": ("3d", "model_file"),
     "Load3DAdvanced": ("3d", "model_file"),
     # Un nœud qui prend une image par son NOM sans être un chargeur d'image :
-    # il ouvre le fichier lui-même (il a besoin du fichier, pas des pixels, pour
-    # écrire ce qu'il en sait à côté). Absent d'ici, il n'apparaissait pas comme
-    # une pièce jointe et le formulaire ne proposait rien à joindre.
-    "ImageSavoir": ("image", "image"),
-    # Même cas, pour la même raison poussée plus loin : celui-ci ne lit même pas
-    # le fichier — il en envoie le CHEMIN à un service qui le documente, parce
-    # que c'est l'empreinte du fichier de cette machine qui doit reconnaître
-    # l'œuvre en bibliothèque.
+    # il ne lit même pas le fichier — il en envoie le CHEMIN à un service qui
+    # le documente, parce que c'est l'empreinte du fichier de cette machine qui
+    # doit reconnaître l'œuvre en bibliothèque. Absent d'ici, il n'apparaîtrait
+    # pas comme une pièce jointe et le formulaire ne proposerait rien à joindre.
     "IconographeDocumentation": ("image", "image"),
 }
 
