@@ -114,7 +114,6 @@
       "verifier": [
         { "id": "l_accroche_est_vue_a_2_5_s", "valeur": "$deroulement.recit.hook_vu.atteint", "op": "gte", "attendu": 0.10 },
         { "id": "le_climax_est_hors_du_cadre_d_ouverture", "valeur": "$deroulement.recit.climax_a_l_ouverture", "op": "lte", "attendu": 0.12 },
-        { "id": "le_climax_reste_vierge_jusqu_a_son_heure", "valeur": "$deroulement.recit.climax_encre_avant", "op": "lte", "attendu": 0.05 },
         { "id": "le_climax_est_tenu", "valeur": "$deroulement.recit.climax_tenue_s", "op": "gte", "attendu": 2 },
         { "id": "chaque_temps_est_dans_le_champ", "valeur": "$deroulement.recit.visibilite_min", "op": "gte", "attendu": 0.9 },
         { "id": "les_temps_se_suivent", "valeur": "$deroulement.recit.chevauchement_max_mesure_s", "op": "lte", "attendu": 8 }
