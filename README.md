@@ -842,9 +842,9 @@ Les graphes qu'elle enchaîne (`image-iconographe`, `image-iconologue`,
 catégorie : le lanceur ne les montre pas.
 
 `video-revelation-brume` — « Révéler une image par la brume », **l'essai d'une
-autre technique** dans la même catégorie (ordre 2), en **huit étapes**. Elle
-PARTAGE tout l'amont avec la précédente — mêmes `analyse`, `intention`,
-`plan_valide`, mêmes appels, même plan remis tel quel — et ne change que la
+autre technique** dans la même catégorie (ordre 2), en **neuf étapes**. Elle
+PARTAGE tout l'amont avec la précédente — mêmes `analyse`, `culture`,
+`intention`, `plan_valide`, mêmes appels, même plan remis tel quel — et ne change que la
 peinture : son `deroulement` appelle `video-reveal-brume-dirige` (nœud
 `RevealBrume`) au lieu du nœud d'encre. L'image est déjà là, **entière et en
 couleur**, sous une nappe de bruit fractal animé qui se dissipe selon le même
