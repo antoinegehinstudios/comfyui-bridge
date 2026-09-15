@@ -51,6 +51,14 @@ s'autorise), l'APPEL FINAL (`video-appel-final`, qui vaut pour
 n'importe quelle vidéo). Une chaîne ne recopie donc jamais une liste ni une
 documentation : elle dit d'où elles viennent.
 
+**Le socle ink est figé** (2026-09-15, « c'est parfait — assure cette
+standardisation ») : le plan des onze étapes est agnostique, tout le reste est un
+paramètre dont le DÉFAUT est celui du rendu ink livré ce jour-là ; un style de plus
+est une entrée de plus dans un catalogue ou une table, jamais un défaut de moins.
+Le témoin `tests/test_socle_ink.py` (ici, et dans `comfyui-ink-reveal`) épingle
+plan, défauts, contrat des étapes et constantes : le faire échouer est une
+décision à écrire, voir la section « Le socle ink » du README.
+
 **Une étape peut ne livrer aucun média** : un run qui n'écrit qu'un `.json`
 réussit, et ce fichier est son livrable comme son `recit` (`_principal`,
 `adapter/chaines.py`). C'est le cas de `analyse` et `intention`.

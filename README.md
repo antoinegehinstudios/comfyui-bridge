@@ -875,6 +875,24 @@ cœur en dernier, aucun temps supprimé.
 `video-prolongement` — 17 dernières images → prolongement → mesure du raccord
 → recollage sans le chevauchement.
 
+### Le socle ink — ce qui est figé, ce qui se règle, où ajouter
+
+Antoine, le 2026-09-15 à midi, sur les vidéos ink livrées : « c'est parfait —
+assure cette standardisation ». Trois couches, et un témoin exécutable
+(`tests/test_socle_ink.py`) qui les épingle :
+
+| couche | ce que c'est | où |
+|---|---|---|
+| **le plan** | agnostique, hors de tout style : les onze étapes, dans cet ordre, avec leurs genres — `analyse` → `culture` → `intention` → `plan_valide` → `deroulement` → `plan_tenu` → `raccord` → `conclusion` → `appel` → `montage` → `controle` — et le contrat par lequel chacune parle à la suivante (`$etape.recit.*`, `$etape.livrable`, `$raccord.depot` ; la fermeture reçoit `fermeture_json` du récit du déroulement au lieu de relire le disque). La chaîne de la brume porte le même plan. | `_data/chaines/*.json` et leurs jumeaux |
+| **les paramètres** | tout ce qui se règle : structure du récit, approche, fond, ambiance, tracé, rendu, conduite, négatif, contemplation, conclusion, CTA et sa police, format. **Leurs défauts sont ceux du style ink livré ce jour-là et ne changent pas** : `reseau-social`, `peinture-calme`, `washi`, `lanterne`, `lavis`, `ink-bleed`, `le plan`, négatif `non`, contemplation 4 s, conclusion 8 s, 45 s, 704×1280, 25 i/s, graine 71 | `expose` de la chaîne ; littéraux du graphe local `video-reveal-cinematic-dirige` |
+| **les styles** | ce qu'on ajoute sans rien casser : un style narratif ou une approche dans les catalogues de `comfyui-direction-de-style` (`styles/narratifs.json`, `styles/approches.json`), un fond, une encre, une ambiance, un rendu, un négatif dans les tables du paquet de nœuds (`FONDS`, `ENCRES`, `AMBIANCES`, `RENDUS`, `NEGATIFS`), une brume dans `BRUMES`. Une **entrée de plus**, jamais un défaut de moins ; le défaut reste en tête de chaque liste | les catalogues et les tables |
+
+Le témoin refuse tout écart : plan, défauts, bornes, options (le défaut en tête,
+rien de retiré), contrat de chaque étape, listes de contrôles, littéraux des
+graphes locaux quand ils sont là. Le paquet de nœuds a le sien
+(`tests/test_socle_ink.py` de `comfyui-ink-reveal`) pour les défauts des nœuds
+et les constantes du rendu.
+
 ### Ce qui est agnostique est APPELÉ, jamais ancré
 
 Une étape qui ne regarde pas ce flux-ci n'a rien à faire dedans. Cinq

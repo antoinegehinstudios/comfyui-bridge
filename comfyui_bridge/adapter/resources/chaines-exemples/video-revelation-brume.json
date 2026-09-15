@@ -311,7 +311,8 @@
         "inputs": {
           "6.fond": "$fond",
           "6.depart_s": "$deroulement.recit.duree_retenue_s",
-          "6.appel_texte": "$cta"
+          "6.appel_texte": "$cta",
+          "6.fermeture_json": "$deroulement.recit.fermeture_json"
         }
       }
     },
