@@ -310,7 +310,8 @@
         "seed": "$seed",
         "inputs": {
           "6.fond": "$fond",
-          "6.depart_s": "$deroulement.recit.duree_retenue_s"
+          "6.depart_s": "$deroulement.recit.duree_retenue_s",
+          "6.appel_texte": "$cta"
         }
       }
     },
