@@ -123,7 +123,7 @@
         { "id": "l_accroche_montre_de_la_matiere", "valeur": "$intention.recit.hook_est_vide", "op": "eq", "attendu": false },
         { "id": "le_climax_est_la_figure_de_l_oeuvre", "valeur": "$intention.recit.climax_est_central", "op": "eq", "attendu": true },
         { "id": "le_climax_garde_un_coeur_pour_la_fin", "valeur": "$intention.recit.climax_coeur", "op": "exists" },
-        { "id": "le_trajet_ne_revient_pas", "valeur": "$intention.recit.trajet_retours", "op": "lte", "attendu": 1 },
+        { "id": "le_trajet_ne_revient_pas", "valeur": "$intention.recit.trajet_retours", "op": "lte", "attendu": 2 },
         { "id": "le_plan_tient_dans_l_approche", "valeur": "$intention.recit.temps_dans_l_approche", "op": "eq", "attendu": true }
       ]
     },

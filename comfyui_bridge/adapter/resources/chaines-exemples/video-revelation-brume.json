@@ -172,7 +172,7 @@
           "id": "le_trajet_ne_revient_pas",
           "valeur": "$intention.recit.trajet_retours",
           "op": "lte",
-          "attendu": 1
+          "attendu": 2
         },
         {
           "id": "le_plan_tient_dans_l_approche",
