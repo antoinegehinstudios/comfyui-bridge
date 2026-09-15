@@ -25,74 +25,170 @@
     "style_narratif": {
       "type": "COMBO",
       "defaut": "reseau-social",
-      "options_depuis": { "menu": "style_narratif" },
+      "options_depuis": {
+        "menu": "style_narratif"
+      },
       "libelle": "Structure du récit"
     },
     "style_approche": {
       "type": "COMBO",
       "defaut": "peinture-calme",
-      "options_depuis": { "menu": "style_approche" },
+      "options_depuis": {
+        "menu": "style_approche"
+      },
       "libelle": "Approche"
     },
     "fond": {
       "type": "COMBO",
       "defaut": "brume-blanche",
-      "options": ["brume-blanche", "brume-grise", "brume-dorée"],
+      "options": [
+        "brume-blanche",
+        "brume-grise",
+        "brume-dorée"
+      ],
       "libelle": "Teinte de la brume"
     },
     "conduite": {
       "type": "COMBO",
       "defaut": "le plan",
-      "options": ["le plan"],
+      "options": [
+        "le plan"
+      ],
       "libelle": "Qui commande le déroulement"
     },
-    "width": { "type": "INT", "defaut": 704, "libelle": "Largeur", "unite": "px" },
-    "height": { "type": "INT", "defaut": 1280, "libelle": "Hauteur", "unite": "px" },
-    "fps": { "type": "INT", "defaut": 25, "min": 1, "libelle": "Images par seconde" },
-    "seed": { "type": "INT", "defaut": 71, "libelle": "Graine" }
+    "width": {
+      "type": "INT",
+      "defaut": 704,
+      "libelle": "Largeur",
+      "unite": "px"
+    },
+    "height": {
+      "type": "INT",
+      "defaut": 1280,
+      "libelle": "Hauteur",
+      "unite": "px"
+    },
+    "fps": {
+      "type": "INT",
+      "defaut": 25,
+      "min": 1,
+      "libelle": "Images par seconde"
+    },
+    "seed": {
+      "type": "INT",
+      "defaut": 71,
+      "libelle": "Graine"
+    }
   },
   "etapes": [
     {
       "id": "analyse",
       "rendre": {
         "workflow": "image-iconographe",
-        "media": { "image": "$image" }
+        "media": {
+          "image": "$image"
+        }
+      }
+    },
+    {
+      "id": "culture",
+      "rendre": {
+        "workflow": "image-iconologue",
+        "media": {
+          "image": "$image"
+        },
+        "inputs": {
+          "1.markers_json": "$analyse.recit.markers_json",
+          "1.anchors_json": "$analyse.recit.anchors_json",
+          "1.empreinte_iconographe": "$analyse.recit.empreinte"
+        }
       }
     },
     {
       "id": "intention",
       "rendre": {
         "workflow": "image-intention",
-        "media": { "image": "$image" },
+        "media": {
+          "image": "$image"
+        },
         "style_narratif": "$style_narratif",
         "inputs": {
           "70.style_approche": "$style_approche",
           "62.markers_json": "$analyse.recit.markers_json",
-          "62.culture_json": "$analyse.recit.culture_json",
-          "62.anchors_json": "$analyse.recit.anchors_json"
+          "62.culture_json": "$culture.recit.culture_json",
+          "62.anchors_json": "$culture.recit.anchors_json"
         }
       }
     },
     {
       "id": "plan_valide",
       "verifier": [
-        { "id": "le_plan_nomme_son_accroche", "valeur": "$intention.recit.hook", "op": "exists" },
-        { "id": "le_plan_nomme_son_climax", "valeur": "$intention.recit.climax", "op": "exists" },
-        { "id": "l_accroche_ne_devoile_pas_le_climax", "valeur": "$intention.recit.hook_recouvre_climax", "op": "eq", "attendu": false },
-        { "id": "le_plan_a_de_quoi_croitre", "valeur": "$intention.recit.nb_temps", "op": "gte", "attendu": 3 },
-        { "id": "l_accroche_est_un_detail", "valeur": "$intention.recit.hook_aire", "op": "lte", "attendu": 0.15 },
-        { "id": "l_accroche_montre_de_la_matiere", "valeur": "$intention.recit.hook_est_vide", "op": "eq", "attendu": false },
-        { "id": "le_climax_est_la_figure_de_l_oeuvre", "valeur": "$intention.recit.climax_est_central", "op": "eq", "attendu": true },
-        { "id": "le_climax_garde_un_coeur_pour_la_fin", "valeur": "$intention.recit.climax_coeur", "op": "exists" },
-        { "id": "le_trajet_ne_revient_pas", "valeur": "$intention.recit.trajet_retours", "op": "lte", "attendu": 1 },
-        { "id": "le_plan_tient_dans_l_approche", "valeur": "$intention.recit.temps_dans_l_approche", "op": "eq", "attendu": true }
+        {
+          "id": "le_plan_nomme_son_accroche",
+          "valeur": "$intention.recit.hook",
+          "op": "exists"
+        },
+        {
+          "id": "le_plan_nomme_son_climax",
+          "valeur": "$intention.recit.climax",
+          "op": "exists"
+        },
+        {
+          "id": "l_accroche_ne_devoile_pas_le_climax",
+          "valeur": "$intention.recit.hook_recouvre_climax",
+          "op": "eq",
+          "attendu": false
+        },
+        {
+          "id": "le_plan_a_de_quoi_croitre",
+          "valeur": "$intention.recit.nb_temps",
+          "op": "gte",
+          "attendu": 3
+        },
+        {
+          "id": "l_accroche_est_un_detail",
+          "valeur": "$intention.recit.hook_aire",
+          "op": "lte",
+          "attendu": 0.15
+        },
+        {
+          "id": "l_accroche_montre_de_la_matiere",
+          "valeur": "$intention.recit.hook_est_vide",
+          "op": "eq",
+          "attendu": false
+        },
+        {
+          "id": "le_climax_est_la_figure_de_l_oeuvre",
+          "valeur": "$intention.recit.climax_est_central",
+          "op": "eq",
+          "attendu": true
+        },
+        {
+          "id": "le_climax_garde_un_coeur_pour_la_fin",
+          "valeur": "$intention.recit.climax_coeur",
+          "op": "exists"
+        },
+        {
+          "id": "le_trajet_ne_revient_pas",
+          "valeur": "$intention.recit.trajet_retours",
+          "op": "lte",
+          "attendu": 1
+        },
+        {
+          "id": "le_plan_tient_dans_l_approche",
+          "valeur": "$intention.recit.temps_dans_l_approche",
+          "op": "eq",
+          "attendu": true
+        }
       ]
     },
     {
       "id": "deroulement",
       "rendre": {
         "workflow": "video-reveal-brume-dirige",
-        "media": { "image": "$image" },
+        "media": {
+          "image": "$image"
+        },
         "duration_s": "$duration_s",
         "fps": "$fps",
         "width": "$width",
@@ -109,22 +205,69 @@
     {
       "id": "plan_tenu",
       "verifier": [
-        { "id": "l_accroche_est_vue_a_2_5_s", "valeur": "$deroulement.recit.hook_vu.atteint", "op": "gte", "attendu": 0.10 },
-        { "id": "le_climax_est_hors_du_cadre_d_ouverture", "valeur": "$deroulement.recit.climax_a_l_ouverture", "op": "lte", "attendu": 0.12 },
-        { "id": "le_climax_est_tenu", "valeur": "$deroulement.recit.climax_tenue_s", "op": "gte", "attendu": 2 },
-        { "id": "la_camera_glisse", "valeur": "$deroulement.recit.vitesse_camera_max_mesuree", "op": "lte", "attendu": 0.1 },
-        { "id": "la_camera_ne_saccade_pas", "valeur": "$deroulement.recit.acceleration_camera_max", "op": "lte", "attendu": 1.0 },
-        { "id": "les_temps_sont_lisibles", "valeur": "$deroulement.recit.lisibilite_min", "op": "gte", "attendu": 0.85 },
-        { "id": "l_ordre_d_arrivee_est_celui_du_plan", "valeur": "$deroulement.recit.ordre_d_arrivee_respecte", "op": "eq", "attendu": true },
-        { "id": "le_coeur_vient_en_dernier", "valeur": "$deroulement.recit.coeur_en_dernier", "op": "eq", "attendu": true },
-        { "id": "aucun_temps_supprime", "valeur": "$deroulement.recit.nb_hors_champ", "op": "eq", "attendu": 0 }
+        {
+          "id": "l_accroche_est_vue_a_2_5_s",
+          "valeur": "$deroulement.recit.hook_vu.atteint",
+          "op": "gte",
+          "attendu": 0.1
+        },
+        {
+          "id": "le_climax_est_hors_du_cadre_d_ouverture",
+          "valeur": "$deroulement.recit.climax_a_l_ouverture",
+          "op": "lte",
+          "attendu": 0.12
+        },
+        {
+          "id": "le_climax_est_tenu",
+          "valeur": "$deroulement.recit.climax_tenue_s",
+          "op": "gte",
+          "attendu": 2
+        },
+        {
+          "id": "la_camera_glisse",
+          "valeur": "$deroulement.recit.vitesse_camera_max_mesuree",
+          "op": "lte",
+          "attendu": 0.1
+        },
+        {
+          "id": "la_camera_ne_saccade_pas",
+          "valeur": "$deroulement.recit.acceleration_camera_max",
+          "op": "lte",
+          "attendu": 1.0
+        },
+        {
+          "id": "les_temps_sont_lisibles",
+          "valeur": "$deroulement.recit.lisibilite_min",
+          "op": "gte",
+          "attendu": 0.85
+        },
+        {
+          "id": "l_ordre_d_arrivee_est_celui_du_plan",
+          "valeur": "$deroulement.recit.ordre_d_arrivee_respecte",
+          "op": "eq",
+          "attendu": true
+        },
+        {
+          "id": "le_coeur_vient_en_dernier",
+          "valeur": "$deroulement.recit.coeur_en_dernier",
+          "op": "eq",
+          "attendu": true
+        },
+        {
+          "id": "aucun_temps_supprime",
+          "valeur": "$deroulement.recit.nb_hors_champ",
+          "op": "eq",
+          "attendu": 0
+        }
       ]
     },
     {
       "id": "appel",
       "rendre": {
         "workflow": "video-appel-final",
-        "media": { "video": "$deroulement.livrable" },
+        "media": {
+          "video": "$deroulement.livrable"
+        },
         "fps": "$fps",
         "seed": "$seed",
         "inputs": {
@@ -135,7 +278,9 @@
     {
       "id": "montage",
       "recoller": {
-        "parts": ["$appel.livrable"],
+        "parts": [
+          "$appel.livrable"
+        ],
         "fps": "$fps",
         "largeur": "$width",
         "hauteur": "$height"
@@ -144,8 +289,18 @@
     {
       "id": "controle",
       "verifier": [
-        { "id": "la_seule_part", "valeur": "$montage.parts", "op": "eq", "attendu": 1 },
-        { "id": "livrable_pese", "valeur": "$montage.mesure.bytes", "op": "gte", "attendu": 100000 }
+        {
+          "id": "la_seule_part",
+          "valeur": "$montage.parts",
+          "op": "eq",
+          "attendu": 1
+        },
+        {
+          "id": "livrable_pese",
+          "valeur": "$montage.mesure.bytes",
+          "op": "gte",
+          "attendu": 100000
+        }
       ]
     }
   ],
@@ -158,6 +313,7 @@
     "ce_que_le_plan_tenu_mesure": "Les mêmes grandeurs que sous l'encre quand elles ont un sens, mesurées sur la CARTE DE DENSITÉ que le nœud vient de rendre, jamais promises : l'accroche vue à 2,5 s (part de sa boîte dont la brume est descendue sous la moitié), le climax hors du cadre d'ouverture et tenu, la caméra qui glisse sans saccade, la LISIBILITÉ (part de la boîte et de son halo passée sous 0,3 de densité à la fin de sa tenue), l'ORDRE D'ARRIVÉE (l'heure médiane de dissipation croît-elle dans l'ordre du plan), le CŒUR EN DERNIER, et aucun temps supprimé. Le nœud, lui, ne supprime rien : un temps hors de l'image ou incadrable REFUSE le plan avec sa raison. DEUX GRANDEURS DE PLUS sont rendues et ne sont pas encore contrôlées ici, parce qu'elles séparent ce que la peinture a fait de ce que le plan lui a demandé d'impossible : « boite_dissipee_min » (la BOÎTE de chaque temps dégagée à son heure — le contrat irréductible, qu'aucune géométrie n'excuse) et « lisibilite_min_hors_dispute » (la lisibilité des seuls temps dont un temps plus tardif ne revendique pas déjà le voisinage ; « temps_au_voisinage_dispute » les nomme).",
     "le_plan_commande": "L'intention est écrite AVANT toute image, et le déroulement la reçoit telle quelle (61.direction_json). Le champ « conduite » n'a qu'une valeur : la brume ne sait se dissiper que le long d'un chemin narratif, et sans plan exploitable elle refuse au lieu de replier sur une géométrie de caméra — ce déroulement-là a été mesuré faux le 2026-09-14.",
     "aucune_limite_arbitraire": "Les bornes exposées sont celles que le graphe, la logique ou le média imposent : 1 image par seconde est le plancher d'une vidéo, et 79 s la borne haute d'un média qu'on regarde en défilant. La durée demandée est celle qui est LIVRÉE ; le nœud ne l'allonge que si le minimum logique du plan ne tient pas dedans (tenues, trajets et pauses lisibles, plus la levée de la dernière nappe et la tenue finale), et il dit alors pourquoi (echelon_de_duree, duree_minimale_s, raison_duree).",
-    "ce_qui_est_appele": "La documentation de l'image (image-iconographe), la structure du récit et l'approche (le catalogue de styles) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : cette chaîne les appelle, elle ne les porte pas — et « Révéler une image » les appelle aussi, sans que rien soit repayé ni recopié."
+    "ce_qui_est_appele": "La documentation de l'image (image-iconographe), la structure du récit et l'approche (le catalogue de styles) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : cette chaîne les appelle, elle ne les porte pas — et « Révéler une image » les appelle aussi, sans que rien soit repayé ni recopié.",
+    "culture_par_iconologue": "L'étape CULTURE est tenue par ICONOLOGUE depuis le 2026-09-15 (flux « image-iconologue », service local 127.0.0.1:7950). Elle vient APRÈS l'analyse et lui répond : Iconographe dit ce que l'image MONTRE, Iconologue dit ce que l'œuvre EST — l'identité et le degré de sa preuve (identifiée, hypothèse, inconnue), la notice encyclopédique, le passage du récit que l'œuvre illustre (cité, borné, sourcé), le sens des motifs, et une ATTESTATION par élément : qui affirme que cet élément-là est dans l'œuvre, et sur quelle base publique. Elle reçoit le relevé et l'ancrage de l'analyse (1.markers_json, 1.anchors_json, 1.empreinte_iconographe) et rend l'ancrage ENRICHI, que l'intention lit à la place de celui de l'analyse. CE QU'ELLE CORRIGE, MESURÉ : sur l'Uccello, sans culture, le central est le « cheval blanc armé » — la plus grande masse d'attention (0,213 des fixations attendues) — et le réalisateur en fait le climax ; le sujet de l'œuvre est pourtant saint Georges tuant le dragon, et ce n'est pas une impression : Wikidata le DÉCLARE (P180, « déclaré parmi les sujets de l'entité : dragon »). Une ancre attestée par le TITRE ou par les SUJETS déclarés pèse 3 de plus, et le central devient la FIGURE la mieux pesée d'entre elles : le dragon (rang 6 + 3 = 9) passe devant le cheval (7), et le récit dit de quoi vers quoi. POUR UNE ŒUVRE QUE LES BASES NE CONNAISSENT PAS, RIEN NE CASSE : « reconnu » et « nomme » sont faux, l'ancrage de l'analyse ressort INTACT, le récit dit « oeuvre-inedite », et l'intention se joue sur ce que l'image montre — exactement comme avant cette étape. C'est pourquoi AUCUN contrôle de « plan_valide » ne se fonde sur la culture : un contrôle qui exigerait un sujet attesté arrêterait la chaîne sur toute œuvre inédite, et une donnée absente n'est pas un plan faux. Le nœud, lui, ne cherche rien : il TRADUIT ce qu'Iconologue a établi, et son catalogue fait qu'une œuvre n'est jamais enquêtée deux fois."
   }
 }
