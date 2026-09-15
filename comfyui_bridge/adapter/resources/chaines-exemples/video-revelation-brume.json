@@ -71,6 +71,12 @@
       ],
       "libelle": "Teinte de la brume"
     },
+    "bords": {
+      "type": "COMBO",
+      "defaut": "fondus",
+      "options": ["fondus", "francs"],
+      "libelle": "Bords de l'œuvre"
+    },
     "conduite": {
       "type": "COMBO",
       "defaut": "le plan",
@@ -222,7 +228,8 @@
           "61.direction_json": "$intention.recit.direction_json",
           "61.fond": "$fond",
           "61.conduite": "$conduite",
-          "61.contemplation_s": "$contemplation_s"
+          "61.contemplation_s": "$contemplation_s",
+          "61.bords": "$bords"
         }
       }
     },
@@ -364,6 +371,7 @@
   ],
   "livrable": "$montage.livrable",
   "notes": {
+    "bords": "Le champ « Bords de l'œuvre » (bords, 61.bords, « fondus » par défaut) est le même que sur la chaîne d'encre : la pose de l'œuvre sur la feuille est partagée (voir la note « bords » de video-revelation) — sous la brume aussi, le rectangle de l'œuvre ne se lit plus.",
     "etapes": "Les étapes portent les noms du travail : ANALYSE (la documentation de l'image, tenue par Iconographe), CULTURE (ce que l'œuvre EST, tenue par Iconologue), INTENTION (le plan), PLAN_VALIDE (le plan tient-il), DÉROULEMENT (la peinture par la brume), PLAN_TENU (la peinture a-t-elle tenu le plan), RACCORD, CONCLUSION, APPEL, MONTAGE, CONTRÔLE. Ce que la chaîne annonce est ce qu'elle fait.",
     "ce_qui_change_et_ce_qui_ne_change_pas": "Cette chaîne est l'ESSAI d'une autre technique de révélation, permis le 2026-09-15. Elle PARTAGE tout l'amont avec « Révéler une image » — mêmes étapes, mêmes appels, mêmes contrôles sur le plan — et ne change que la peinture : le déroulement appelle « video-reveal-brume-dirige » (nœud RevealBrume) au lieu du nœud d'encre. Le savoir n'est donc écrit nulle part deux fois : la documentation vient d'Iconographe, la structure et l'approche du catalogue de styles, l'appel final de son propre flux.",
     "ce_que_la_brume_fait": "La peinture est déjà là, entière et en couleur, sous une nappe de bruit fractal animé (deux à trois octaves, une dérive lente dans le sens que le plan déclare pour la caméra, une respiration de densité). Elle recouvre tout au départ — 0,97, il reste un soupçon de forme — et se dissipe pixel par pixel selon le MÊME champ d'heures que la saignée d'encre : une graine par temps, à la vitesse qui lui fait dégager sa boîte et son voisinage avant la fin de sa tenue, puis lentement jusqu'à rejoindre les autres. Sous la brume l'image est floue et désaturée d'autant qu'elle est couverte : la dissipation se lit comme une mise au point. Après le corps, la dernière nappe se lève partout pendant le dézoom ; la tenue finale montre la peinture nue, avec un voile résiduel au ras des bords — de l'air, pas un reste de récit, et le récit le déclare (brume.residuelle_au_bord). TROIS CHOSES SE JUGENT À L'ŒIL et sont donc mesurées sur les images COMPOSÉES, sous « brume.vu » : la LARGEUR de la pente (une brume n'a pas de bord — trois secondes de dissipation ne font que dix pixels quand le front rampe, d'où des médaillons découpés ; la pente est donc demandée en PIXELS et convertie en secondes par la pente locale du champ), le CONTRASTE de la nappe et sa vie (ses lambeaux, sa dérive, sa respiration d'une image à l'autre), et ce que la peinture laisse voir sous nappe pleine — les grandes masses, rien de plus. La brume se lève aussi DANS SON ENSEMBLE : sa densité de base descend jusqu'au climax (la lande se devine de plus en plus), puis jusqu'à rien pendant le dézoom ; les temps narratifs sont les endroits qu'elle quitte d'abord, et une éclaircie garde toujours un reste de voile — sans quoi ce n'est plus une éclaircie, c'est une découpe.",

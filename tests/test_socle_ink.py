@@ -35,7 +35,7 @@ DEFAUTS_INK = {
     "duration_s": 45, "contemplation_s": 4, "conclusion_s": 8, "cta": "", "cta_police": "",
     "style_narratif": "reseau-social", "style_approche": "peinture-calme",
     "fond": "washi", "ambiance": "lanterne", "encre": "lavis", "negatif": "non",
-    "rendu": "ink-bleed", "conduite": "le plan",
+    "rendu": "ink-bleed", "conduite": "le plan", "bords": "fondus",
     "width": 704, "height": 1280, "fps": 25, "seed": 71,
 }
 BORNES_INK = {"contemplation_s": (3, 5), "conclusion_s": (0, 30), "duration_s": (5, 79)}
@@ -46,6 +46,7 @@ OPTIONS_INK = {
     "negatif": ["non", "oui", "selon-l-oeuvre"],
     "rendu": ["ink-bleed", "classique", "front-organique"],
     "conduite": ["le plan", "la camera"],
+    "bords": ["fondus", "francs"],
 }
 
 # CE QUE CHAQUE ÉTAPE RENDUE APPELLE, ET CE QU'ELLE REÇOIT DE L'AMONT.
@@ -63,7 +64,8 @@ CONTRAT_INK = {
         "61.direction_json": "$intention.recit.direction_json",
         "61.fond": "$fond", "61.ambiance": "$ambiance", "61.encre": "$encre",
         "61.rendu": "$rendu", "61.conduite": "$conduite",
-        "61.contemplation_s": "$contemplation_s", "61.negatif": "$negatif"}),
+        "61.contemplation_s": "$contemplation_s", "61.negatif": "$negatif",
+        "61.bords": "$bords"}),
     "conclusion": ("video-reveal-closing", {
         "6.fond": "$fond", "6.ambiance": "$ambiance",
         "6.depart_s": "$deroulement.recit.duree_retenue_s",
@@ -162,7 +164,7 @@ def test_le_graphe_local_du_deroulement_porte_les_memes_defauts():
         pytest.skip("pas de _data/workflows sur ce poste")
     noeud = json.loads((graphes / "video-reveal-cinematic-dirige.json").read_text(encoding="utf-8"))["61"]
     assert noeud["class_type"] == "RevealCinematic"
-    for cle in ("fond", "ambiance", "encre", "rendu", "conduite", "negatif"):
+    for cle in ("fond", "ambiance", "encre", "rendu", "conduite", "negatif", "bords"):
         assert noeud["inputs"][cle] == DEFAUTS_INK[cle], cle
     assert noeud["inputs"]["contemplation_s"] == DEFAUTS_INK["contemplation_s"]
     fermeture = json.loads((graphes / "video-reveal-closing.json").read_text(encoding="utf-8"))["6"]

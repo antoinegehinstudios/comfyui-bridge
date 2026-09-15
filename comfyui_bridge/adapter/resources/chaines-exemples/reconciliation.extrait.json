@@ -126,6 +126,19 @@
         "front-organique": { "libelle": "Front organique (essai : le lavis ne suit plus le rectangle de la caméra)"} 
       }
     },
+    "bords": {
+      "libelle": "Bords de l'œuvre",
+      "libelles": {
+        "fondus": {
+          "libelle": "Fondus dans la feuille (le défaut)",
+          "resume": "les traits continuent au-delà de l'arête et se fondent sur un front ondulé : aucun rectangle à lire pendant la construction"
+        },
+        "francs": {
+          "libelle": "Francs (le prolongement d'avant)",
+          "resume": "flouté dès l'arête : le rectangle de l'œuvre se lit"
+        }
+      }
+    },
     "conduite": {
       "libelle": "Qui commande le déroulement",
       "libelles": {
@@ -179,6 +192,7 @@
         "encre": "Comment l'encre restitue l'image : lavis (défaut), trait sec, encre dense.",
         "style_approche": "COMMENT la révélation se conduit — c'est l'intention qui la reçoit, pas la peinture. « Peinture calme » (le défaut) : peu de temps, longs, un chemin continu dans l'image sans retour, et une caméra qui glisse sans jamais s'arrêter — c'est l'encre qui révèle. « Visite guidée » : plus de temps, plus courts, une caméra qui va d'élément en élément.",
         "rendu": "Comment l'encre vient. « Encre qui saigne » (le défaut) : une tache par temps, qui fleurit depuis lui, s'étend à bords humides et rejoint les autres — l'image apparaît dedans, sans réserve blanche découpée. Ce qui a un CONTOUR NET (une partie de figure : visage, main, crâne, gueule) est DESSINÉ d'abord, par des traits d'encre qui suivent ses propres contours, et la tache part de ces traits. « Classique » : le rendu du 13 septembre, des touches d'encre par temps. « Front organique » : le même, avec un lavis qui ne suit plus le rectangle de la caméra.",
+        "bords": "Les BORDS de l'œuvre sur la feuille. « Fondus » (le défaut) : la matière de l'œuvre continue au-delà de son arête (les traits d'encre ne s'arrêtent pas net) et se fond dans la feuille sur un front ondulé, puis en chapelet de taches — le rectangle de l'œuvre ne se lit jamais pendant la construction. « Francs » : le prolongement d'avant le 2026-09-15 après-midi, flouté dès l'arête, où le rectangle se lisait. Le récit mesure ce que la feuille montre (cadre_lu_encre, cadre_lu_couleur : part du côté qui porte un bord continu).",
         "conduite": "Qui mène : le PLAN (l'ordre des temps, leur rythme et le cadrage viennent de l'intention, et la caméra est bâtie sur eux — aucun temps n'est écarté, la durée demandée est celle qui est livrée), ou la CAMÉRA (le déroulement d'avant : la géométrie réordonne les temps et plafonne la durée)."
       }
     },
@@ -196,6 +210,7 @@
         "style_narratif": "La structure du récit : quels temps, dans quel ordre, et ce que chacun doit faire. La liste est celle du catalogue des structures.",
         "style_approche": "COMMENT la révélation se conduit — c'est l'intention qui la reçoit, pas la peinture. « Peinture calme » (le défaut) : peu de temps, longs, un chemin continu dans l'image sans retour, et une caméra qui glisse sans jamais s'arrêter.",
         "fond": "La teinte de la brume, et donc l'heure de l'image : blanche pour un jour pâle, grise pour un temps couvert, dorée pour une lanterne dans la brume.",
+        "bords": "Les BORDS de l'œuvre sur la feuille. « Fondus » (le défaut) : la matière de l'œuvre continue au-delà de son arête (les traits d'encre ne s'arrêtent pas net) et se fond dans la feuille sur un front ondulé, puis en chapelet de taches — le rectangle de l'œuvre ne se lit jamais pendant la construction. « Francs » : le prolongement d'avant le 2026-09-15 après-midi, flouté dès l'arête, où le rectangle se lisait. Le récit mesure ce que la feuille montre (cadre_lu_encre, cadre_lu_couleur : part du côté qui porte un bord continu).",
         "conduite": "Le PLAN, et lui seul : l'ordre des temps, leur rythme et le cadrage viennent de l'intention, la caméra est bâtie sur eux, et aucun temps n'est écarté. La brume ne sait pas se dissiper sans chemin narratif — sans plan, elle refuse."
       }
     },
