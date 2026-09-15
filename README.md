@@ -828,11 +828,11 @@ catégorie, **onze étapes** qui portent les noms du travail :
 | `culture` | la CULTURE de l'œuvre par **Iconologue** (`image-iconologue`) — identité prouvée, notice, passage du récit représenté, sens des motifs, et une **attestation par élément** du relevé. Elle rend l'ancrage **enrichi**, et son central re-décidé sur la figure que les bases déclarent sujet : sur l'Uccello, le climax passe du cheval blanc au **dragon** (rang 6 + 3 contre 7). Œuvre inconnue des bases : `reconnu: false`, l'ancrage ressort intact, rien ne casse |
 | `intention` | le plan : accroche, temps retenus, climax, dans la structure de récit demandée. Artefact `.json` lui aussi |
 | `plan_valide` | le plan tient-il ? accroche et climax nommés, l'accroche ne recouvre pas le climax, au moins trois temps, **le plan tient dans son APPROCHE et son trajet ne revient pas sur ses pas** — avant de dépenser la moindre seconde de rendu |
-| `deroulement` | la peinture, qui reçoit le relevé et le plan tels quels — et, depuis le 2026-09-14, qui les SUIT : le champ `conduite` vaut « le plan », l'ordre des temps, leur rythme et le cadrage viennent de l'intention (« la camera » rejoue le déroulement d'avant). Le champ `rendu` vaut « ink-bleed » : une tache d'encre par temps, qui fleurit, s'étend à bords humides et rejoint les autres. Le champ `ambiance` vaut « lanterne » depuis le 2026-09-15 : une flaque de lumière chaude posée hors champ, dont le centre dérive et dont la flamme respire, et dont les rayons rasants font accrocher les fibres du papier — la page se VIT pendant qu'on dessine dessus (« selon-le-fond » rejoue la lampe fixe d'avant, « atelier » la page nue) |
-| `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait : accroche vue, climax hors de l'ouverture et tenu, étapes qui se suivent, **ordre du plan suivi, chaque temps cadré (≥ 0,9) à son heure, aucun temps supprimé, caméra qui glisse (≤ 0,1 largeur/s) sans saccade (accélération ≤ 0,5 largeur/s²), page qui ne s'achève pas d'un coup (≤ 0,25 au dézoom), temps lisibles (halo encré ≥ 0,85), ordre d'ARRIVÉE de l'encre conforme au plan, cœur du climax en dernier** |
+| `deroulement` | la peinture, qui reçoit le relevé et le plan tels quels — et, depuis le 2026-09-14, qui les SUIT : le champ `conduite` vaut « le plan », l'ordre des temps, leur rythme et le cadrage viennent de l'intention (« la camera » rejoue le déroulement d'avant). Le champ `rendu` vaut « ink-bleed » : une tache d'encre par temps, qui fleurit, s'étend à bords humides et rejoint les autres. Le champ `ambiance` vaut « lanterne » depuis le 2026-09-15 : une flaque de lumière chaude posée hors champ, dont le centre dérive et dont la flamme respire, et dont les rayons rasants font accrocher les fibres du papier — la page se VIT pendant qu'on dessine dessus (« selon-le-fond » rejoue la lampe fixe d'avant, « atelier » la page nue). Depuis le 2026-09-15, trois choses de plus : la CONTEMPLATION (`contemplation_s`, 4 s, bornée de 3 à 5) est la dernière étape du déroulement — l'image révélée se regarde sous une caméra qui continue de s'ouvrir, jamais figée ; le NÉGATIF est un champ (`negatif`, « non » par défaut : l'encre est ce qui est sombre dans l'œuvre, une nuit se peint en lavis noir autour d'une lune laissée en réserve — « selon-l-oeuvre » rejoue l'inversion automatique d'avant) ; et le SILLAGE fait suivre la caméra par l'encre pendant les trajets (une goutte par seconde là où elle sera, un trait sur le contour qu'elle va montrer), sans jamais entrer dans la boîte d'un temps à venir |
+| `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait : accroche vue, climax hors de l'ouverture et tenu, étapes qui se suivent, **ordre du plan suivi, chaque temps cadré (≥ 0,9) à son heure, aucun temps supprimé, caméra qui glisse (≤ 0,1 largeur/s) sans saccade (accélération ≤ 0,5 largeur/s²), page qui ne s'achève pas d'un coup (≤ 0,25 au dézoom), temps lisibles (halo encré ≥ 0,85), ordre d'ARRIVÉE de l'encre conforme au plan, cœur du climax en dernier, contemplation qui ne se fige pas (≤ 0,5 s immobile), jamais de page blanche sous la caméra (≥ 1 % du cadre encré après l'accroche)** |
 | `raccord` | les 50 dernières images, en clip sans perte |
-| `conclusion` | la page se referme (0 s = pas de conclusion) — sous la MÊME ambiance, et à la seconde où le déroulement s'arrête (`6.depart_s` = `$deroulement.recit.duree_retenue_s`) : la flamme y reprend sa phase, et la luminance ne bouge pas de plus de 1 % au raccord |
-| `appel` | l'appel final écrit à l'encre sur la fin |
+| `conclusion` | la page se referme (0 s = pas de conclusion) — sous la MÊME ambiance, et à la seconde où le déroulement s'arrête (`6.depart_s` = `$deroulement.recit.duree_retenue_s`) : la flamme y reprend sa phase, et la luminance ne bouge pas de plus de 1 % au raccord. Depuis le 2026-09-15 elle ne contemple plus (`hold_s` 0,5 s au lieu de 2,2 : la contemplation appartient au déroulement) : un souffle, puis l'encre reprend la page — et elle MÈNE AU CTA |
+| `appel` | l'appel final (`cta`, s'il est renseigné) écrit à l'encre sur la page refermée par la conclusion, puis tenu |
 | `montage` | déroulement + fin, recollés |
 | `controle` | deux parts, un livrable qui pèse |
 
@@ -842,23 +842,32 @@ Les graphes qu'elle enchaîne (`image-iconographe`, `image-iconologue`,
 catégorie : le lanceur ne les montre pas.
 
 `video-revelation-brume` — « Révéler une image par la brume », **l'essai d'une
-autre technique** dans la même catégorie (ordre 2), en **neuf étapes**. Elle
+autre technique** dans la même catégorie (ordre 2), en **onze étapes**. Elle
 PARTAGE tout l'amont avec la précédente — mêmes `analyse`, `culture`,
 `intention`, `plan_valide`, mêmes appels, même plan remis tel quel — et ne change que la
 peinture : son `deroulement` appelle `video-reveal-brume-dirige` (nœud
 `RevealBrume`) au lieu du nœud d'encre. L'image est déjà là, **entière et en
 couleur**, sous une nappe de bruit fractal animé qui se dissipe selon le même
 champ d'heures narratif ; sous la brume elle est floue et désaturée d'autant
-qu'elle est couverte. Deux étapes disparaissent — `raccord` et `conclusion` :
-une brume qui reviendrait ne refermerait rien, il n'y a donc pas de
-`conclusion_s`, l'`appel` part du déroulement, et le `montage` n'a qu'une part
-(il ré-encode et nomme le livrable). Le champ `fond` y choisit la teinte de la
-brume (blanche, grise, dorée) ; ni `encre` ni `rendu`. Son `plan_tenu` mesure
-les mêmes grandeurs que l'encre quand elles ont un sens, **sur la carte de
-densité que le nœud vient de rendre** : accroche vue, climax hors de
-l'ouverture et tenu, caméra qui glisse sans saccade, temps lisibles (boîte et
-halo sous 0,3 de densité à leur heure), ordre d'arrivée, cœur en dernier,
-aucun temps supprimé.
+qu'elle est couverte. **Elle a sa conclusion depuis le 2026-09-15**, et c'est
+la même queue que celle de l'encre, au même endroit : `raccord` (les 50
+dernières images) → `conclusion` → `appel` → `montage` en deux parts, avec son
+champ `conclusion_s` (0 = aucune). On avait écrit qu'une brume qui reviendrait
+ne refermerait rien ; le reproche d'Antoine a déplacé le jugement — « il manque
+la partie conclusion à toutes ces vidéos » : il ne s'agit pas de REFERMER un
+récit mais de le POSER, puis d'amener l'appel. Le nœud `BrumeClosing`
+(`video-reveal-brume-closing`) fait revenir la brume depuis les bords vers le
+climax, **repris en dernier** (son heure de retour n'est que sa distance au
+foyer : rien n'est découpé), avec la MÊME brume que le déroulement et une nappe
+qui reprend sa dérive à la seconde où celui-ci s'est arrêté (`6.depart_s`). La
+dernière image est une **page de brume claire** — luminance 0,82 pour un contrat
+à 0,80 —, celle sur laquelle l'appel final écrit son encre sombre. Le champ
+`fond` y choisit la teinte de la brume (blanche, grise, dorée) ; ni `encre`
+ni `rendu`. Son `plan_tenu` mesure les mêmes grandeurs que l'encre quand elles
+ont un sens, **sur la carte de densité que le nœud vient de rendre** : accroche
+vue, climax hors de l'ouverture et tenu, caméra qui glisse sans saccade, temps
+lisibles (boîte et halo sous 0,3 de densité à leur heure), ordre d'arrivée,
+cœur en dernier, aucun temps supprimé.
 
 `video-prolongement` — 17 dernières images → prolongement → mesure du raccord
 → recollage sans le chevauchement.

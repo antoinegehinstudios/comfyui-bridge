@@ -252,6 +252,19 @@
         "filename_prefix": { "node": "18", "input": "filename_prefix"} 
       }
     },
+    "video-reveal-brume-closing": {
+      "kind": "video",
+      "workflow": "<dossier de données>/workflows/video-reveal-brume-closing.json",
+      "description": "LA CONCLUSION PAR LA BRUME : à partir du clip vivant, la brume REVIENT — depuis les bords vers le climax, qui est repris en dernier. La scène continue de respirer pendant que la page se referme, et la dernière image est une page de brume, claire : c'est elle que l'appel final reçoit pour y écrire son encre. `fond` reprend la brume du déroulement, `depart_s` la seconde où celui-ci s'est arrêté (la nappe y reprend sa dérive). Une durée de 0 la rend facultative : la dernière image passe telle quelle. Entrée : une VIDÉO (media video).",
+      "defaults": { "duration_s": 8.0, "fps": 25} ,
+      "bindings": {
+        "video": { "node": "1", "input": "file"} ,
+        "duration_s": { "node": "3", "input": "value"} ,
+        "fps": { "node": "4", "input": "value"} ,
+        "seed": { "node": "16", "input": "value"} ,
+        "filename_prefix": { "node": "18", "input": "filename_prefix"} 
+      }
+    },
     "video-prolongement": {
       "kind": "video",
       "chaine": "<dossier de données>/chaines/video-prolongement.json",
