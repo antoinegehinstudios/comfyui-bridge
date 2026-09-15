@@ -69,6 +69,33 @@ def test_managed_profile_starts_when_nothing_is_there(tmp_path, monkeypatch):
     assert E.ensure_engine(p)["state"] == "started"
 
 
+def test_an_old_startup_lock_does_not_block_a_restart(tmp_path, monkeypatch):
+    """Observed 2026-09-15: the lock written at the previous start stayed; once
+    the engine was killed, every restart waited 240 s for 'another process' —
+    the bridge itself, alive. A lock older than the startup window is a
+    leftover, whoever wrote it: the restart goes ahead and rewrites it."""
+    import os
+    from comfyui_bridge.adapter import engines as eng
+    profile = eng.EngineProfile(name="local", base_url="http://127.0.0.1:1", manage=True,
+                                command=["python", "-c", "pass"], cwd=str(tmp_path))
+    alive = {"n": 0}
+
+    def fake_alive(url):
+        alive["n"] += 1
+        return alive["n"] > 1  # dead at first probe, alive right after the launch
+
+    monkeypatch.setattr(eng, "is_alive", fake_alive)
+    monkeypatch.setattr(eng.time, "sleep", lambda s: None)
+    lock = eng._lock_path(profile, tmp_path)
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    lock.write_text(f"{os.getpid()} {profile.base_url}", encoding="utf-8")  # a leftover, its writer alive
+    vieux = eng.time.time() - 3600
+    os.utime(lock, (vieux, vieux))  # written an hour ago: no startup lasts that long
+    state = eng.ensure_engine(profile, startup_timeout_s=5.0, lock_dir=tmp_path)
+    assert state["started"] is True
+    assert lock.exists() and lock.stat().st_mtime > vieux + 1000  # rewritten by this start
+
+
 def test_unknown_or_empty_file_is_refused(tmp_path):
     with pytest.raises(E.EngineError):
         E.load_engines(_file(tmp_path, {"engines": {}}))

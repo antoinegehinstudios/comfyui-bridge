@@ -134,9 +134,16 @@ def _pid_exists(pid: int) -> bool:
     return True
 
 
-def _starter_alive(lock: Path) -> bool:
-    """Is another bridge process already starting this engine?"""
+def _starter_alive(lock: Path, max_age_s: float = 300.0) -> bool:
+    """Is another bridge process already starting this engine?
+
+    A lock older than the startup window is a leftover, whoever wrote it
+    (observed 2026-09-15: the lock written at the previous start outlived the
+    engine, and every restart request waited 240 s for "another process" —
+    the bridge itself, still alive). No startup lasts hours."""
     try:
+        if time.time() - lock.stat().st_mtime > max_age_s:
+            return False
         pid = int(lock.read_text(encoding="utf-8").split()[0])
     except Exception:
         return False
@@ -191,7 +198,7 @@ def ensure_engine(profile: EngineProfile, startup_timeout_s: float = 180.0,
     # both concluded "nothing there" and launched one each — observed: two
     # ComfyUI fighting for the same port.
     lock = _lock_path(profile, lock_dir) if lock_dir else None
-    if lock is not None and lock.exists() and _starter_alive(lock):
+    if lock is not None and lock.exists() and _starter_alive(lock, max_age_s=max(startup_timeout_s, 60.0) + 60.0):
         deadline = time.monotonic() + startup_timeout_s
         while time.monotonic() < deadline:
             time.sleep(2.0)
