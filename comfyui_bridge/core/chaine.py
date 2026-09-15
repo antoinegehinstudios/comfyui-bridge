@@ -96,6 +96,10 @@ class Etape:
     id: str
     genre: str
     params: Any                       # dict, ou liste de contrôles pour « verifier »
+    # « quand » : un RENVOI (« $cta ») ; l'étape n'est jouée que si ce qu'il
+    # désigne n'est pas vide. Sautée, elle rend son média tel quel en livrable,
+    # pour que l'aval qui la nomme continue de tenir (voir l'adaptateur).
+    quand: str = ""
 
     @property
     def workflow(self) -> str | None:
@@ -196,6 +200,18 @@ def _etape(brut: Any, rang: int, chaine: str) -> Etape:
             f"{', '.join(GENRES)} (trouvé : {', '.join(genres) or 'aucun'})")
     genre = genres[0]
     params = brut[genre]
+    # UNE ÉTAPE FACULTATIVE DIT DE QUOI ELLE DÉPEND : « quand » est un renvoi,
+    # jamais une valeur écrite en dur (une étape qu'on veut toujours sauter
+    # n'a pas à exister). Demandé le 2026-09-15 : « si pas de CTA spécifié, on
+    # ne met pas de CTA — on saute l'étape ».
+    quand = brut.get("quand", "")
+    if quand is not None and quand != "":
+        if not isinstance(quand, str) or not quand.startswith("$"):
+            raise WorkflowMappingError(
+                f"chaîne {chaine!r} : étape {ident!r} — « quand » attend un renvoi "
+                f"(« $champ » ou « $etape.cle »), pas {quand!r}")
+    else:
+        quand = ""
     if genre == "verifier":
         if not isinstance(params, list) or not params:
             raise WorkflowMappingError(
@@ -213,7 +229,7 @@ def _etape(brut: Any, rang: int, chaine: str) -> Etape:
                 raise WorkflowMappingError(
                     f"chaîne {chaine!r} : contrôle {controle.get('id')!r} de {ident!r} : "
                     f"« valeur » manquante")
-        return Etape(id=ident, genre=genre, params=params)
+        return Etape(id=ident, genre=genre, params=params, quand=quand)
     if not isinstance(params, dict):
         raise WorkflowMappingError(
             f"chaîne {chaine!r} : « {genre} » de {ident!r} attend un objet de paramètres")
@@ -228,7 +244,7 @@ def _etape(brut: Any, rang: int, chaine: str) -> Etape:
         raise WorkflowMappingError(
             f"chaîne {chaine!r} : étape {ident!r} ({genre}) — paramètre(s) requis absent(s) : "
             f"{', '.join(manquantes)}")
-    return Etape(id=ident, genre=genre, params=params)
+    return Etape(id=ident, genre=genre, params=params, quand=quand)
 
 
 def lire(brut: Any, nom_declare: str | None = None) -> Chaine:
@@ -270,7 +286,7 @@ def _verifier_renvois(chaine: Chaine) -> None:
     """
     amont: set[str] = set()
     for etape in chaine.etapes:
-        for renvoi in renvois(etape.params):
+        for renvoi in list(renvois(etape.params)) + list(renvois(etape.quand)):
             tete = renvoi.split(".", 1)[0]
             if tete in chaine.champs or tete in amont:
                 continue

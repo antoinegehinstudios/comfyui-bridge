@@ -189,6 +189,25 @@ STRUCTURES = {"styles": {
     "lente": {"libelle": "Contemplation lente", "famille": "structure longue"},
 }}
 
+# Une étape FACULTATIVE : « appel » ne se joue que si le champ « texte » est
+# renseigné (« quand »). Sautée, elle rend le livrable qu'elle devait reprendre,
+# et le montage qui la nomme tient toujours.
+CHAINE_FACULTATIVE = {
+    "version": 1, "chaine": "chaine-facultative",
+    "resume": "une étape qui ne se joue que si un champ est renseigné",
+    "expose": {"texte": {"type": "STRING", "defaut": "", "libelle": "Appel final"}},
+    "etapes": [
+        {"id": "une", "rendre": {"workflow": "video-essai", "prompt": "une",
+                                 "duration_s": 1.0}},
+        {"id": "appel", "quand": "$texte",
+         "rendre": {"workflow": "video-essai", "prompt": "$texte", "duration_s": 1.0,
+                    "media": {"video": "$une.livrable"}}},
+        {"id": "montage", "recoller": {"parts": ["$une.livrable", "$appel.livrable"],
+                                       "fps": 25, "largeur": 160, "hauteur": 120}},
+    ],
+    "livrable": "$montage.livrable",
+}
+
 # Le livrable d'une étape « rendre » est un CHEMIN local ; une étape suivante
 # qui le reprend en média (ici « deux » lit « $une.livrable ») ne doit jamais
 # le voir tel quel. « image_2 » n'est déjà pas un fichier d'ici : rien à
@@ -216,6 +235,8 @@ def atelier():
     (tmp / "chaine-au-menu.json").write_text(json.dumps(CHAINE_AU_MENU), encoding="utf-8")
     (tmp / "chaine-media-livrable.json").write_text(json.dumps(CHAINE_MEDIA_LIVRABLE),
                                                      encoding="utf-8")
+    (tmp / "chaine-facultative.json").write_text(json.dumps(CHAINE_FACULTATIVE),
+                                                 encoding="utf-8")
     (tmp / "structures.json").write_text(json.dumps(STRUCTURES, ensure_ascii=False),
                                          encoding="utf-8")
     (tmp / "reconciliation.local.json").write_text(json.dumps({
@@ -233,6 +254,10 @@ def atelier():
                                       "chaine": str(tmp / "chaine-media-livrable.json"),
                                       "titre": "Chaîne média livrable",
                                       "categorie": "essais", "ordre": 6},
+            "chaine-facultative": {"kind": "video",
+                                   "chaine": str(tmp / "chaine-facultative.json"),
+                                   "titre": "Chaîne facultative",
+                                   "categorie": "essais", "ordre": 7},
             "chaine-simple": {"kind": "image", "chaine": str(tmp / "chaine-simple.json"),
                               "titre": "Chaîne d'essai", "categorie": "essais", "ordre": 1},
             "chaine-recollee": {"kind": "video", "chaine": str(tmp / "chaine-recollee.json"),
@@ -694,3 +719,29 @@ def test_le_nom_donne_puis_le_type_nomment_tous_les_fichiers(atelier):
     # Sans nom donné : le type seul, jamais deux fois.
     job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-recollee"}))
     assert pathlib.Path(job["artifacts"][0]["path"]).name.startswith("chaine-recollee-final_")
+
+
+def test_une_etape_facultative_est_sautee_quand_son_champ_est_vide(atelier, monkeypatch):
+    """« Si pas de CTA spécifié, on ne met pas de CTA : on saute l'étape. »
+    Sans texte, « appel » n'est pas jouée — statut « skipped », raison dite —
+    et rend le livrable qu'elle devait reprendre : le montage qui la nomme
+    recolle deux parts, dont deux fois la première. Avec un texte, elle se
+    joue comme avant."""
+    # le dépôt chez le moteur est court-circuité : il n'y a pas de moteur ici
+    monkeypatch.setattr("comfyui_bridge.adapter.neutral.upload_image",
+                        lambda base, nom, contenu, *reste, **autres: nom)
+    r = atelier.post("/v1/render", json={"workflow": "chaine-facultative", "label": "sans"})
+    assert r.status_code == 202, r.text
+    job = _job(atelier, r)
+    assert job["status"] == "succeeded", job.get("problem")
+    statuts = {e["id"]: e["statut"] for e in job["etapes"]}
+    assert statuts == {"une": "done", "appel": "skipped", "montage": "done"}
+    appel = next(e for e in job["etapes"] if e["id"] == "appel")
+    assert "vide" in (appel["note"] or "") and appel["job_id"] is None
+    assert appel["resultat"]["livrable"].endswith(".mp4")
+    assert next(e for e in job["etapes"] if e["id"] == "montage")["resultat"]["parts"] == 2
+    r = atelier.post("/v1/render", json={"workflow": "chaine-facultative", "label": "avec",
+                                         "texte": "La suite, bientôt"})
+    job = _job(atelier, r)
+    assert job["status"] == "succeeded", job.get("problem")
+    assert [e["statut"] for e in job["etapes"]] == ["done", "done", "done"]

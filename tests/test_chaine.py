@@ -206,3 +206,26 @@ def test_un_texte_facultatif_vaut_sa_chaine_vide_et_un_booleen_son_faux():
     # …et le renvoi se résout sur la chaîne vide, au lieu de lever.
     assert noyau.resoudre(chaine.etapes[0].params, noyau.valeurs(chaine, {}), {})["inputs"] == {
         "7.texte": "", "7.signer": False}
+
+
+def test_une_etape_facultative_porte_un_renvoi_dans_quand():
+    """« Si pas de CTA spécifié, on saute l'étape » (2026-09-15) : « quand »
+    est un RENVOI vers un champ ou une étape d'amont — jamais une valeur en
+    dur, jamais l'aval."""
+    chaine = noyau.lire(_minimale(
+        expose={"cta": {"type": "STRING", "defaut": "", "libelle": "Appel final"}},
+        etapes=[{"id": "un", "rendre": {"workflow": "wf"}},
+                {"id": "appel", "quand": "$cta",
+                 "rendre": {"workflow": "wf", "media": {"video": "$un.livrable"}}}],
+        livrable="$appel.livrable"))
+    assert chaine.etapes[0].quand == "" and chaine.etapes[1].quand == "$cta"
+    with pytest.raises(WorkflowMappingError) as refus:
+        noyau.lire(_minimale(etapes=[{"id": "un", "quand": "toujours",
+                                      "rendre": {"workflow": "wf"}}]))
+    assert "quand" in refus.value.detail
+    with pytest.raises(WorkflowMappingError) as refus:
+        noyau.lire(_minimale(etapes=[{"id": "un", "quand": "$deux.livrable",
+                                      "rendre": {"workflow": "wf"}},
+                                     {"id": "deux", "rendre": {"workflow": "wf"}}],
+                             livrable="$deux.livrable"))
+    assert "APRÈS" in refus.value.detail

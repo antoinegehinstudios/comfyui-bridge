@@ -103,6 +103,21 @@ class RunnerDeChaines:
             if store.get(job_id).cancel_requested:
                 self._abandonner(job_id, etapes, rang, chaine, produits)
                 return
+            sautee = self._a_sauter(etape, valeurs, resultats)
+            if sautee is not None:
+                # UNE ÉTAPE FACULTATIVE SANS RAISON D'ÊTRE EST SAUTÉE, ET LE DIT :
+                # son « quand » désigne une valeur vide (un appel final sans
+                # texte). Elle rend son média tel quel en livrable, pour que
+                # l'étape suivante qui la nomme (« $appel.livrable ») reprenne
+                # ce qu'elle aurait reçu — rien n'est rendu, rien n'est perdu.
+                resultats[etape.id] = sautee
+                etapes[rang]["statut"] = "skipped"
+                etapes[rang]["note"] = sautee.get("raison")
+                etapes[rang]["resultat"] = _resume(sautee)
+                store.set_etapes(job_id, etapes)
+                store.append_log(job_id, f"étape {etape.id} ({etape.genre}) sautée : "
+                                         f"{sautee.get('raison')}")
+                continue
             etapes[rang]["statut"] = "running"
             store.set_etapes(job_id, etapes)
             store.set_progress(job_id, rang, len(etapes), etape.id)
@@ -213,6 +228,45 @@ class RunnerDeChaines:
                                 status="failed", problem=genre, detail=exc.detail)
 
     # -- étapes ----------------------------------------------------------------
+
+    @staticmethod
+    def _a_sauter(etape: noyau.Etape, valeurs: dict[str, Any],
+                  resultats: dict[str, Any]) -> dict[str, Any] | None:
+        """Ce qu'une étape SAUTÉE rend — ou None quand elle doit être jouée.
+
+        Une étape porte « quand » : un renvoi vers un champ ou un résultat
+        d'amont. Vide (texte blanc, faux, zéro, liste ou objet vides, absent),
+        l'étape n'a rien à faire. Son résultat est alors un PASSE-PLAT : le
+        premier média qu'elle devait reprendre devient son livrable, pour que
+        l'aval la nomme sans savoir qu'elle n'a pas eu lieu."""
+        if not etape.quand:
+            return None
+        valeur = noyau.resoudre(etape.quand, valeurs, resultats)
+        if isinstance(valeur, str):
+            pleine = bool(valeur.strip())
+        else:
+            pleine = bool(valeur)
+        if pleine:
+            return None
+        resultat: dict[str, Any] = {"sautee": True,
+                                    "raison": f"« {etape.quand} » est vide"}
+        params = etape.params if isinstance(etape.params, dict) else {}
+        sources: list[Any] = []
+        media = params.get("media")
+        if isinstance(media, dict):
+            sources += list(media.values())
+        for cle in ("video", "image", "parts"):
+            if cle in params:
+                sources.append(params[cle])
+        for source in sources:
+            chemin = noyau.resoudre(source, valeurs, resultats, strict=False)
+            if isinstance(chemin, list) and chemin:
+                chemin = chemin[0]
+            if isinstance(chemin, str) and chemin and Path(chemin).is_file():
+                resultat["livrable"] = chemin
+                resultat["mesure"] = {"bytes": Path(chemin).stat().st_size}
+                break
+        return resultat
 
     def _executer_etape(self, job_id: str, etape: noyau.Etape, valeurs: dict[str, Any],
                         resultats: dict[str, Any], travail: Path, label: str,

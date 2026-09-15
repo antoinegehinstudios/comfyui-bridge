@@ -715,7 +715,9 @@ est donc une entrée de catalogue comme une autre, avec `chaine` au lieu de
 
 Elle se lance par le **même verbe** que tout le reste : `POST /v1/render` avec
 son nom, et ses champs exposés à la racine du corps. Elle se suit par le même
-`GET /v1/jobs/{id}` (+ SSE), avec ses `etapes`. Une étape `rendre` est un run
+`GET /v1/jobs/{id}` (+ SSE), avec ses `etapes`. Une étape peut porter `"quand": "$champ"` : elle n'est jouée que si ce renvoi
+désigne une valeur non vide, sinon elle est **sautée** (statut `skipped`, raison dite)
+et rend le média qu'elle devait reprendre en livrable — l'aval qui la nomme tient. Une étape `rendre` est un run
 ORDINAIRE : sous-job visible dans `/v1/jobs`, Hermes, journal, estimation,
 reprise — rien n'est réécrit pour elle.
 
@@ -753,7 +755,8 @@ Le fichier de chaîne (copies de référence dans
     { "id": "raccord",    "extraire_queue": { "video": "$deroulement.livrable", "images": 50 } },
     { "id": "conclusion", "rendre": { "workflow": "video-reveal-closing",
         "media": { "video": "$raccord.depot" }, "duration_s": "$conclusion_s" } },
-    { "id": "appel",      "rendre": { "workflow": "video-appel-final",
+    { "id": "appel",      "quand": "$cta",
+                          "rendre": { "workflow": "video-appel-final",
         "media": { "video": "$conclusion.livrable" }, "inputs": { "7.texte": "$cta" } } },
     { "id": "montage",    "recoller": { "parts": ["$deroulement.livrable", "$appel.livrable"] } },
     { "id": "controle",   "verifier": [
@@ -832,7 +835,7 @@ catégorie, **onze étapes** qui portent les noms du travail :
 | `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait : accroche vue, climax hors de l'ouverture et tenu, étapes qui se suivent, **ordre du plan suivi, chaque temps cadré (≥ 0,9) à son heure, aucun temps supprimé, caméra qui glisse (≤ 0,1 largeur/s) sans saccade (accélération ≤ 0,5 largeur/s²), page qui ne s'achève pas d'un coup (≤ 0,25 au dézoom), temps lisibles (halo encré ≥ 0,85), ordre d'ARRIVÉE de l'encre conforme au plan, cœur du climax en dernier, contemplation qui ne se fige pas (≤ 0,5 s immobile), jamais de page blanche sous la caméra (≥ 1 % du cadre encré après l'accroche)** |
 | `raccord` | les 50 dernières images, en clip sans perte |
 | `conclusion` | la page se referme (0 s = pas de conclusion) — sous la MÊME ambiance, et à la seconde où le déroulement s'arrête (`6.depart_s` = `$deroulement.recit.duree_retenue_s`) : la flamme y reprend sa phase, et la luminance ne bouge pas de plus de 1 % au raccord. Depuis le 2026-09-15 elle ne contemple plus (`hold_s` 0,5 s au lieu de 2,2 : la contemplation appartient au déroulement) : un souffle, puis l'encre reprend la page — et elle MÈNE AU CTA |
-| `appel` | l'appel final (`cta`, s'il est renseigné) écrit à l'encre sur la page refermée par la conclusion, puis tenu |
+| `appel` | l'appel final (`cta`) écrit à l'encre SUR les dernières secondes de la conclusion, qui continue de vivre sous le texte ; la police s'injecte par `cta_police` (nom ou chemin). Sans texte, l'étape est **sautée** (`"quand": "$cta"`) et rend le livrable de la conclusion tel quel |
 | `montage` | déroulement + fin, recollés |
 | `controle` | deux parts, un livrable qui pèse |
 

@@ -40,6 +40,11 @@
       "defaut": "",
       "libelle": "Appel final (facultatif)"
     },
+    "cta_police": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Police de l'appel (nom ou chemin ; vide = automatique)"
+    },
     "style_narratif": {
       "type": "COMBO",
       "defaut": "reseau-social",
@@ -311,6 +316,7 @@
     },
     {
       "id": "appel",
+      "quand": "$cta",
       "rendre": {
         "workflow": "video-appel-final",
         "media": {
@@ -319,7 +325,8 @@
         "fps": "$fps",
         "seed": "$seed",
         "inputs": {
-          "7.texte": "$cta"
+          "7.texte": "$cta",
+          "7.police": "$cta_police"
         }
       }
     },
