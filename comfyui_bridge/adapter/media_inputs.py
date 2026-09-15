@@ -29,6 +29,15 @@ MEDIA_LOADERS: dict[str, tuple[str, str]] = {
     "LoadAudio": ("audio", "audio"),
     "Load3D": ("3d", "model_file"),
     "Load3DAdvanced": ("3d", "model_file"),
+    # Deux nœuds qui prennent une image par son NOM sans être des chargeurs
+    # d'image : ils ne lisent même pas le fichier — ils en envoient le CHEMIN à
+    # un service qui la documente, parce que c'est l'empreinte du fichier de
+    # CETTE machine qui doit reconnaître l'œuvre — en bibliothèque pour ce que
+    # l'image montre, au catalogue pour ce que l'œuvre est. Absents d'ici, ils
+    # n'apparaîtraient pas comme une pièce jointe et le formulaire ne
+    # proposerait rien à joindre.
+    "IconographeDocumentation": ("image", "image"),
+    "IconologueCulture": ("image", "image"),
 }
 
 # Les drapeaux par lesquels ComfyUI annonce qu'une entrée reçoit un fichier.

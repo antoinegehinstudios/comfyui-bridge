@@ -705,16 +705,19 @@ est donc une entrée de catalogue comme une autre, avec `chaine` au lieu de
 `workflow` + `bindings` :
 
 ```jsonc
-"video-revelation-podcast": {
+"video-revelation": {
   "kind": "video",
-  "chaine": "…/_data/chaines/video-revelation-podcast.json",
-  "titre": "Révélation pour podcast", "categorie": "reveler-une-image", "ordre": 1
+  "chaine": "…/_data/chaines/video-revelation.json",
+  "titre": "Révéler une image", "categorie": "reveler-une-image", "ordre": 1,
+  "aides": { "cta": "Une phrase courte, écrite à l'encre sur la page refermée. Vide : aucun appel." }
 }
 ```
 
 Elle se lance par le **même verbe** que tout le reste : `POST /v1/render` avec
 son nom, et ses champs exposés à la racine du corps. Elle se suit par le même
-`GET /v1/jobs/{id}` (+ SSE), avec ses `etapes`. Une étape `rendre` est un run
+`GET /v1/jobs/{id}` (+ SSE), avec ses `etapes`. Une étape peut porter `"quand": "$champ"` : elle n'est jouée que si ce renvoi
+désigne une valeur non vide, sinon elle est **sautée** (statut `skipped`, raison dite)
+et rend le média qu'elle devait reprendre en livrable — l'aval qui la nomme tient. Une étape `rendre` est un run
 ORDINAIRE : sous-job visible dans `/v1/jobs`, Hermes, journal, estimation,
 reprise — rien n'est réécrit pour elle.
 
@@ -723,34 +726,83 @@ Le fichier de chaîne (copies de référence dans
 
 ```jsonc
 {
-  "version": 1, "chaine": "video-revelation-podcast", "resume": "…",
+  "version": 1, "chaine": "video-revelation", "resume": "…",
   "expose": {
-    "image":      { "media": "image", "requis": true, "libelle": "L'image à révéler" },
-    "duration_s": { "type": "FLOAT", "defaut": 50, "min": 20, "max": 90, "unite": "s" }
+    "image":       { "media": "image", "requis": true, "libelle": "L'image à révéler" },
+    "duration_s":  { "type": "FLOAT", "defaut": 45, "min": 5, "max": 79, "unite": "s" },
+    "style_narratif": { "type": "COMBO", "defaut": "reseau-social",
+                        "options_depuis": { "menu": "style_narratif" },
+                        "libelle": "Structure du récit" },
+    "fond":        { "type": "COMBO", "defaut": "washi", "options": ["washi", "sepia"] },
+    "cta":         { "type": "STRING", "defaut": "", "libelle": "Appel final (facultatif)" }
   },
   "etapes": [
-    { "id": "revelation", "rendre": { "workflow": "video-reveal-cinematic",
-        "media": { "image": "$image" }, "duration_s": "$duration_s" } },
-    { "id": "queue",   "extraire_queue": { "video": "$revelation.livrable", "images": 50 } },
-    { "id": "final",   "recoller": { "parts": ["$revelation.livrable", "$conclusion.livrable"] } },
-    { "id": "controle", "verifier": [
-        { "id": "duree_tenue", "valeur": "$final.mesure.duration_s",
-          "op": "between", "attendu": [40, 120] } ] }
+    { "id": "analyse",   "rendre": { "workflow": "image-iconographe",
+        "media": { "image": "$image" } } },
+    { "id": "intention", "rendre": { "workflow": "image-intention",
+        "media": { "image": "$image" }, "style_narratif": "$style_narratif",
+        "inputs": { "62.markers_json": "$analyse.recit.markers_json" } } },
+    { "id": "plan_valide", "verifier": [
+        { "id": "le_plan_nomme_son_climax", "valeur": "$intention.recit.climax",
+          "op": "exists" } ] },
+    { "id": "deroulement", "rendre": { "workflow": "video-reveal-cinematic-dirige",
+        "media": { "image": "$image" }, "duration_s": "$duration_s",
+        "inputs": { "61.direction_json": "$intention.recit.direction_json",
+                    "61.fond": "$fond" } } },
+    { "id": "plan_tenu", "verifier": [
+        { "id": "l_accroche_est_vue_a_2_5_s",
+          "valeur": "$deroulement.recit.hook_vu.atteint", "op": "gte", "attendu": 0.10 } ] },
+    { "id": "raccord",    "extraire_queue": { "video": "$deroulement.livrable", "images": 50 } },
+    { "id": "conclusion", "rendre": { "workflow": "video-reveal-closing",
+        "media": { "video": "$raccord.depot" }, "duration_s": "$conclusion_s" } },
+    { "id": "appel",      "quand": "$cta",
+                          "rendre": { "workflow": "video-appel-final",
+        "media": { "video": "$conclusion.livrable" }, "inputs": { "7.texte": "$cta" } } },
+    { "id": "montage",    "recoller": { "parts": ["$deroulement.livrable", "$appel.livrable"] } },
+    { "id": "controle",   "verifier": [
+        { "id": "les_deux_parts", "valeur": "$montage.parts", "op": "eq", "attendu": 2 } ] }
   ],
-  "livrable": "$final.livrable"
+  "livrable": "$montage.livrable"
 }
 ```
+
+**Menus dont la liste n'est pas écrite** : un champ peut dire d'OÙ viennent ses
+valeurs plutôt que les recopier — `"options_depuis": {"catalogue": {…}}` (les
+entrées publiées du catalogue, filtrées) ou `"options_depuis": {"menu": "<nom>"}`
+(les valeurs d'un menu déclaré, qui peut n'être que la projection d'un fichier
+tenu par un fournisseur). Recopiée, une liste vieillit au premier ajout ; ici
+elle reste celle du fournisseur, et la passerelle refuse tout ce qui n'y est
+pas. Nommer deux sources à la fois, ou un menu sans le nommer, est refusé **à
+la lecture**.
 
 **Renvois** : `$champ` (une valeur exposée), `$etape.cle` (un résultat d'étape
 PRÉCÉDENTE). Un renvoi vers l'aval ou vers un nom inconnu est refusé **à la
 lecture**, en le nommant : découvert en route, il faisait échouer la chaîne
 après avoir dépensé les étapes d'avant.
 
+**Réglages de nœud** : une étape `rendre` peut écrire directement une entrée
+du graphe qu'elle vise, `"inputs": {"<nœud>.<entrée>": "$champ"}` — c'est
+ainsi que le fond et l'encre choisis par l'utilisateur atteignent le nœud de
+révélation (`61.fond`, `61.encre`) et l'appel final le nœud d'inscription
+(`7.texte`). L'entrée doit exister en littéral dans le graphe (sinon l'étape
+échoue en la nommant), et jamais une entrée déjà liée par les `bindings`, que
+l'override écraserait en silence.
+
+**Média depuis un livrable** : un `rendre` peut consommer `$etape.livrable` en
+média — la passerelle le dépose chez le moteur, comme elle le fait déjà pour
+ce que `extraire_queue`/`extraire_image` produisent.
+
+**Récit** : le premier artefact `.json` qu'un run rapporte (hors compagnon `.origine.json`) est parsé sous `recit`
+dans le résultat de l'étape. Une étape `verifier` contrôle alors ce que le
+nœud a MESURÉ — `$revelation.recit.hook_vu.atteint`, `…climax_tenue_s`,
+`…duree_retenue_s` — et arrête la chaîne AVANT de dépenser la fermeture
+quand le plan ne tient pas la règle des quatre temps.
+
 **Genres d'étape** et ce que chacun rend :
 
 | genre | ce qu'il fait | résultat |
 |---|---|---|
-| `rendre` | un run de workflow, par les moyens ordinaires | `livrable`, `artefacts`, `mesure`, `job_id` |
+| `rendre` | un run de workflow, par les moyens ordinaires | `livrable`, `artefacts`, `mesure`, `job_id`, `recit` (le premier artefact `.json` du run, hors compagnon, parsé ; la fiche du job n'en garde que les valeurs simples du premier niveau, le récit entier reste lisible par les étapes `verifier`) |
 | `extraire_queue` | les N dernières images, en clip SANS PERTE (`-qp 0`, compte revérifié), déposé chez le moteur | `fichier`, `depot`, `images` |
 | `extraire_image` | une image, par son index exact (`first`/`last`/N) | `fichier`, `depot` |
 | `recoller` | joindre des parts (ré-encodage uniforme, piste silencieuse si muet) | `livrable`, `mesure`, `parts` |
@@ -768,11 +820,106 @@ sous `<sortie>/cortex/_travail/<job>/` et ne sont jamais listées comme
 livrables. Annuler le parent arrête le sous-job en cours par les moyens du
 moteur et saute le reste.
 
-Trois chaînes sont livrées : `video-revelation-podcast` (révélation cinématique
-→ queue de 50 images → fermeture → recollage → contrôle),
-`video-revelation-poussee` (révélation au mode CHOISI → poussée caméra →
-recollage) et `video-prolongement` (17 dernières images → prolongement →
-mesure du raccord → recollage sans le chevauchement).
+Trois chaînes sont livrées.
+
+`video-revelation` — « Révéler une image », le seul flux publié de sa
+catégorie, **onze étapes** qui portent les noms du travail :
+
+| étape | ce qu'elle fait |
+|---|---|
+| `analyse` | la DOCUMENTATION de l'image par **Iconographe** (`image-iconographe`) — carte d'attention, éléments découpés au pixel, hiérarchie mesurée, noms et textes — servie par sa bibliothèque si l'œuvre y est déjà (verdict « repris », 15,9 s mesurées), calculée sinon (≈ 18 min, une fois). Ne livre aucun média : son artefact `.json` EST son résultat |
+| `culture` | la CULTURE de l'œuvre par **Iconologue** (`image-iconologue`) — identité prouvée, notice, passage du récit représenté, sens des motifs, et une **attestation par élément** du relevé. Elle rend l'ancrage **enrichi**, et son central re-décidé sur la figure que les bases déclarent sujet : sur l'Uccello, le climax passe du cheval blanc au **dragon** (rang 6 + 3 contre 7). Œuvre inconnue des bases : `reconnu: false`, l'ancrage ressort intact, rien ne casse |
+| `intention` | le plan : accroche, temps retenus, climax, dans la structure de récit demandée. Artefact `.json` lui aussi |
+| `plan_valide` | le plan tient-il ? accroche et climax nommés, l'accroche ne recouvre pas le climax, au moins trois temps, **le plan tient dans son APPROCHE et son trajet ne revient pas sur ses pas** — avant de dépenser la moindre seconde de rendu |
+| `deroulement` | la peinture, qui reçoit le relevé et le plan tels quels — et, depuis le 2026-09-14, qui les SUIT : le champ `conduite` vaut « le plan », l'ordre des temps, leur rythme et le cadrage viennent de l'intention (« la camera » rejoue le déroulement d'avant). Le champ `rendu` vaut « ink-bleed » : une tache d'encre par temps, qui fleurit, s'étend à bords humides et rejoint les autres. Le champ `ambiance` vaut « lanterne » depuis le 2026-09-15 : une flaque de lumière chaude posée hors champ, dont le centre dérive et dont la flamme respire, et dont les rayons rasants font accrocher les fibres du papier — la page se VIT pendant qu'on dessine dessus (« selon-le-fond » rejoue la lampe fixe d'avant, « atelier » la page nue). Depuis le 2026-09-15, trois choses de plus : la CONTEMPLATION (`contemplation_s`, 4 s, bornée de 3 à 5) est la dernière étape du déroulement — l'image révélée se regarde sous une caméra qui continue de s'ouvrir, jamais figée ; le NÉGATIF est un champ (`negatif`, « non » par défaut : l'encre est ce qui est sombre dans l'œuvre, une nuit se peint en lavis noir autour d'une lune laissée en réserve — « selon-l-oeuvre » rejoue l'inversion automatique d'avant) ; et le SILLAGE fait suivre la caméra par l'encre pendant les trajets (une goutte par seconde là où elle sera, un trait sur le contour qu'elle va montrer), sans jamais entrer dans la boîte d'un temps à venir. Et depuis le 2026-09-15 après-midi, les BORDS de l'œuvre (`bords`, « fondus » par défaut) : la matière de l'œuvre continue au-delà de son arête et se fond dans la feuille sur un front ondulé — le rectangle de l'œuvre ne se lit plus pendant la construction (« francs » rejoue le prolongement d'avant, flouté dès l'arête, où il se lisait ; le récit mesure `cadre_lu_encre` / `cadre_lu_couleur`) |
+| `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait : accroche vue, climax hors de l'ouverture et tenu, étapes qui se suivent, **ordre du plan suivi, chaque temps cadré (≥ 0,9) à son heure, aucun temps supprimé, caméra qui glisse (≤ 0,1 largeur/s) sans saccade (accélération ≤ 0,5 largeur/s²), page qui ne s'achève pas d'un coup (≤ 0,25 au dézoom), temps lisibles (halo encré ≥ 0,85), ordre d'ARRIVÉE de l'encre conforme au plan, cœur du climax en dernier, contemplation qui ne se fige pas (≤ 0,5 s immobile), jamais de page blanche sous la caméra (≥ 1 % du cadre encré après l'accroche)** |
+| `raccord` | les 50 dernières images, en clip sans perte |
+| `conclusion` | la page se referme (0 s = pas de conclusion) — sous la MÊME ambiance, et à la seconde où le déroulement s'arrête (`6.depart_s` = `$deroulement.recit.duree_retenue_s`) : la flamme y reprend sa phase, et la luminance ne bouge pas de plus de 1 % au raccord. Depuis le 2026-09-15 elle ne contemple plus (`hold_s` 0,5 s au lieu de 2,2 : la contemplation appartient au déroulement) : un souffle, puis l'encre reprend la page — et elle MÈNE AU CTA |
+| `appel` | l'appel final (`cta`) écrit à l'encre quand la fermeture a fini : il ne mord que sur sa dernière seconde, puis reste le temps de se lire, déduit du texte (la conclusion reçoit le même texte par `6.appel_texte` et prolonge sa page refermée, vivante, d'autant) ; la police s'injecte par `cta_police` (nom ou chemin). Sans texte, l'étape est **sautée** (`"quand": "$cta"`) et rend le livrable de la conclusion tel quel |
+| `montage` | déroulement + fin, recollés |
+| `controle` | deux parts, un livrable qui pèse |
+
+Les graphes qu'elle enchaîne (`image-iconographe`, `image-iconologue`,
+`image-intention`, `video-reveal-cinematic-dirige`, `video-reveal-closing`,
+`video-appel-final`) et `video-still-motion` restent des **techniques**, sans
+catégorie : le lanceur ne les montre pas.
+
+`video-revelation-brume` — « Révéler une image par la brume », **l'essai d'une
+autre technique** dans la même catégorie (ordre 2), en **onze étapes**. Elle
+PARTAGE tout l'amont avec la précédente — mêmes `analyse`, `culture`,
+`intention`, `plan_valide`, mêmes appels, même plan remis tel quel — et ne change que la
+peinture : son `deroulement` appelle `video-reveal-brume-dirige` (nœud
+`RevealBrume`) au lieu du nœud d'encre. L'image est déjà là, **entière et en
+couleur**, sous une nappe de bruit fractal animé qui se dissipe selon le même
+champ d'heures narratif ; sous la brume elle est floue et désaturée d'autant
+qu'elle est couverte. **Elle a sa conclusion depuis le 2026-09-15**, et c'est
+la même queue que celle de l'encre, au même endroit : `raccord` (les 50
+dernières images) → `conclusion` → `appel` → `montage` en deux parts, avec son
+champ `conclusion_s` (0 = aucune). On avait écrit qu'une brume qui reviendrait
+ne refermerait rien ; le reproche d'Antoine a déplacé le jugement — « il manque
+la partie conclusion à toutes ces vidéos » : il ne s'agit pas de REFERMER un
+récit mais de le POSER, puis d'amener l'appel. Le nœud `BrumeClosing`
+(`video-reveal-brume-closing`) fait revenir la brume depuis les bords vers le
+climax, **repris en dernier** (son heure de retour n'est que sa distance au
+foyer : rien n'est découpé), avec la MÊME brume que le déroulement et une nappe
+qui reprend sa dérive à la seconde où celui-ci s'est arrêté (`6.depart_s`). La
+dernière image est une **page de brume claire** — luminance 0,82 pour un contrat
+à 0,80 —, celle sur laquelle l'appel final écrit son encre sombre. Le champ
+`fond` y choisit la teinte de la brume (blanche, grise, dorée) ; ni `encre`
+ni `rendu`. Son `plan_tenu` mesure les mêmes grandeurs que l'encre quand elles
+ont un sens, **sur la carte de densité que le nœud vient de rendre** : accroche
+vue, climax hors de l'ouverture et tenu, caméra qui glisse sans saccade, temps
+lisibles (boîte et halo sous 0,3 de densité à leur heure), ordre d'arrivée,
+cœur en dernier, aucun temps supprimé.
+
+`video-prolongement` — 17 dernières images → prolongement → mesure du raccord
+→ recollage sans le chevauchement.
+
+### Le socle ink — ce qui est figé, ce qui se règle, où ajouter
+
+Antoine, le 2026-09-15 à midi, sur les vidéos ink livrées : « c'est parfait —
+assure cette standardisation ». Trois couches, et un témoin exécutable
+(`tests/test_socle_ink.py`) qui les épingle :
+
+| couche | ce que c'est | où |
+|---|---|---|
+| **le plan** | agnostique, hors de tout style : les onze étapes, dans cet ordre, avec leurs genres — `analyse` → `culture` → `intention` → `plan_valide` → `deroulement` → `plan_tenu` → `raccord` → `conclusion` → `appel` → `montage` → `controle` — et le contrat par lequel chacune parle à la suivante (`$etape.recit.*`, `$etape.livrable`, `$raccord.depot` ; la fermeture reçoit `fermeture_json` du récit du déroulement au lieu de relire le disque). La chaîne de la brume porte le même plan. | `_data/chaines/*.json` et leurs jumeaux |
+| **les paramètres** | tout ce qui se règle : structure du récit, approche, fond, ambiance, tracé, rendu, conduite, négatif, contemplation, conclusion, CTA et sa police, format. **Leurs défauts sont ceux du style ink livré ce jour-là et ne changent pas** : `reseau-social`, `peinture-calme`, `washi`, `lanterne`, `lavis`, `ink-bleed`, `le plan`, négatif `non`, contemplation 4 s, conclusion 8 s, 45 s, 720×1280, 30 i/s, graine 71 | `expose` de la chaîne ; littéraux du graphe local `video-reveal-cinematic-dirige` |
+| **les styles** | ce qu'on ajoute sans rien casser : un style narratif ou une approche dans les catalogues de `comfyui-direction-de-style` (`styles/narratifs.json`, `styles/approches.json`), un fond, une encre, une ambiance, un rendu, un négatif dans les tables du paquet de nœuds (`FONDS`, `ENCRES`, `AMBIANCES`, `RENDUS`, `NEGATIFS`), une brume dans `BRUMES`. Une **entrée de plus**, jamais un défaut de moins ; le défaut reste en tête de chaque liste | les catalogues et les tables |
+
+**Une exception, écrite** : le FORMAT par défaut est passé du 704×1280 à 25 i/s
+au portrait 720p à 30 i/s le 2026-09-15 au soir, à la demande d'Antoine
+(« valeurs par défaut : portrait, 720p, 30 i/s »). Un format est un réglage
+d'usage — la taille et la cadence que les réseaux attendent — pas un trait du
+style ink : rien de ce que le style fait n'en dépend, et le nœud d'encre accepte
+un pas de 8 (720 = 90 × 8). Le témoin épingle les nouveaux défauts, à la même
+condition que les autres : les changer est une décision à écrire ici.
+
+Le témoin refuse tout écart : plan, défauts, bornes, options (le défaut en tête,
+rien de retiré), contrat de chaque étape, listes de contrôles, littéraux des
+graphes locaux quand ils sont là. Le paquet de nœuds a le sien
+(`tests/test_socle_ink.py` de `comfyui-ink-reveal`) pour les défauts des nœuds
+et les constantes du rendu.
+
+### Ce qui est agnostique est APPELÉ, jamais ancré
+
+Une étape qui ne regarde pas ce flux-ci n'a rien à faire dedans. Cinq
+mécanismes de la chaîne ci-dessus valent pour n'importe quel flux, et sont
+donc des entrées de catalogue qu'elle APPELLE — un autre flux les appellera
+sans rien dupliquer :
+
+| mécanisme | où il vit | ce qu'il rend |
+|---|---|---|
+| la DOCUMENTATION d'une image | graphe `image-iconographe` (nœud `IconographeDocumentation`, paquet `comfyui-iconographe`) → le service **Iconographe** (`E:/Claude Code/Programmes/Iconographe`, `127.0.0.1:7940`) et sa BIBLIOTHÈQUE, schéma `iconographe/documentation` | où l'œil va, ce qu'il y a et où, ce qui compte (attraction, accroche, central), les noms — payés une seule fois par œuvre (sha256 exact puis empreinte perceptuelle), quel que soit ce qu'on en fera. Il ne dit PAS ce que l'œuvre est : son port `culture` n'a aucun adaptateur, et c'est l'étape suivante qui l'apporte |
+| la CULTURE d'une œuvre | graphe `image-iconologue` (nœud `IconologueCulture`, paquet `comfyui-iconologue`) → le service **Iconologue** (`E:/Claude Code/Programmes/Iconologue`, `127.0.0.1:7950`) et son CATALOGUE, schéma `iconologue/dossier` | ce que l'œuvre EST, sourcé : identité et degré de la preuve, notice, passage du récit représenté, sens des motifs, et une **attestation par élément** (qui l'affirme, sur quelle base). L'ancrage en ressort enrichi : une figure attestée par le titre ou par les sujets déclarés pèse 3 de plus, et le central est re-décidé sur elle |
+| la STRUCTURE du récit | catalogue de structures du paquet `comfyui-direction-de-style` (`styles/narratifs.json`), servi au formulaire par `options_depuis: {"menu": "style_narratif"}` et au graphe `image-intention` par le champ sémantique `style_narratif` | les temps, leur ordre, ce que chacun doit faire (`reseau-social` : hook · setup · corps · conclusion facultative · appel) |
+| l'APPROCHE | catalogue d'approches du MÊME paquet (`styles/approches.json`), servi au formulaire par `options_depuis: {"menu": "style_approche"}` et au graphe par `70.style_approche` | COMMENT la révélation se conduit : combien de temps au plus, combien de temps chacun tient, ce que la caméra s'autorise, par quel geste l'encre vient (`peinture-calme` : au plus 6 temps, un chemin continu sans retour, une caméra qui glisse à 0,08 largeur/s et ne s'arrête jamais) |
+| l'APPEL FINAL | graphe `video-appel-final` | le texte écrit à l'encre sur la fin d'une vidéo — de n'importe quelle vidéo, pas seulement d'une révélation |
+
+Le signe qu'un mécanisme doit sortir d'un flux : on peut le nommer sans
+nommer le flux. La conclusion et l'appel final vivaient dans le même graphe ;
+on ne pouvait pas avoir l'un sans l'autre. Ils sont maintenant deux étapes,
+et deux graphes.
 
 ## Vitrine : catégories, titres, menus
 
@@ -787,14 +934,42 @@ fichier de réconciliation, et servi par le réseau.
   technique** (étape de chaîne, utilitaire) et n'est pas publiée aux lanceurs.
   Une entrée qui ne porte QUE ces clés **décore** un graphe déposé dans le
   dossier des workflows, sans lui faire perdre son auto-liaison.
+* `formats` (clé de premier niveau) : le **vocabulaire** des formats — les cas
+  généraux, leurs libellés, leurs côtés —, rendu tel quel par `GET /v1/workflows`
+  à côté de `categories` :
+
+  ```jsonc
+  "formats": {
+    "orientations": [ { "valeur": "portrait", "libelle": "Portrait (vertical)" },
+                      { "valeur": "paysage",  "libelle": "Paysage (horizontal)" } ],
+    "resolutions":  [ { "valeur": "720p", "libelle": "720p (HD)",
+                        "cote_court": 720, "cote_long": 1280 }, … ]
+  }
+  ```
+
+  Le lanceur en fait deux listes (Orientation, Résolution) et **traduit** le
+  choix en `width`/`height`, qu'il envoie ; ni `format` ni `orientation` ne
+  partent dans la demande (la passerelle les refuserait : ce ne sont pas des
+  champs du mode). La règle de traduction est **géométrique**, pas métier —
+  portrait ⇒ la largeur est le petit côté, paysage ⇒ le grand —, ce qui la garde
+  vraie quand le vocabulaire s'allonge. Aucun défaut n'est écrit ici : le défaut
+  d'un mode est celui de SES champs `width`/`height`/`fps` (`/io`), et le lanceur
+  retrouve le format par défaut en cherchant le couple correspondant (720×1280 ⇒
+  720p portrait ; hors vocabulaire ⇒ « Personnalisée »). Une résolution sans
+  `valeur` ou sans ses deux côtés entiers est refusée **à la lecture**, nommée :
+  servie tronquée, elle aurait donné une liste où un choix n'écrit rien. Sans
+  déclaration : `{"orientations": [], "resolutions": []}` — le lanceur ne montre
+  pas les listes, et largeur/hauteur restent des champs ordinaires.
 * `menus` (clé de premier niveau) : les libellés des valeurs d'un champ. La
   LISTE, elle, vient toujours du fournisseur — le moteur pour un COMBO de nœud,
-  le catalogue pour un mode de chaîne (`"options_depuis": {"catalogue":
-  {"prefixe": "video-reveal-"}}`). Deux formes :
+  la chaîne pour un COMBO à `options` littérales (`fond`, `encre` de
+  `video-revelation`), ou le catalogue quand une chaîne choisit un mode parmi
+  les entrées d'un préfixe (`"options_depuis": {"catalogue": {"prefixe":
+  "…"}}`). Deux formes :
 
 ```jsonc
 "menus": {
-  "mode": { "libelle": "Mode", "libelles": { "sumi-e": { "libelle": "Sumi-e", "groupe": "encre" } } },
+  "encre": { "libelle": "Style de tracé", "libelles": { "lavis": { "libelle": "Lavis", "resume": "aplats et lavis, le défaut" } } },
   "style_graphique": { "source_fichier": {
       "chemin": "…/comfyui-direction-de-style/styles/graphiques.json",
       "table": "styles", "libelle": "libelle", "resume": "resume", "groupe": "famille" } }
@@ -806,6 +981,73 @@ résumé, groupe), `libelle` et `unite`. Une valeur sans libellé apparaît tell
 quelle ; une source illisible rend un `manque` plutôt que de dégarnir le menu
 en silence. Pour une **chaîne**, `/io` répond `described: true` même moteur
 éteint : son contrat est écrit, pas découvert.
+
+### Raccourcis : un ensemble de réglages enregistré
+
+Un mode publie ses champs et leurs défauts. Un utilisateur qui a trouvé SON
+réglage — un fond ambré, plus de trait, une flamme étroite, 45 s — n'avait
+aucun moyen de le garder : il le retapait, et le retapait faux. Un **raccourci**
+est ce réglage-là, nommé, avec l'aperçu animé de la livraison qui l'a fait
+naître. **Le mode lui-même est le raccourci par défaut** : ses défauts ne sont
+écrits nulle part, et il s'affiche toujours en premier ; les raccourcis
+enregistrés viennent après lui, sous le même groupe.
+
+Le lanceur ne fait que DÉSIGNER (« garde ces réglages-là ») et RENDRE ce qui
+est publié — aucune liste écrite chez lui, aucune image fabriquée par lui.
+
+```jsonc
+{
+  "id": "sepia-au-trait-sec",          // le slug du titre ; « -2 » si le titre existe déjà
+  "workflow": "…", "titre": "Sépia au trait sec", "resume": "…",
+  "valeurs": { "duration_s": 45, "fond": "sepia", "…": "…" },
+  "ecarts": [                          // ce qui DIFFÈRE des défauts du mode, habillé
+    { "champ": "fond", "libelle": "Fond de départ",
+      "valeur": "sepia", "libelle_valeur": "Sépia" },
+    { "champ": "duration_s", "libelle": "Durée", "valeur": 45, "libelle_valeur": "45 s" }
+  ],
+  "apercu_url": "/v1/workflows/…/raccourcis/sepia-au-trait-sec/apercu",
+  "job_id": "1f04…", "cree_le": "2026-09-15T20:10:00+00:00", "ordre": 100
+}
+```
+
+`valeurs` porte TOUS les réglages, jamais les pièces jointes (l'image se
+redépose à chaque fois) ni ce que la passerelle possède elle-même (`workflow`,
+`label`, `kind`, `media`, `inputs`, `constraints`). `ecarts` est calculé **à la
+lecture**, contre les défauts d'aujourd'hui : figé dans le fichier, il aurait
+continué d'annoncer « Sépia » comme un choix particulier le jour où le mode en
+fait son défaut. Une liste d'écarts vide se lit « les réglages par défaut ».
+Quand `width` ET `height` diffèrent tous deux et que le couple correspond à un
+format déclaré (voir `formats` plus haut), les deux écarts sont repliés en un
+seul — `{"champ": "format", "libelle": "Format", "valeur": "1080p paysage",
+"libelle_valeur": "1080p (Full HD), Paysage (horizontal)"}` — à la place du
+premier des deux : l'utilisateur a fait UN choix, pas deux. Hors vocabulaire
+(704×1280) ou sur un carré, les deux écarts restent (« 704 px »).
+`apercu_url` n'est annoncé que si le fichier existe — une vignette promise et
+absente fait une image cassée par carte.
+
+| Route | Corps | Réponse |
+|---|---|---|
+| `GET /v1/workflows/{nom}/raccourcis` | — | `{"workflow", "raccourcis": [vue…]}`, triés par `ordre` puis titre |
+| `POST /v1/workflows/{nom}/raccourcis` | `{"titre"` requis`, "resume"?, "job_id"?, "valeurs"?, "ordre"?}` — au moins `job_id` ou `valeurs` | **201** la vue |
+| `GET /v1/workflows/{nom}/raccourcis/{id}` | — | la vue ; inconnu → **404** problem+json |
+| `PUT /v1/workflows/{nom}/raccourcis/{id}` | les mêmes champs ; seuls ceux PRÉSENTS changent, `valeurs` remplace tout, `job_id` refait l'aperçu | **200** la vue |
+| `DELETE /v1/workflows/{nom}/raccourcis/{id}` | — | `{"workflow", "id", "removed"}` — 200 même s'il n'existait pas |
+| `GET /v1/workflows/{nom}/raccourcis/{id}/apercu` | — | le fichier (`image/webp` ou `image/gif`) ; sans fichier → **404** |
+| `GET /v1/workflows` | — | chaque entrée porte `"raccourcis": [vue…]` (vide sinon) |
+
+**La passerelle fait autorité sur les valeurs** : ce qu'un mode refuserait au
+lancement, il le refuse à l'enregistrement — champ qu'il n'expose pas (422,
+nommé), valeur hors bornes ou hors menu (422, avec `field`) —, et ce qui est
+gardé est TYPÉ. Sans ce contrôle, un raccourci gardait une durée que le mode
+plafonne et n'échouait qu'au lancement, longtemps après avoir été nommé. Une
+livraison désignée doit être celle DE CE MODE (sinon 422, les deux nommés) ;
+un run inconnu est un 404 ; un run qui n'a livré aucune vidéo n'est pas une
+erreur — il n'a simplement rien à montrer.
+
+Où ça vit : `_data/raccourcis/<mode>/<id>.json` et son aperçu `<id>.webp|.gif`,
+à côté de `_data/apercus/` — écrits de côté puis remplacés d'un coup, comme
+l'aperçu d'un mode (une fiche relue pendant sa réécriture serait tronquée). Par
+l'API, jamais à la main.
 
 ## Ajouter un workflow
 
@@ -824,11 +1066,15 @@ modifier ça ? » a donc une réponse par nature de changement :
 
 | Ce qu'on veut changer | Où c'est écrit | Ce qui le sert |
 |---|---|---|
-| l'EFFET lui-même (l'encre, les taches, la caméra, la fermeture) | le paquet de nœuds ComfyUI (`comfyui-ink-reveal`, `comfyui-direction-de-style`…) | le moteur ; ré-extraire si les entrées changent |
+| l'EFFET lui-même (l'encre, les taches, la caméra, la fermeture) | le paquet de nœuds ComfyUI (`comfyui-ink-reveal`, `comfyui-direction-de-style`, `comfyui-iconographe`…) | le moteur ; ré-extraire si les entrées changent |
+| ce qu'on SAIT d'une image (éléments détectés, hiérarchie, noms) | **pas ici** : le service Iconographe (`E:/Claude Code/Programmes/Iconographe` — profils, seuils, adaptateurs de ports) ; ici on ne règle que la TRADUCTION (`elements_max`, `profil` du graphe `image-iconographe`) | l'étape `analyse` d'une chaîne |
+| ce qu'on SAIT d'une ŒUVRE (identité, notice, récit, motifs, attestations) | **pas ici** : le service Iconologue (`E:/Claude Code/Programmes/Iconologue` — profils, sources, seuils d'identification) ; ici on ne règle que la TRADUCTION et le POIDS d'un sujet attesté (`POIDS_DU_SUJET_ATTESTE` du paquet `comfyui-iconologue`) | l'étape `culture` d'une chaîne |
 | le GRAPHE d'un mode (ses nœuds, ses valeurs figées) | `_data/workflows/<nom>.json` + ses liaisons dans `_data/reconciliation.local.json` | `POST /v1/render` |
 | l'ORDRE des étapes, les durées, les contrôles d'un flux composé | `_data/chaines/<nom>.json` (et sa copie `resources/chaines-exemples/`) | le runner de chaînes |
+| un CONTRÔLE sur ce que le nœud a MESURÉ (hook vu, climax tenu, durée retenue) | l'étape `verifier` de la chaîne, sur `$etape.recit.<clé>` (le premier artefact `.json` d'un run est parsé sous `recit`) | le runner de chaînes |
 | une RÉPÉTITION (blocs de boucle, conditions) | le montage `_data/workflows/<montage>.json`, ses blocs `_data/blocs/` | le dépliage |
 | ce que l'utilisateur VOIT (titre, catégorie, résumé, libellés, aides) | `_data/reconciliation.local.json` : `titre`, `categorie`, `menus`, `aides` | `/v1/workflows`, `/io` |
+| un RACCOURCI (un ensemble de réglages nommé, son aperçu) | `_data/raccourcis/<mode>/` — par l'API, jamais à la main | `/v1/workflows`, `…/raccourcis` |
 | le VOCABULAIRE des styles | `styles/*.json` du paquet de direction de style | `/io` (`options` + `choix`) |
 
 Jamais dans un fichier `.py` de la passerelle, jamais dans le lanceur. Ce n'est

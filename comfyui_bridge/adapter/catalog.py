@@ -183,7 +183,8 @@ class WorkflowCatalog:
     def __init__(self, default: str, specs: dict[str, WorkflowSpec],
                  workflows_dir: Path | None = None,
                  categories: dict[str, Any] | None = None,
-                 menus: dict[str, Any] | None = None) -> None:
+                 menus: dict[str, Any] | None = None,
+                 formats: dict[str, Any] | None = None) -> None:
         self._default = default
         self._specs = specs
         self._workflows_dir = Path(workflows_dir) if workflows_dir else None
@@ -201,6 +202,11 @@ class WorkflowCatalog:
         # jour où le fournisseur en a ajouté un.
         self.categories: dict[str, Any] = dict(categories or {})
         self.menus: dict[str, Any] = dict(menus or {})
+        # Le vocabulaire des FORMATS (orientations, résolutions). Deux listes,
+        # vides quand rien n'est déclaré : un lanceur ne montre alors pas les
+        # listes, et largeur/hauteur restent des champs ordinaires. Aucun défaut
+        # ici — le défaut d'un mode est celui de SES champs.
+        self.formats: dict[str, Any] = dict(formats or {"orientations": [], "resolutions": []})
 
     # -- maintained manifest (provenance + dependencies) ----------------------
 
@@ -566,6 +572,54 @@ def _spec_de_chaine(name: str, entry: dict[str, Any], catalogue: Path,
     )
 
 
+# Les deux seules rubriques du vocabulaire des formats. Une liste blanche
+# plutôt qu'un filtre : ce qui n'est pas nommé ici ne part pas au réseau, et la
+# clé `_lire_moi` qui documente le bloc dans le fichier en est écartée du même
+# coup (le `_` est la convention de documentation de ce fichier).
+RUBRIQUES_DE_FORMAT: tuple[str, ...] = ("orientations", "resolutions")
+
+
+def _formats(brut: Any, path: Path) -> dict[str, list[dict[str, Any]]]:
+    """Le vocabulaire des formats, lu et VÉRIFIÉ à la lecture.
+
+    Servi tel quel à un lanceur, qui traduit le choix en ``width``/``height``
+    (portrait ⇒ la largeur est le petit côté). Une résolution sans valeur ou
+    sans ses deux côtés entiers est donc inutilisable : la servir tronquée
+    aurait donné une liste où un choix n'écrit rien, et le lanceur aurait eu
+    l'air en panne. Elle est refusée ici, nommée.
+    """
+    if not isinstance(brut, dict):
+        return {rubrique: [] for rubrique in RUBRIQUES_DE_FORMAT}
+    lu: dict[str, list[dict[str, Any]]] = {}
+    for rubrique in RUBRIQUES_DE_FORMAT:
+        lignes = brut.get(rubrique)
+        lu[rubrique] = []
+        if lignes is None:
+            continue
+        if not isinstance(lignes, list):
+            raise WorkflowMappingError(f"{path}: formats.{rubrique} doit être une liste")
+        for rang, ligne in enumerate(lignes, 1):
+            if not isinstance(ligne, dict):
+                raise WorkflowMappingError(
+                    f"{path}: formats.{rubrique} n°{rang} n'est pas un objet")
+            garde = {k: v for k, v in ligne.items() if not str(k).startswith("_")}
+            valeur = str(garde.get("valeur") or "")
+            if not valeur:
+                raise WorkflowMappingError(
+                    f"{path}: formats.{rubrique} n°{rang} n'a pas de « valeur » — "
+                    f"c'est elle que le lanceur renvoie")
+            if rubrique == "resolutions":
+                for cote in ("cote_court", "cote_long"):
+                    mesure = garde.get(cote)
+                    if not isinstance(mesure, int) or isinstance(mesure, bool):
+                        raise WorkflowMappingError(
+                            f"{path}: la résolution {valeur!r} n'a pas de « {cote} » entier "
+                            f"({mesure!r}) — sans les deux côtés, elle ne se traduit pas "
+                            f"en largeur/hauteur")
+            lu[rubrique].append(garde)
+    return lu
+
+
 def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
                  data_dir: str | Path | None = None) -> WorkflowCatalog:
     path = Path(path)
@@ -601,8 +655,8 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
         if not isinstance(entry, dict):
             raise WorkflowMappingError(f"workflow {name!r}: needs 'workflow' and 'bindings'")
         # La vitrine se lit sur TOUTE entrée, chaîne ou graphe : c'est ce qui
-        # fait qu'un lanceur montre « Révélation pour podcast » et non
-        # « video-revelation-podcast », et qu'une entrée technique reste hors
+        # fait qu'un lanceur montre le titre déclaré (« Révéler une image »)
+        # et non l'identifiant technique, et qu'une entrée technique reste hors
         # de la vue sans avoir à tenir une seconde liste quelque part.
         vitrine = {
             "titre": str(entry.get("titre") or ""),
@@ -700,7 +754,8 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
     catalogue = WorkflowCatalog(default=default, specs=specs,
                                 workflows_dir=Path(workflows_dir) if workflows_dir else None,
                                 categories=data.get("categories"),
-                                menus=data.get("menus"))
+                                menus=data.get("menus"),
+                                formats=_formats(data.get("formats"), path))
     catalogue.shadowed = tuple(masques)
     catalogue.vitrines_orphelines = tuple(sorted(orphelines))
     return catalogue

@@ -21,14 +21,17 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
+from ..adapter import raccourcis
 from ..config import Settings
 from ..container import build_container
-from ..core.errors import DependencyUnavailableError, UnknownWorkflowInputError
+from ..core.errors import (DependencyUnavailableError, InputValueRefusedError,
+                           RaccourciNotFoundError, UnknownWorkflowInputError)
 from ..core.jobs import JobStatus
-from ..core.intention import intent_fields
+from ..core.intention import intent_fields, is_media_param
 from ..core.orchestrator import Orchestrator, derivable_params
 from .problems import install_problem_handlers
-from .schemas import ArtifactOut, IntentIn, JobOut, RejeuIn, WorkflowImportIn
+from .schemas import (ArtifactOut, IntentIn, JobOut, RaccourciIn, RejeuIn,
+                      WorkflowImportIn)
 
 _DESCRIPTION = """
 Decoupled orchestration for ComfyUI.
@@ -398,15 +401,29 @@ def _options_du_catalogue(c, filtre: Any) -> tuple[list[str], dict[str, Any]]:
     return [nom for _, _, nom in sorted(trouves)], libelles
 
 
+def _options_declarees(c, depuis: Any) -> tuple[list[str], dict[str, Any]]:
+    """La liste d'un champ qui dit d'OÙ elle vient, et de quoi l'habiller.
+
+    Deux sources, une seule règle : la liste appartient au fournisseur. Le
+    CATALOGUE pour un champ qui choisit un flux publié ; un MENU déclaré pour
+    un champ qui choisit dans un vocabulaire qu'un paquet tient (les structures
+    de récit). Recopier l'une ou l'autre dans la chaîne la figerait.
+    """
+    if isinstance(depuis, dict) and depuis.get("menu"):
+        from ..adapter import menus as _menus
+        declare = _menu_declare(c, str(depuis["menu"]))
+        return _menus.valeurs(declare)[0], declare
+    filtre = depuis.get("catalogue", depuis) if isinstance(depuis, dict) else depuis
+    options, libelles = _options_du_catalogue(c, filtre)
+    return options, {"libelles": libelles}
+
+
 def _options_exposees(c, chaine) -> dict[str, tuple]:
     """Les valeurs permises de chaque champ COMBO d'une chaîne."""
     sorties: dict[str, tuple] = {}
     for nom, champ in chaine.champs.items():
         if champ.options_depuis is not None:
-            filtre = champ.options_depuis
-            if isinstance(filtre, dict):
-                filtre = filtre.get("catalogue", filtre)
-            sorties[nom] = tuple(_options_du_catalogue(c, filtre)[0])
+            sorties[nom] = tuple(_options_declarees(c, champ.options_depuis)[0])
         elif champ.options is not None:
             sorties[nom] = tuple(champ.options)
     return sorties
@@ -425,11 +442,10 @@ def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
         menu = _menu_declare(c, nom)
         options = champ.options
         if champ.options_depuis is not None:
-            filtre = champ.options_depuis
-            if isinstance(filtre, dict):
-                filtre = filtre.get("catalogue", filtre)
-            options, libelles = _options_du_catalogue(c, filtre)
-            menu = {"libelles": libelles, **menu}
+            options, source = _options_declarees(c, champ.options_depuis)
+            # Le menu déclaré AU NOM DU CHAMP reste le plus proche : il peut
+            # retitrer ce que la source rend, jamais l'inverse.
+            menu = {**source, **menu}
         entree: dict[str, Any] = {
             "field": nom, "param": nom, "node": None, "input": None,
             "type": champ.type, "value": champ.defaut, "derived": False,
@@ -600,7 +616,10 @@ def _apercus_dir(c) -> Path:
     return Path(c.settings.hermes_db).parent / "apercus"
 
 
-APERCU_FORMATS = ((".webp", "image/webp"), (".gif", "image/gif"))
+# Une seule liste de formats pour tout ce que la passerelle fabrique en image
+# animée (l'aperçu d'un mode, celui d'un raccourci) : écrite deux fois, elle
+# aurait fini par servir un GIF annoncé « image/webp ».
+APERCU_FORMATS = raccourcis.FORMATS
 
 
 def _apercu_fichier(c, name: str) -> tuple[Path, str] | None:
@@ -622,6 +641,178 @@ def _presentation(c, spec) -> dict:
     if _apercu_fichier(c, spec.name):
         p["apercu_url"] = f"/v1/workflows/{spec.name}/apercu"
     return p
+
+
+# -- raccourcis ----------------------------------------------------------------
+#
+# Un raccourci est un ensemble de réglages enregistré pour un mode. Le MODE,
+# avec ses défauts, reste le raccourci implicite — il n'est écrit nulle part ;
+# les raccourcis enregistrés viennent après lui. Le lanceur ne fait que DÉSIGNER
+# (une livraison devient un raccourci) : c'est ici qu'on valide, qu'on range et
+# qu'on fabrique l'image.
+
+
+def _raccourcis_base(c) -> Path:
+    return Path(c.settings.hermes_db).parent
+
+
+def _medias_du_mode(c, spec) -> list[str]:
+    """Les pièces jointes d'un mode, par leur nom de champ.
+
+    Ce sont exactement les champs qu'une fiche ne garde PAS : le nom du fichier
+    déposé chez le moteur ne veut plus rien dire demain, et l'image se redépose
+    à chaque fois.
+    """
+    if spec.est_chaine:
+        return [nom for nom, champ in c.catalog.chaine(spec).champs.items()
+                if champ.media is not None]
+    from ..adapter import media_inputs
+    graphe, liaisons = c.catalog.monter(spec)
+    return [m["param"] for m in media_inputs.describe(liaisons, spec.titles,
+                                                      spec.carried, graphe)]
+
+
+def _decrire_champ(c, spec, chaine=None):
+    """De quoi HABILLER un écart : le libellé du champ, son unité, les libellés
+    de ses valeurs — la même lecture que le formulaire, pas une seconde.
+
+    Un écart écrit « fond : sepia » ne dit rien de plus que le corps de la
+    requête ; « Fond de départ : Sépia » se lit sur une carte.
+    """
+    from ..adapter import menus as _menus
+
+    def d_une_chaine(nom: str) -> dict:
+        champ = chaine.champs.get(nom)
+        if champ is None:
+            return {}
+        menu = _menu_declare(c, nom)
+        options = champ.options
+        if champ.options_depuis is not None:
+            options, source = _options_declarees(c, champ.options_depuis)
+            # Le menu déclaré AU NOM DU CHAMP reste le plus proche, comme au
+            # formulaire : il retitre ce que la source rend, jamais l'inverse.
+            menu = {**source, **menu}
+        choix, _manque = _menus.choix(list(options) if options is not None else None, menu)
+        return {"libelle": champ.libelle or menu.get("libelle") or nom,
+                "unite": _menus.unite(nom, champ.unite or menu.get("unite")),
+                "libelles_valeurs": {str(x["valeur"]): x["libelle"] for x in (choix or ())}}
+
+    def d_un_graphe(nom: str) -> dict:
+        menu = _menu_declare(c, nom)
+        table = menu.get("libelles") if isinstance(menu.get("libelles"), dict) else {}
+        return {"libelle": menu.get("libelle") or nom,
+                "unite": _menus.unite(nom, menu.get("unite")),
+                "libelles_valeurs": {str(v): (d or {}).get("libelle") or str(v)
+                                     for v, d in table.items()}}
+
+    return d_une_chaine if chaine is not None else d_un_graphe
+
+
+def _vue_raccourci(c, spec, fiche: dict) -> dict:
+    """La fiche telle qu'un lanceur la rend : ses écarts, et son aperçu s'il existe.
+
+    Les écarts sont calculés À LA LECTURE, contre les défauts du mode
+    d'aujourd'hui : figés dans le fichier, ils auraient continué d'annoncer
+    « Sépia » comme un choix particulier le jour où le mode en a fait son
+    défaut. L'adresse de l'aperçu n'est annoncée que si le fichier est là —
+    une vignette promise et absente fait une image cassée par carte.
+    """
+    from ..core import chaine as _noyau
+    chaine = c.catalog.chaine(spec) if spec.est_chaine else None
+    defauts = _noyau.defauts(chaine) if chaine is not None else spec.defaults
+    vue = dict(fiche)
+    vue["ecarts"] = raccourcis.ecarts(fiche.get("valeurs") or {}, defauts,
+                                      _decrire_champ(c, spec, chaine),
+                                      getattr(c.catalog, "formats", None))
+    ident = str(fiche.get("id") or "")
+    if raccourcis.apercu_fichier(_raccourcis_base(c), spec.name, ident):
+        vue["apercu_url"] = f"/v1/workflows/{spec.name}/raccourcis/{ident}/apercu"
+    return vue
+
+
+def _raccourcis_vus(c, spec) -> list[dict]:
+    return [_vue_raccourci(c, spec, fiche)
+            for fiche in raccourcis.lister(_raccourcis_base(c), spec.name)]
+
+
+def _valeurs_de_raccourci(c, spec, valeurs: dict) -> dict:
+    """Les valeurs d'un raccourci, validées PAR LE MODE et gardées typées.
+
+    La passerelle fait autorité : ce qu'elle refuserait au lancement, elle le
+    refuse à l'enregistrement. Sans ce contrôle, un raccourci gardait une durée
+    de 400 s que le mode plafonne à 79, et n'échouait qu'au moment de lancer —
+    bien après que l'utilisateur l'ait nommé.
+    """
+    from ..core import chaine as _noyau
+    if spec.est_chaine:
+        chaine = c.catalog.chaine(spec)
+        inconnus = sorted(k for k in valeurs if k not in chaine.champs)
+        if inconnus:
+            raise UnknownWorkflowInputError(
+                f"chaîne {spec.name!r} : champ(s) qu'elle n'expose pas : {', '.join(inconnus)}",
+                workflow=spec.name, fields=inconnus, accepts=sorted(chaine.champs))
+        pieces = sorted(k for k in valeurs if chaine.champs[k].media is not None)
+        if pieces:
+            raise UnknownWorkflowInputError(
+                f"{spec.name!r} : une pièce jointe ne s'enregistre pas dans un raccourci "
+                f"({', '.join(pieces)}) — elle se redépose à chaque fois",
+                workflow=spec.name, fields=pieces)
+        options = _options_exposees(c, chaine)
+        return {nom: _noyau.valeur_de(chaine.champs[nom], brute, options.get(nom))
+                for nom, brute in valeurs.items()}
+    admis = (set(intent_fields(spec.profile.accepts))
+             | set(derivable_params(spec.kind, spec.profile.accepts, spec.defaults))
+             | set(spec.profile.accepts))
+    inconnus = sorted(k for k in valeurs if k not in admis)
+    pieces = sorted(k for k in valeurs if k in admis and is_media_param(k))
+    if inconnus or pieces:
+        refuses = inconnus + pieces
+        raise UnknownWorkflowInputError(
+            f"{spec.name!r} n'enregistre pas " + ", ".join(repr(k) for k in refuses)
+            + (" (une pièce jointe se redépose à chaque fois)" if pieces else "")
+            + f" — il accepte : {', '.join(sorted(a for a in admis if not is_media_param(a)))}",
+            workflow=spec.name, fields=refuses)
+    return dict(valeurs)
+
+
+async def _apercu_de_raccourci(c, spec, ident: str, job) -> None:
+    """Fabriquer l'aperçu d'un raccourci depuis la livraison qui l'a fait naître.
+
+    Le même mécanisme que l'aperçu d'un mode : la première vidéo du run, résumée
+    en image animée. Un run qui n'a livré aucune vidéo (une analyse, un plan)
+    n'est pas une erreur — il n'a simplement rien à montrer.
+    """
+    from ..adapter import montage_video
+    if job is None:
+        return
+    videos = [a for a in job.artifacts if a.kind == "video" and a.path
+              and Path(a.path).is_file()]
+    if not videos:
+        return
+    await run_in_threadpool(montage_video.apercu_anime, Path(videos[0].path),
+                            raccourcis.cible_apercu(_raccourcis_base(c), spec.name, ident))
+
+
+def _livraison_du_mode(c, spec, job_id: str):
+    """Le run désigné, s'il est bien une livraison DE CE MODE.
+
+    Enregistrer les réglages d'un autre mode aurait fait un raccourci que la
+    validation refuse ensuite champ par champ, sans jamais dire la vraie cause.
+    """
+    job = c.store.get(str(job_id))            # 404 problem+json si inconnu
+    if job.workflow != spec.name:
+        raise UnknownWorkflowInputError(
+            f"le run {job.id} est une livraison de {job.workflow!r}, pas de {spec.name!r}",
+            workflow=spec.name, job_id=job.id, job_workflow=job.workflow)
+    return job
+
+
+def _titre_de_raccourci(titre: str) -> str:
+    propre = str(titre or "").strip()
+    if not propre:
+        raise InputValueRefusedError(
+            "un raccourci se retrouve par son titre : il est requis", field="titre")
+    return propre
 
 
 def _spec_dict(spec) -> dict:
@@ -876,6 +1067,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "neutral_for": [],
                     "media_inputs": _habiller_medias(c, _media_inputs_chaine(chaine),
                                                      spec.aides),
+                    # Les réglages enregistrés sous ce mode : la vitrine les
+                    # montre à sa suite, le mode lui-même valant « réglages par
+                    # défaut ». Une seconde requête par entrée les aurait fait
+                    # apparaître carte après carte.
+                    "raccourcis": _raccourcis_vus(c, spec),
                     "defaults": spec.defaults,
                     "limits": spec.limits,
                     "dependencies": spec.dependencies,
@@ -919,6 +1115,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "media_inputs": _habiller_medias(c, media_inputs.describe(
                     cat.monter(spec)[1], spec.titles, spec.carried, cat.monter(spec)[0]),
                     spec.aides),
+                # Comme pour une chaîne : ce qu'on a enregistré sous ce mode.
+                "raccourcis": _raccourcis_vus(c, spec),
                 "defaults": spec.defaults,
                 "limits": spec.limits,
                 "dependencies": spec.dependencies,
@@ -933,6 +1131,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # Un lanceur qui tiendrait sa propre liste de catégories la verrait
             # vieillir dès qu'une entrée change de rangement.
             "categories": cat.categories,
+            # Le vocabulaire des FORMATS (orientations, résolutions), déclaré au
+            # même endroit. Un lanceur le rend en deux listes et TRADUIT le choix
+            # en width/height — la règle est géométrique, pas métier : portrait ⇒
+            # la largeur est le petit côté. Deux listes vides quand rien n'est
+            # déclaré : largeur et hauteur restent alors des champs ordinaires.
+            "formats": cat.formats,
             "workflows": items,
             # Des graphes enregistrés qu'une entrée déclarée du fichier de
             # réconciliation recouvre : ce qui est masqué doit se voir.
@@ -1069,6 +1273,123 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 fichier.unlink()
                 existait = True
         return {"workflow": name, "removed": existait}
+
+    # Déclarées AVANT "/v1/workflows/{name}", comme les routes d'aperçu : une
+    # route à un seul segment lue en premier avalerait les suivantes.
+    @app.get("/v1/workflows/{name}/raccourcis", tags=["workflows"])
+    async def workflow_raccourcis(name: str, request: Request) -> dict:
+        """Les ensembles de réglages enregistrés pour ce mode.
+
+        Le mode lui-même, avec ses défauts, n'est pas dans la liste : il est le
+        raccourci implicite, et un lanceur le montre toujours en premier."""
+        c = request.app.state.container
+        spec = c.catalog.get_spec(name)                # 400 si le mode est inconnu
+        return {"workflow": spec.name, "raccourcis": _raccourcis_vus(c, spec)}
+
+    @app.post("/v1/workflows/{name}/raccourcis", status_code=201, tags=["workflows"])
+    async def workflow_raccourci_creer(name: str, corps: RaccourciIn,
+                                       request: Request) -> dict:
+        """Enregistrer un ensemble de réglages, depuis une livraison ou tel quel.
+
+        C'est le geste que le lanceur relaie après un run réussi : « garde ça ».
+        Les valeurs viennent de la DEMANDE du run (sans les pièces jointes, qui
+        se redéposent), recouvertes par ce que le corps nomme ; l'aperçu est
+        fabriqué ici, depuis la vidéo livrée — un lanceur ne manipule pas
+        d'images, il désigne.
+        """
+        c = request.app.state.container
+        spec = c.catalog.get_spec(name)
+        titre = _titre_de_raccourci(corps.titre)
+        if not corps.job_id and corps.valeurs is None:
+            raise InputValueRefusedError(
+                "un raccourci part d'une livraison (« job_id ») ou de réglages "
+                "(« valeurs ») : il en faut au moins un", field="job_id")
+        job = _livraison_du_mode(c, spec, corps.job_id) if corps.job_id else None
+        brutes = raccourcis.filtrer_demande(job.demande if job else {},
+                                            _medias_du_mode(c, spec))
+        brutes.update(corps.valeurs or {})
+        valeurs = _valeurs_de_raccourci(c, spec, brutes)
+        base = _raccourcis_base(c)
+        ident = raccourcis.identifiant(
+            titre, [f["id"] for f in raccourcis.lister(base, spec.name)])
+        # L'image d'abord : une fabrication qui échoue ne doit pas laisser une
+        # fiche sans l'aperçu qu'elle promettait.
+        await _apercu_de_raccourci(c, spec, ident, job)
+        fiche = {
+            "id": ident, "workflow": spec.name, "titre": titre,
+            "resume": str(corps.resume or "").strip(), "valeurs": valeurs,
+            "job_id": job.id if job else None,
+            "cree_le": datetime.now(timezone.utc).isoformat(),
+            "ordre": corps.ordre if corps.ordre is not None else raccourcis.ORDRE_PAR_DEFAUT,
+        }
+        raccourcis.ecrire(base, spec.name, fiche)
+        return _vue_raccourci(c, spec, fiche)
+
+    @app.get("/v1/workflows/{name}/raccourcis/{ident}", tags=["workflows"])
+    async def workflow_raccourci(name: str, ident: str, request: Request) -> dict:
+        c = request.app.state.container
+        spec = c.catalog.get_spec(name)
+        fiche = raccourcis.lire(_raccourcis_base(c), spec.name, ident)
+        if fiche is None:
+            raise RaccourciNotFoundError(
+                f"{spec.name} n'a pas de raccourci {ident!r}", workflow=spec.name, id=ident)
+        return _vue_raccourci(c, spec, fiche)
+
+    @app.put("/v1/workflows/{name}/raccourcis/{ident}", tags=["workflows"])
+    async def workflow_raccourci_modifier(name: str, ident: str, corps: RaccourciIn,
+                                          request: Request) -> dict:
+        """Modifier un raccourci : seuls les champs PRÉSENTS dans le corps changent.
+
+        Sauf ``valeurs``, qui remplace tout : des réglages fusionnés auraient
+        gardé un champ que l'utilisateur venait justement d'effacer. L'identifiant
+        ne bouge pas, même renommé — c'est l'adresse que le lanceur a en main.
+        """
+        c = request.app.state.container
+        spec = c.catalog.get_spec(name)
+        base = _raccourcis_base(c)
+        fiche = raccourcis.lire(base, spec.name, ident)
+        if fiche is None:
+            raise RaccourciNotFoundError(
+                f"{spec.name} n'a pas de raccourci {ident!r}", workflow=spec.name, id=ident)
+        donnes = corps.model_fields_set
+        if "titre" in donnes:
+            fiche["titre"] = _titre_de_raccourci(corps.titre)
+        if "resume" in donnes:
+            fiche["resume"] = str(corps.resume or "").strip()
+        if "ordre" in donnes and corps.ordre is not None:
+            fiche["ordre"] = corps.ordre
+        if "valeurs" in donnes and corps.valeurs is not None:
+            fiche["valeurs"] = _valeurs_de_raccourci(c, spec, dict(corps.valeurs))
+        if "job_id" in donnes and corps.job_id:
+            job = _livraison_du_mode(c, spec, corps.job_id)
+            await _apercu_de_raccourci(c, spec, ident, job)
+            fiche["job_id"] = job.id
+        raccourcis.ecrire(base, spec.name, fiche)
+        return _vue_raccourci(c, spec, fiche)
+
+    @app.delete("/v1/workflows/{name}/raccourcis/{ident}", tags=["workflows"])
+    async def workflow_raccourci_retirer(name: str, ident: str, request: Request) -> dict:
+        """Retirer un raccourci — sa fiche et son aperçu. Retirer ce qui n'existe
+        pas n'est pas une erreur : c'est déjà l'état demandé."""
+        c = request.app.state.container
+        spec = c.catalog.get_spec(name)
+        return {"workflow": spec.name, "id": ident,
+                "removed": raccourcis.retirer(_raccourcis_base(c), spec.name, ident)}
+
+    @app.get("/v1/workflows/{name}/raccourcis/{ident}/apercu", tags=["workflows"])
+    async def workflow_raccourci_apercu(name: str, ident: str,
+                                        request: Request) -> FileResponse:
+        """L'aperçu animé d'un raccourci : ce que CES réglages ont donné."""
+        c = request.app.state.container
+        spec = c.catalog.get_spec(name)
+        trouve = raccourcis.apercu_fichier(_raccourcis_base(c), spec.name, ident)
+        if trouve is None:
+            raise RaccourciNotFoundError(
+                f"le raccourci {ident!r} de {spec.name} n'a pas d'aperçu : en donner un "
+                f"avec PUT /v1/workflows/{spec.name}/raccourcis/{ident} {{\"job_id\": …}}",
+                workflow=spec.name, id=ident)
+        fichier, mime = trouve
+        return FileResponse(fichier, media_type=mime, headers={"Cache-Control": "no-cache"})
 
     @app.get("/v1/workflows/{name}", tags=["workflows"])
     async def get_workflow(name: str, request: Request) -> dict:
@@ -1449,7 +1770,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Declared engines (where ComfyUI runs) and which one is active."""
         from ..adapter.engines import is_alive, load_engines
         c = request.app.state.container
-        default, profiles = load_engines(c.settings.engines_file)
+        # Le fichier livré ET la surcharge du poste, comme au démarrage
+        # (container.py) : lu sans le dossier de données, ce point d'entrée
+        # n'annonçait que le profil livré « attach » alors que le moteur actif
+        # était « local » (mesuré : default attach, active local) — on ne
+        # pouvait pas y lire qui gère le moteur.
+        default, profiles = load_engines(c.settings.engines_file,
+                                         data_dir=c.settings.hermes_db.parent)
         return {
             "default": default,
             "active": c.engine.name,

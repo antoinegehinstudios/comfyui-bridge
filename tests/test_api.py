@@ -1,5 +1,6 @@
 """API tests. Skipped cleanly if FastAPI's test stack isn't installed."""
 
+import json
 import pathlib
 import tempfile
 
@@ -452,3 +453,26 @@ def test_the_style_menus_are_intent_fields_not_node_numbers(client):
                                           "style_narratif": "quatre-temps-social"})
     assert r.status_code == 200, r.text
     assert "style_graphique" in r.json().get("ignored", [])
+
+
+def test_les_moteurs_annonces_sont_ceux_du_poste_pas_seulement_ceux_du_paquet():
+    """Le paquet ne livre qu'un profil qui se RATTACHE ; celui qui LANCE se
+    déclare à côté, dans le dossier de données. Lu sans ce dossier, ce point
+    d'entrée annonçait « attach » par défaut alors que le moteur actif était
+    « local » (mesuré) : on ne pouvait pas y lire qui gère le moteur."""
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="comfybridge_moteurs_"))
+    (tmp / "engines.local.json").write_text(json.dumps({
+        "default": "local",
+        "engines": {"local": {"base_url": "http://127.0.0.1:9", "manage": True,
+                              "command": ["python", "main.py"], "description": "d'essai"}}}),
+        encoding="utf-8")
+    settings = Settings(comfy_backend="cli", dry_run=True, comfyui_base_url="http://127.0.0.1:9",
+                        comfyui_request_timeout_s=1, hermes_db=tmp / "h.sqlite3",
+                        comfy_output_dir=tmp / "out", hermes_mode="local",
+                        workflows_dir=tmp / "workflows")
+    with TestClient(create_app(settings)) as c:
+        d = c.get("/v1/engines").json()
+    assert d["default"] == "local" and d["active"] == "local"
+    assert d["engines"]["local"]["manage"] is True
+    assert d["engines"]["local"]["description"] == "d'essai"
+    assert "attach" in d["engines"]          # le profil livré reste : la surcharge s'ajoute

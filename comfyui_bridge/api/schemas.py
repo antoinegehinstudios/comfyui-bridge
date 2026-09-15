@@ -199,3 +199,26 @@ class RejeuIn(BaseModel):
 
     reglages: dict[str, Any] = Field(default_factory=dict,
                                      examples=[{"seed": 4242, "duration_s": 30}])
+
+
+class RaccourciIn(BaseModel):
+    """Enregistrer (ou modifier) un ensemble de réglages nommé, pour un mode.
+
+    Les valeurs viennent d'une LIVRAISON (``job_id`` : sa demande, sans les
+    pièces jointes) ou sont données telles quelles (``valeurs``), ou les deux —
+    ce qui est nommé recouvre alors ce que la livraison portait. Le modèle
+    refuse ce qu'il ne connaît pas, comme ``RejeuIn`` : un champ mal
+    orthographié repartait sinon avec un 201 et n'enregistrait rien.
+
+    À la modification, seuls les champs PRÉSENTS dans le corps changent
+    (``model_fields_set``) : sans cela, renommer un raccourci effaçait son
+    résumé, qui n'était pas renvoyé.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    titre: str = Field("", examples=["Sépia au trait sec, à la chandelle"])
+    resume: str = Field("", examples=["Un papier ambré, plus de trait, une flamme étroite."])
+    job_id: str | None = None
+    valeurs: dict[str, Any] | None = Field(None, examples=[{"duration_s": 45, "fond": "sepia"}])
+    ordre: int | None = None

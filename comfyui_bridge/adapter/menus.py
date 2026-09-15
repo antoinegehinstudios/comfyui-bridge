@@ -90,6 +90,23 @@ def _libelles(menu: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
             for valeur, ligne in table.items()}, None
 
 
+def valeurs(menu: dict[str, Any] | None) -> tuple[list[str], str | None]:
+    """Les VALEURS qu'un menu déclaré permet — ses clés, dans l'ordre du fournisseur.
+
+    Un menu sert d'ordinaire à HABILLER une liste que le fournisseur donne. Il
+    arrive qu'il SOIT la liste : une chaîne n'a pas de moteur à interroger, et
+    recopier chez elle les vingt structures de récit les figerait au jour où on
+    l'a écrite. Elle nomme le menu ; la liste reste celle du fichier que le
+    fournisseur tient.
+
+    Rend ``(valeurs, manque)`` : une source illisible rend une liste vide ET la
+    raison, jamais une liste vide seule — un menu silencieusement dégarni
+    ressemble trait pour trait à un menu normal.
+    """
+    table, manque = _libelles(menu or {})
+    return list(table), manque
+
+
 def choix(options: list[Any] | tuple[Any, ...] | None,
           menu: dict[str, Any] | None) -> tuple[list[dict[str, Any]] | None, str | None]:
     """Les options du fournisseur, habillées de ce qui a été déclaré.

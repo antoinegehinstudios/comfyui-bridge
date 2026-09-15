@@ -108,6 +108,29 @@ def test_une_valeur_hors_menu_est_refusee_et_le_menu_peut_venir_du_dehors():
     assert noyau.valeurs(chaine, {"mode": "z"}, {"mode": ("z",)}) == {"mode": "z"}
 
 
+def test_une_liste_peut_venir_du_catalogue_ou_d_un_menu_declare():
+    """Une chaîne qui recopie une liste la fige au jour où on l'a écrite. Elle
+    dit d'où elle vient — et les deux sources sont lues à la lecture, pas
+    découvertes dans un formulaire aux choix vides."""
+    for depuis in ({"catalogue": {"prefixe": "video-"}}, {"menu": "style_narratif"},
+                   {"prefixe": "video-"}):
+        chaine = noyau.lire(_minimale(expose={
+            "mode": {"type": "COMBO", "defaut": "a", "options_depuis": depuis}},
+            etapes=[{"id": "un", "rendre": {"workflow": "wf"}}]))
+        assert chaine.champs["mode"].options_depuis == depuis
+
+
+def test_une_liste_qui_nomme_deux_sources_ou_un_menu_sans_nom_est_refusee():
+    for depuis, dit in (({"catalogue": {}, "menu": "styles"}, "deux sources"),
+                        ({"menu": "   "}, "sans le nommer"),
+                        ("style_narratif", "doit être un objet")):
+        with pytest.raises(WorkflowMappingError) as refus:
+            noyau.lire(_minimale(expose={
+                "mode": {"type": "COMBO", "options_depuis": depuis}},
+                etapes=[{"id": "un", "rendre": {"workflow": "wf"}}]))
+        assert dit in refus.value.detail
+
+
 def test_resoudre_descend_dans_les_listes_et_les_objets():
     valeurs = {"largeur": 704}
     resultats = {"un": {"livrable": "C:/a.mp4", "mesure": {"duration_s": 4.2}}}
@@ -142,3 +165,67 @@ def test_un_attendu_peut_lui_aussi_renvoyer_a_ce_qui_a_ete_demande():
           "attendu": "$duration_s"}],
         {"duration_s": 4}, {"un": {"mesure": {"duration_s": 4.0}}})
     assert lignes[0]["ok"] is True and lignes[0]["attendu"] == 4
+
+
+def test_un_reglage_de_noeud_peut_renvoyer_a_un_champ_expose():
+    """Une étape « rendre » règle une entrée de nœud par « inputs » : le renvoi
+    qui s'y niche est lu à la lecture et résolu à l'exécution comme un renvoi
+    à la racine. C'est le seul canal par lequel un champ exposé atteint une
+    entrée de nœud sans qu'aucun code ne nomme ce nœud."""
+    chaine = noyau.lire(_minimale(
+        expose={"fond": {"type": "COMBO", "defaut": "washi", "options": ["washi", "sepia"]}},
+        etapes=[{"id": "un", "rendre": {"workflow": "wf", "inputs": {"61.fond": "$fond"}}}]))
+    assert chaine.etapes[0].params["inputs"] == {"61.fond": "$fond"}
+    assert noyau.resoudre(chaine.etapes[0].params, {"fond": "sepia"}, {}) == {
+        "workflow": "wf", "inputs": {"61.fond": "sepia"}}
+
+
+def test_un_renvoi_inconnu_niche_dans_inputs_est_refuse_avec_son_nom():
+    """Découvert à l'exécution, il aurait fait échouer l'étape après avoir
+    dépensé les précédentes ; à la lecture, il est nommé."""
+    with pytest.raises(WorkflowMappingError) as refus:
+        noyau.lire(_minimale(etapes=[{"id": "un", "rendre": {
+            "workflow": "wf", "inputs": {"61.fond": "$inconnu"}}}]))
+    assert "$inconnu" in refus.value.detail
+
+
+def test_un_texte_facultatif_vaut_sa_chaine_vide_et_un_booleen_son_faux():
+    """« "" » et « false » sont des DÉFAUTS, pas des absences : un appel final
+    facultatif laissé vide vaut la chaîne vide dans les valeurs, sinon le
+    « $cta » de l'étape n'a rien à désigner et l'étape échoue. Un champ sans
+    défaut, lui, reste absent."""
+    chaine = noyau.lire(_minimale(
+        expose={"cta": {"type": "STRING", "defaut": "", "libelle": "Appel final"},
+                "signer": {"type": "BOOLEAN", "defaut": False},
+                "libre": {"type": "STRING"}},
+        etapes=[{"id": "un", "rendre": {"workflow": "wf",
+                                        "inputs": {"7.texte": "$cta", "7.signer": "$signer"}}}]))
+    assert noyau.valeurs(chaine, {}) == {"cta": "", "signer": False}
+    assert noyau.valeurs(chaine, {"cta": "Abonnez-vous", "signer": "oui"}) == {
+        "cta": "Abonnez-vous", "signer": True}
+    # …et le renvoi se résout sur la chaîne vide, au lieu de lever.
+    assert noyau.resoudre(chaine.etapes[0].params, noyau.valeurs(chaine, {}), {})["inputs"] == {
+        "7.texte": "", "7.signer": False}
+
+
+def test_une_etape_facultative_porte_un_renvoi_dans_quand():
+    """« Si pas de CTA spécifié, on saute l'étape » (2026-09-15) : « quand »
+    est un RENVOI vers un champ ou une étape d'amont — jamais une valeur en
+    dur, jamais l'aval."""
+    chaine = noyau.lire(_minimale(
+        expose={"cta": {"type": "STRING", "defaut": "", "libelle": "Appel final"}},
+        etapes=[{"id": "un", "rendre": {"workflow": "wf"}},
+                {"id": "appel", "quand": "$cta",
+                 "rendre": {"workflow": "wf", "media": {"video": "$un.livrable"}}}],
+        livrable="$appel.livrable"))
+    assert chaine.etapes[0].quand == "" and chaine.etapes[1].quand == "$cta"
+    with pytest.raises(WorkflowMappingError) as refus:
+        noyau.lire(_minimale(etapes=[{"id": "un", "quand": "toujours",
+                                      "rendre": {"workflow": "wf"}}]))
+    assert "quand" in refus.value.detail
+    with pytest.raises(WorkflowMappingError) as refus:
+        noyau.lire(_minimale(etapes=[{"id": "un", "quand": "$deux.livrable",
+                                      "rendre": {"workflow": "wf"}},
+                                     {"id": "deux", "rendre": {"workflow": "wf"}}],
+                             livrable="$deux.livrable"))
+    assert "APRÈS" in refus.value.detail

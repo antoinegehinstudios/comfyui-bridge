@@ -1,0 +1,276 @@
+{
+  "version": 1,
+  "chaine": "video-revelation",
+  "resume": "L'image est d'abord DOCUMENTÉE par Iconographe — une fois pour toutes, dans sa bibliothèque — puis sa CULTURE est documentée par Iconologue : ce que l'œuvre EST, sourcé, et la figure que les bases déclarent sujet reprend sa place. Une INTENTION est ensuite écrite dans la structure d'un média qu'on regarde en défilant, et c'est ELLE qui commande : le DÉROULEMENT peint l'accroche (2,5 s), la mise en place, puis le corps qui croît vers le climax et le tient sans arrêter l'animation ; l'image révélée se CONTEMPLE ensuite (3 à 5 s, la caméra glisse encore). Une CONCLUSION pose la scène (on peut s'en passer), un APPEL FINAL s'écrit à l'encre, et le MONTAGE réunit le tout. Deux contrôles jugent : le plan avant de le peindre, la peinture avant de la clore.",
+  "expose": {
+    "image": {
+      "media": "image",
+      "requis": true,
+      "libelle": "L'image à révéler"
+    },
+    "duration_s": {
+      "type": "FLOAT",
+      "defaut": 45,
+      "min": 5,
+      "max": 79,
+      "step": 1,
+      "libelle": "Durée du déroulement (au moins)",
+      "unite": "s"
+    },
+    "contemplation_s": {
+      "type": "FLOAT",
+      "defaut": 4,
+      "min": 3,
+      "max": 5,
+      "step": 0.5,
+      "libelle": "Contemplation de l'image révélée",
+      "unite": "s"
+    },
+    "conclusion_s": {
+      "type": "FLOAT",
+      "defaut": 8,
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "libelle": "Durée de la conclusion (0 = aucune)",
+      "unite": "s"
+    },
+    "cta": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Appel final (facultatif)"
+    },
+    "cta_police": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Police de l'appel (nom ou chemin ; vide = automatique)"
+    },
+    "style_narratif": {
+      "type": "COMBO",
+      "defaut": "reseau-social",
+      "options_depuis": { "menu": "style_narratif" },
+      "libelle": "Structure du récit"
+    },
+    "style_approche": {
+      "type": "COMBO",
+      "defaut": "peinture-calme",
+      "options_depuis": { "menu": "style_approche" },
+      "libelle": "Approche"
+    },
+    "fond": {
+      "type": "COMBO",
+      "defaut": "washi",
+      "options": ["washi", "washi-sans-lampe", "sepia", "gris-atelier"],
+      "libelle": "Fond de départ"
+    },
+    "ambiance": {
+      "type": "COMBO",
+      "defaut": "lanterne",
+      "options": ["lanterne", "chandelle", "atelier", "selon-le-fond"],
+      "libelle": "Ambiance"
+    },
+    "encre": {
+      "type": "COMBO",
+      "defaut": "lavis",
+      "options": ["lavis", "trait-sec", "encre-dense"],
+      "libelle": "Style de tracé"
+    },
+    "negatif": {
+      "type": "COMBO",
+      "defaut": "non",
+      "options": ["non", "oui", "selon-l-oeuvre"],
+      "libelle": "Négatif (l'encre inverse la lumière)"
+    },
+    "bords": {
+      "type": "COMBO",
+      "defaut": "fondus",
+      "options": ["fondus", "francs"],
+      "libelle": "Bords de l'œuvre"
+    },
+    "rendu": {
+      "type": "COMBO",
+      "defaut": "ink-bleed",
+      "options": ["ink-bleed", "classique", "front-organique"],
+      "libelle": "Rendu"
+    },
+    "conduite": {
+      "type": "COMBO",
+      "defaut": "le plan",
+      "options": ["le plan", "la camera"],
+      "libelle": "Qui commande le déroulement"
+    },
+    "width": { "type": "INT", "defaut": 720, "libelle": "Largeur", "unite": "px" },
+    "height": { "type": "INT", "defaut": 1280, "libelle": "Hauteur", "unite": "px" },
+    "fps": { "type": "INT", "defaut": 30, "min": 1, "libelle": "Images par seconde" },
+    "seed": { "type": "INT", "defaut": 71, "libelle": "Graine" }
+  },
+  "etapes": [
+    {
+      "id": "analyse",
+      "rendre": {
+        "workflow": "image-iconographe",
+        "media": { "image": "$image" }
+      }
+    },
+    {
+      "id": "culture",
+      "rendre": {
+        "workflow": "image-iconologue",
+        "media": { "image": "$image" },
+        "inputs": {
+          "1.markers_json": "$analyse.recit.markers_json",
+          "1.anchors_json": "$analyse.recit.anchors_json",
+          "1.empreinte_iconographe": "$analyse.recit.empreinte"
+        }
+      }
+    },
+    {
+      "id": "intention",
+      "rendre": {
+        "workflow": "image-intention",
+        "media": { "image": "$image" },
+        "style_narratif": "$style_narratif",
+        "inputs": {
+          "70.style_approche": "$style_approche",
+          "62.markers_json": "$analyse.recit.markers_json",
+          "62.culture_json": "$culture.recit.culture_json",
+          "62.anchors_json": "$culture.recit.anchors_json"
+        }
+      }
+    },
+    {
+      "id": "plan_valide",
+      "verifier": [
+        { "id": "le_plan_nomme_son_accroche", "valeur": "$intention.recit.hook", "op": "exists" },
+        { "id": "le_plan_nomme_son_climax", "valeur": "$intention.recit.climax", "op": "exists" },
+        { "id": "l_accroche_ne_devoile_pas_le_climax", "valeur": "$intention.recit.hook_recouvre_climax", "op": "eq", "attendu": false },
+        { "id": "le_plan_a_de_quoi_croitre", "valeur": "$intention.recit.nb_temps", "op": "gte", "attendu": 3 },
+        { "id": "l_accroche_est_un_detail", "valeur": "$intention.recit.hook_aire", "op": "lte", "attendu": 0.15 },
+        { "id": "l_accroche_montre_de_la_matiere", "valeur": "$intention.recit.hook_est_vide", "op": "eq", "attendu": false },
+        { "id": "le_climax_est_la_figure_de_l_oeuvre", "valeur": "$intention.recit.climax_est_central", "op": "eq", "attendu": true },
+        { "id": "le_climax_garde_un_coeur_pour_la_fin", "valeur": "$intention.recit.climax_coeur", "op": "exists" },
+        { "id": "le_trajet_ne_revient_pas", "valeur": "$intention.recit.trajet_retours", "op": "lte", "attendu": 2 },
+        { "id": "le_plan_tient_dans_l_approche", "valeur": "$intention.recit.temps_dans_l_approche", "op": "eq", "attendu": true }
+      ]
+    },
+    {
+      "id": "deroulement",
+      "rendre": {
+        "workflow": "video-reveal-cinematic-dirige",
+        "media": { "image": "$image" },
+        "duration_s": "$duration_s",
+        "fps": "$fps",
+        "width": "$width",
+        "height": "$height",
+        "seed": "$seed",
+        "inputs": {
+          "61.markers_json": "$analyse.recit.markers_json",
+          "61.direction_json": "$intention.recit.direction_json",
+          "61.fond": "$fond",
+          "61.ambiance": "$ambiance",
+          "61.encre": "$encre",
+          "61.rendu": "$rendu",
+          "61.conduite": "$conduite",
+          "61.contemplation_s": "$contemplation_s",
+          "61.negatif": "$negatif",
+          "61.bords": "$bords"
+        }
+      }
+    },
+    {
+      "id": "plan_tenu",
+      "verifier": [
+        { "id": "l_accroche_est_vue_a_2_5_s", "valeur": "$deroulement.recit.hook_vu.atteint", "op": "gte", "attendu": 0.10 },
+        { "id": "le_climax_est_hors_du_cadre_d_ouverture", "valeur": "$deroulement.recit.climax_a_l_ouverture", "op": "lte", "attendu": 0.12 },
+        { "id": "le_climax_est_tenu", "valeur": "$deroulement.recit.climax_tenue_s", "op": "gte", "attendu": 2 },
+        { "id": "les_temps_se_suivent", "valeur": "$deroulement.recit.chevauchement_max_mesure_s", "op": "lte", "attendu": 8 },
+        { "id": "l_ordre_du_plan_est_suivi", "valeur": "$deroulement.recit.ordre_du_plan_respecte", "op": "eq", "attendu": true },
+        { "id": "chaque_temps_est_cadre_a_son_heure", "valeur": "$deroulement.recit.visibilite_min", "op": "gte", "attendu": 0.9 },
+        { "id": "aucun_temps_supprime", "valeur": "$deroulement.recit.nb_hors_champ", "op": "eq", "attendu": 0 },
+        { "id": "la_camera_glisse", "valeur": "$deroulement.recit.vitesse_camera_max_mesuree", "op": "lte", "attendu": 0.1 },
+        { "id": "la_camera_ne_saccade_pas", "valeur": "$deroulement.recit.acceleration_camera_max", "op": "lte", "attendu": 0.5 },
+        { "id": "la_page_ne_s_acheve_pas_d_un_coup", "valeur": "$deroulement.recit.achevement_part", "op": "lte", "attendu": 0.25 },
+        { "id": "les_temps_sont_lisibles", "valeur": "$deroulement.recit.lisibilite_min", "op": "gte", "attendu": 0.85 },
+        { "id": "l_ordre_d_arrivee_est_celui_du_plan", "valeur": "$deroulement.recit.ordre_d_arrivee_respecte", "op": "eq", "attendu": true },
+        { "id": "le_coeur_vient_en_dernier", "valeur": "$deroulement.recit.coeur_en_dernier", "op": "eq", "attendu": true },
+        { "id": "aucun_temps_n_est_un_trou", "valeur": "$deroulement.recit.trou_max", "op": "lte", "attendu": 0.25 },
+        { "id": "des_traits_et_pas_que_des_blocs", "valeur": "$deroulement.recit.part_des_traces", "op": "gte", "attendu": 0.25 },
+        { "id": "la_contemplation_ne_fige_pas", "valeur": "$deroulement.recit.contemplation_immobile_s", "op": "lte", "attendu": 0.5 },
+        { "id": "la_camera_ne_voit_jamais_de_page_blanche", "valeur": "$deroulement.recit.encre_dans_le_cadre_min", "op": "gte", "attendu": 0.01 }
+      ]
+    },
+    {
+      "id": "raccord",
+      "extraire_queue": { "video": "$deroulement.livrable", "images": 50 }
+    },
+    {
+      "id": "conclusion",
+      "rendre": {
+        "workflow": "video-reveal-closing",
+        "media": { "video": "$raccord.depot" },
+        "duration_s": "$conclusion_s",
+        "fps": "$fps",
+        "seed": "$seed",
+        "inputs": {
+          "6.fond": "$fond",
+          "6.ambiance": "$ambiance",
+          "6.depart_s": "$deroulement.recit.duree_retenue_s",
+          "6.appel_texte": "$cta",
+          "6.fermeture_json": "$deroulement.recit.fermeture_json"
+        }
+      }
+    },
+    {
+      "id": "appel",
+      "quand": "$cta",
+      "rendre": {
+        "workflow": "video-appel-final",
+        "media": { "video": "$conclusion.livrable" },
+        "fps": "$fps",
+        "seed": "$seed",
+        "inputs": {
+          "7.texte": "$cta",
+          "7.police": "$cta_police"
+        }
+      }
+    },
+    {
+      "id": "montage",
+      "recoller": {
+        "parts": ["$deroulement.livrable", "$appel.livrable"],
+        "fps": "$fps",
+        "largeur": "$width",
+        "hauteur": "$height"
+      }
+    },
+    {
+      "id": "controle",
+      "verifier": [
+        { "id": "les_deux_parts", "valeur": "$montage.parts", "op": "eq", "attendu": 2 },
+        { "id": "livrable_pese", "valeur": "$montage.mesure.bytes", "op": "gte", "attendu": 100000 }
+      ]
+    }
+  ],
+  "livrable": "$montage.livrable",
+  "notes": {
+    "socle": "LE SOCLE (2026-09-15, midi, Antoine : « c'est parfait, les versions ink — assure cette standardisation »). CE QUI NE CHANGE PAS : le PLAN, agnostique — les onze étapes, dans cet ordre, avec leurs genres (analyse, culture, intention, plan_valide, deroulement, plan_tenu, raccord, conclusion, appel, montage, controle) — et les DÉFAUTS de tous les champs exposés, qui sont exactement ceux du rendu ink livré ce jour-là : reseau-social, peinture-calme, washi, lanterne, lavis, ink-bleed, le plan, négatif non, contemplation 4 s, conclusion 8 s, 45 s, graine 71 — et, depuis le 2026-09-15 au soir (Antoine : « valeurs par défaut : portrait, 720p, 30 i/s »), le FORMAT par défaut est le portrait 720p à 30 i/s (720×1280, 30) à la place du 704×1280 à 25 i/s de midi : un format est un réglage d'usage (orientation, résolution — vocabulaire « formats » de la réconciliation), pas un trait du style ink. CE QUI SE RÈGLE : chaque champ exposé (structure du récit, approche, fond, ambiance, tracé, rendu, conduite, négatif, durées, CTA et sa police, format). CE QUI S'AJOUTE SANS RIEN CASSER : un style narratif ou une approche dans les catalogues de comfyui-direction-de-style, un fond, une encre, une ambiance, un rendu ou une brume dans les tables du paquet de nœuds — une ENTRÉE de plus, jamais un défaut de moins. LES ÉTAPES SONT INDÉPENDANTES : chacune n'apprend de la précédente que par le contrat déclaré ici (« $etape.recit.* », « $etape.livrable », « $raccord.depot ») ; la fermeture reçoit ainsi « fermeture_json » du récit du déroulement au lieu de relire le disque. Le témoin exécutable de ce socle est tests/test_socle_ink.py (passerelle) et tests/test_socle_ink.py (paquet de nœuds) : y toucher est une décision, jamais un accident.",
+    "etapes": "Les étapes portent les noms du travail : ANALYSE (la documentation de l'image, tenue par Iconographe), CULTURE (ce que l'œuvre EST, tenue par Iconologue), INTENTION (le plan), PLAN_VALIDE (le plan tient-il), DÉROULEMENT (la peinture), PLAN_TENU (la peinture a-t-elle tenu le plan), RACCORD, CONCLUSION, APPEL, MONTAGE, CONTRÔLE. Ce que la chaîne annonce est ce qu'elle fait.",
+    "analyse_par_iconographe": "L'étape ANALYSE est tenue par ICONOGRAPHE depuis le 2026-09-14 (flux « image-iconographe », service local 127.0.0.1:7940). C'est lui qui documente l'image — carte d'attention, éléments découpés au pixel, hiérarchie mesurée (ce qui attire, ce qui accroche, le central), noms et textes — et c'est sa BIBLIOTHÈQUE qui garantit qu'une œuvre n'est jamais analysée deux fois (sha256 exact, puis empreinte perceptuelle) : une œuvre déjà documentée revient en quelques secondes (15,9 s mesurées sur l'Uccello, verdict « repris »), une œuvre neuve coûte une vingtaine de minutes, UNE fois. Le nœud, lui, ne mesure rien : il TRADUIT — les boîtes passent du coin au centre, les éléments qui comptent sont sélectionnés (attraction, plus toutes les accroches et le central), et ce qu'une figure contient devient sa PARTIE, notion qu'Iconographe n'a pas. CE QU'ICONOGRAPHE NE MESURE PAS, C'EST LA CULTURE : son port « culture » est écrit et aucun adaptateur ne le tient (la documentation le déclare elle-même, attestations.mesure = false), donc ses sorties « culture_json » et « identity_json » sont muettes et disent pourquoi. Elles ne servent plus à l'intention : depuis le 2026-09-15, c'est l'étape CULTURE qui apporte ce savoir, par un AUTRE service — voir « culture_par_iconologue ».",
+    "culture_par_iconologue": "L'étape CULTURE est tenue par ICONOLOGUE depuis le 2026-09-15 (flux « image-iconologue », service local 127.0.0.1:7950). Elle vient APRÈS l'analyse et lui répond : Iconographe dit ce que l'image MONTRE, Iconologue dit ce que l'œuvre EST — l'identité et le degré de sa preuve (identifiée, hypothèse, inconnue), la notice encyclopédique, le passage du récit que l'œuvre illustre (cité, borné, sourcé), le sens des motifs, et une ATTESTATION par élément : qui affirme que cet élément-là est dans l'œuvre, et sur quelle base publique. Elle reçoit le relevé et l'ancrage de l'analyse (1.markers_json, 1.anchors_json, 1.empreinte_iconographe) et rend l'ancrage ENRICHI, que l'intention lit à la place de celui de l'analyse. CE QU'ELLE CORRIGE, MESURÉ : sur l'Uccello, sans culture, le central est le « cheval blanc armé » — la plus grande masse d'attention (0,213 des fixations attendues) — et le réalisateur en fait le climax ; le sujet de l'œuvre est pourtant saint Georges tuant le dragon, et ce n'est pas une impression : Wikidata le DÉCLARE (P180, « déclaré parmi les sujets de l'entité : dragon »). Une ancre attestée par le TITRE ou par les SUJETS déclarés pèse 3 de plus, et le central devient la FIGURE la mieux pesée d'entre elles : le dragon (rang 6 + 3 = 9) passe devant le cheval (7), et le récit dit de quoi vers quoi. POUR UNE ŒUVRE QUE LES BASES NE CONNAISSENT PAS, RIEN NE CASSE : « reconnu » et « nomme » sont faux, l'ancrage de l'analyse ressort INTACT, le récit dit « oeuvre-inedite », et l'intention se joue sur ce que l'image montre — exactement comme avant cette étape. C'est pourquoi AUCUN contrôle de « plan_valide » ne se fonde sur la culture : un contrôle qui exigerait un sujet attesté arrêterait la chaîne sur toute œuvre inédite, et une donnée absente n'est pas un plan faux. Le nœud, lui, ne cherche rien : il TRADUIT ce qu'Iconologue a établi, et son catalogue fait qu'une œuvre n'est jamais enquêtée deux fois.",
+    "le_plan_commande": "L'intention est écrite AVANT toute image, et le déroulement la reçoit telle quelle (61.direction_json) : la peinture ne remet aucune mise en scène en cause. Le contrôle « plan_valide » arrête la chaîne avant de dépenser la moindre seconde de rendu quand le plan ne tient pas.",
+    "ce_qu_un_plan_doit_tenir": "Un plan peut nommer son accroche et son climax et rester faux : mesuré sur trois documentations parfaites, l'accroche était une bande de plancher large comme le cadre, un temps tombait sur un ciel noir, et le climax s'arrêtait à la figure entière sans jamais révéler son crâne. Quatre grandeurs le disent maintenant : l'AIRE de l'accroche (un détail, pas un pan de l'œuvre), le fait qu'elle montre de la MATIÈRE, le climax arrimé à la figure CENTRALE de l'ancrage, et le CŒUR qu'il garde pour la fin. Le nœud d'intention corrige ce qu'il peut et le dit (« corrections ») ; ces contrôles arrêtent ce qu'il n'a pas pu corriger.",
+    "aucune_limite_arbitraire": "Les bornes exposées sont celles que le graphe, la logique ou le média imposent : 1 image par seconde est le plancher d'une vidéo, et 79 s la borne haute d'un média qu'on regarde en défilant (c'était aussi le plafond du nœud tant que la caméra commandait). Sous la conduite « le plan », la durée demandée est celle qui est LIVRÉE : le nœud ne l'allonge que si le minimum logique du plan ne tient pas dedans (tenues, trajets et pauses lisibles), et il dit alors pourquoi (echelon_de_duree, duree_minimale_s, raison_duree). Sous « la camera », elle reste un PLANCHER que le plafond du nœud borne.",
+    "l_approche_pese_sur_l_intention": "Le champ « Approche » ne décore pas : il est REÇU par le réalisateur (approche_json du nœud DirectionDeStyle → RevealDirection), il borne ce que le plan peut demander, et il est recopié dans le plan où le rendu le relit. « peinture-calme » (le défaut) : au plus 6 temps, tenues d'au moins 4 s, un chemin continu dans l'image sans retour, une caméra qui glisse à 0,08 largeur de cadre par seconde au plus et ne s'arrête jamais. « visite-guidee » : le déroulement d'avant le 2026-09-14, borné (10 temps, 1,5 s, caméra libre). Jugé ce soir-là sur des vidéos où le plan était pourtant suivi à la lettre : « la vidéo est calme, telle une peinture qui se dévoile narrativement. Il y a trop d'à-coups, de mouvements de caméra qui se déplacent dans tous les sens. Il manque un ensemble de paramètres du style, de l'approche qui s'injectent au moment du plan, de l'intention. » Mesuré : quatorze temps en quarante-cinq secondes, un mouvement toutes les trois secondes.",
+    "ce_que_le_plan_dit_de_la_camera": "Le réalisateur écrit aussi le MOUVEMENT de caméra (« camera » : mouvement, sens, rythme) : le chemin de la caméra et l'ordre des temps — donc le chemin de la saignée — racontent le même trajet. Le sens déclaré est vérifié sur les centres des temps et réécrit s'il ne leur correspond pas ; le nombre de demi-tours est mesuré (« trajet_retours ») et le contrôle « le_trajet_ne_revient_pas » arrête un plan qui fait l'aller-retour.",
+    "ce_qui_remplace_la_reserve": "Deux contrôles ont été RETIRÉS du plan_tenu, parce que deux règles qui se contredisent ne coexistent pas. « le_coeur_du_climax_reste_vierge » exigeait précisément le TROU qu'on nous reproche : « cacher le climax à la fin fait trop grotesque, ce n'est pas naturel ». « chaque_temps_est_encre_a_son_heure » mesurait la boîte seule, sans son voisinage, d'où des éléments « juste incompréhensibles ». À leur place : la LISIBILITÉ (le halo d'un temps est-il encré à son heure), l'ORDRE D'ARRIVÉE (l'heure médiane d'encrage de chaque boîte croît-elle dans l'ordre du plan) et le CŒUR EN DERNIER (son heure médiane est-elle la plus tardive). Le cœur n'est plus protégé par une réserve : il vient en dernier parce que sa graine naît en dernier. DEPUIS LE 2026-09-15, CE N'EST MÊME PLUS UNE PORTE FERMÉE. Le rendu réel montrait, autour du cœur, une grande zone de papier nu à bords organiques au milieu de la scène encrée — la porte du cœur freinait si fort, et sur un rayon si large, qu'elle arrêtait la saignée : on lisait un trou. Chaque temps a maintenant SA porte, qui FREINE et laisse passer de quoi couvrir sa boîte d'une encre clairsemée avant son heure, sans que la moitié en soit encrée. « aucun_temps_n_est_un_trou » le mesure sur seize instants du corps et pour chaque temps (part du halo encrée moins part de la boîte encrée, sous 0,25).",
+    "des_traits_et_pas_que_des_blocs": "« On veut éviter d'avoir que des blocs d'ink, parfois des tracés. » Un temps porte un GESTE : « tache » pour une masse ou un décor (ciel, herbes, sol, roche, étoffe large), « trace » pour ce qui a un contour net — une PARTIE d'une figure, ou une figure qu'on reconnaît à sa silhouette. Un temps tracé est DESSINÉ d'abord : des traits d'encre suivent ses propres contours, relevés sur l'œuvre, pendant les quatre premiers dixièmes de sa tenue ; la saignée part ensuite de ces traits et le remplit. Le réalisateur choisit le geste et l'approche lui dit la proportion visée (0,6 tache / 0,4 trace sous « peinture-calme ») ; à défaut, la règle déterministe lit ce que le temps EST — une partie de figure, ou une reconnaissabilité d'au moins 0,6. Mesuré sur les trois rendus réels de l'itération 1 : pas un trait visible, et la règle d'avant — le seul rapport des côtés de la boîte — ne qualifiait qu'UN temps sur dix-sept. Le contrôle « des_traits_et_pas_que_des_blocs » tient la part de tracés au quart au moins ; le récit dit aussi, par temps, ce que l'encre dessine au tiers de sa tenue (contour_au_tiers : une tache pleine vaut 3,5, un temps dessiné huit ou vingt).",
+    "qui_commande": "Le champ « conduite » dit qui mène le déroulement. « le plan » (le défaut) : l'ordre des temps, leur rythme et le cadrage viennent du plan, et la caméra est bâtie sur eux ; aucun temps n'est supprimé — un temps incadrable refuse le plan avec sa raison. « la camera » : le déroulement d'avant le 2026-09-14, où la géométrie de la caméra réordonnait les temps et plafonnait la durée — mesuré sur trois plans parfaits : ordre réécrit, deux temps jamais cadrés, aucun temps encré à son heure, 79 s pour 20 s demandées.",
+    "la_lumiere_de_la_page": "Le champ « Ambiance » dit sous quelle lumière la page se dessine, et il vaut « Lanterne » par défaut : une flaque de lumière chaude posée hors champ, dont le centre dérive lentement (jusqu'à 6 % du cadre) et dont la flamme respire — une composante lente (± 6 %) et un frémissement fin (± 2 %) — pendant que les fibres du papier accrochent ses rayons rasants : la surface se VIT sous le dessin au lieu de le subir. « Chandelle » est la même flamme, plus étroite, plus vive et plus chaude ; « Atelier » rend la page nue, en lumière du jour, sans lampe ni relief. « Selon le fond » est le comportement d'avant — la lampe FIXE que le fond porte, et rien de plus : c'est le défaut du NŒUD, celui que l'identité au pixel près protège, jamais celui de cette chaîne. La conclusion reçoit la MÊME ambiance et l'instant où le déroulement s'arrête (« 6.depart_s » = la durée retenue) : la flamme y reprend sa phase exacte, et la luminance ne bouge pas de plus de 1 % au raccord (0,35 % mesuré).",
+    "contemplation": "Demandé le 2026-09-15 : « après un court temps de pause sur l'image révélée — un temps de contemplation de 3 à 5 s, pas d'arrêt net — la conclusion doit pouvoir mener à un message CTA s'il est spécifié ». Le champ « Contemplation de l'image révélée » (contemplation_s, 4 s par défaut, borné de 3 à 5) est passé au déroulement (61.contemplation_s) : c'est SA dernière étape, nommée « contemplation » dans son récit (« tenue » jusque-là), qui commence quand la couleur a fini de monter. PAS D'ARRÊT NET, MESURÉ : jusque-là le déroulement posait deux nœuds de caméra identiques à la fin du dézoom et à la fin du plan — le cadre ne changeait plus d'un pixel pendant 2,5 s. Sous « le plan », le cadre continue de s'ouvrir pendant la contemplation (0,8 % de largeur par seconde, dans le sens du dézoom qui vient de finir, jamais à rebours), et le récit compte les secondes où le rectangle rendu n'a pas bougé (contemplation_immobile_s) : plan_tenu en tolère une demie. La conclusion, elle, ne contemple plus : son hold_s est passé de 2,2 s à 0,5 s (un souffle avant que l'encre reprenne), pour que la pause totale reste dans les cinq secondes. Le CTA vient après elle : « appel » écrit le champ cta à l'encre sur la dernière image de la conclusion (voir conclusion_facultative).",
+    "negatif": "Mesuré le 2026-09-15 sur Te-no-me (une scène de nuit) : « la vidéo semble commencer en négatif » — la pleine lune, blanche dans l'œuvre, s'encrait en tache noire, parce que le styliseur d'encre inversait la luminance de toute œuvre majoritairement sombre (médiane < 0,35) pour garder « des traits d'encre sur papier ». Antoine : « le négatif doit être un paramètre, car je ne veux pas qu'on soit toujours en négatif ». Le champ « Négatif » (negatif, passé au déroulement par 61.negatif) vaut « non » par défaut : l'encre est ce qui est SOMBRE dans l'œuvre, et une nuit se peint en lavis noir autour d'une lune laissée en réserve ; « oui » inverse toujours ; « selon-l-oeuvre » est l'automatisme d'avant (le défaut du nœud, gardé pour l'identité du rendu classique). Le récit dit ce qui a été fait (negatif_applique), pas seulement ce qui a été demandé.",
+    "bords": "Antoine, 2026-09-15 (après les tests depuis l'UI sur trois œuvres nouvelles) : « on va trouver moyen, en identifiant la step ou l'entité qui est en mesure de changer la donne, pour que le cadre de l'œuvre ne soit plus visible pendant la construction, de façon élégante, pour tous les cas d'usage de ce workflow ; fais-en un paramètre mis par défaut ». L'entité est la POSE de l'œuvre sur la feuille (`_prolonger_l_oeuvre` de comfyui-ink-reveal, partagée par l'encre et la brume) : le rectangle se lisait parce que le prolongement de l'œuvre au-delà de son arête était flouté dès le premier pixel (les traits s'y arrêtaient net) et que le fondu vers la feuille commençait sur une droite parallèle au bord. Le champ « Bords de l'œuvre » (bords, passé au déroulement par 61.bords) vaut « fondus » par défaut : les traits continuent au-delà de l'arête (rabat continu, décalage nul au bord), rien n'est flouté au ras, et le fondu commence sur un front ondulé ; « francs » rejoue le prolongement d'avant, image pour image (le défaut du nœud, gardé pour l'identité du rendu classique). Sous « fondus », deux rognages de plus, avant la pose, parce que le cadre peut venir de l'image elle-même : le BORD DE SCAN (liseré anti-aliasé d'un rognage, ou bande plate de papier qui s'arrête sur une marche — 4 % du côté au plus, dit par le récit dans bord_de_scan_rogne), et l'ŒUVRE ENTIÈRE (sans marge rognée, la règle d'avant coupait un ciel lisse comme une bande de séparation : 825 lignes de ciel sur le Friedrich). Mesuré sur la feuille d'encre (cadre_lu_encre) : Van Gogh 0,36 → 0,03, Hiroshige 0,45 → 0,02, Friedrich 0,14 → 0,00.",
+    "le_sillage": "Mesuré le 2026-09-15 sur Te-no-me : « il est arrivé que la caméra bifurque sans qu'aucune encre ne suive, donc on a une feuille blanche ». Le trajet de la lune aux herbes durait 14,8 s ; seule la lune était encrée, elle sortait du cadre à la quatrième seconde, et la caméra glissait sur du papier nu (0,56 % du cadre encré au pire). Règle d'Antoine : « il faut toujours au moins un trait ou du contenu qui suit la caméra ». Sous « ink-bleed » et une caméra qui glisse, le déroulement pose maintenant un SILLAGE : pendant chaque trajet, une goutte par seconde là où la caméra sera six dixièmes plus tard, et un trait — le plus long contour de l'œuvre dans le cadre qu'elle va montrer — qui s'y dessine ; ni l'un ni l'autre n'entre dans la boîte d'un temps à venir. Le récit mesure image par image la part du cadre encrée après l'accroche (encre_dans_le_cadre, encre_dans_le_cadre_min et l'instant), et plan_tenu refuse une peinture dont le cadre tombe sous 1 % d'encre (un trait d'un pixel sur 352 × 640 en vaut 0,3 ; les traits du sillage ne sont tronqués que hors du cœur, un contour n'étant pas un dévoilement) (la_camera_ne_voit_jamais_de_page_blanche).",
+    "conclusion_facultative": "À 0 seconde, la fermeture ne dure qu'une image : la scène ne se pose pas, et l'appel final s'écrit directement sur la fin du déroulement. Le montage compte toujours deux parts — le déroulement, puis ce qui le clôt. Depuis le 2026-09-15 la contemplation de l'image révélée appartient au déroulement (voir la note contemplation) : la conclusion commence par un souffle de 0,5 s, puis l'encre reprend la page depuis la lisière vers le climax, et l'appel final — quand cta est renseigné — s'écrit à l'encre quand la fermeture a fini — il ne mord que sur sa dernière seconde (une seconde de chevauchement, pas plus), puis reste le temps de se lire, déduit du texte (écriture 0,06 s le caractère, lecture 0,9 s + 0,35 s le mot : « La suite, bientôt » = 3,5 s). Pour cela la conclusion reçoit le même texte (6.appel_texte) et prolonge sa page refermée, vivante sous la flamme, de cette durée moins la seconde de chevauchement : la conclusion mène au CTA. Sans texte, l'étape « appel » est SAUTÉE (« quand »: « $cta ») et rend le livrable de la conclusion tel quel — on ne met pas de CTA. La police s'injecte par « cta_police » (un nom résolu dans les polices du poste, ou un chemin de fichier ; vide = automatique).",
+    "ce_qui_est_appele": "La documentation de l'image (image-iconographe, tenue par le service Iconographe et sa bibliothèque), la CULTURE de l'œuvre (image-iconologue, tenue par le service Iconologue et son catalogue), la structure du récit (le catalogue des structures narratives) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : la chaîne les appelle, elle ne les porte pas. Un autre flux peut les appeler aussi, et la documentation déjà écrite n'est pas repayée."
+  }
+}

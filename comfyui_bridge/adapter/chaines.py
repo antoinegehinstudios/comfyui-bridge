@@ -15,12 +15,13 @@ livrables offrait cinquante images de travail avant la vidéo commandée.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..core import chaine as noyau
 from ..core.errors import (BridgeError, ChainControlFailedError, MediaAssemblyError,
@@ -30,7 +31,7 @@ from ..core.jobs import JobStatus
 from ..core.plan import Artifact
 from . import montage_video
 from .measure import measure
-from .media import DOSSIER_DE_TRAVAIL, artifact_url, media_kind
+from .media import DOSSIER_DE_TRAVAIL, SIDECAR_SUFFIX, artifact_url, media_kind
 
 # Ce que le journal d'un job de chaîne appelle un problème de contrôle. Nommé
 # une fois : la mémoire d'Hermes et la réponse HTTP doivent dire le même mot.
@@ -102,6 +103,21 @@ class RunnerDeChaines:
             if store.get(job_id).cancel_requested:
                 self._abandonner(job_id, etapes, rang, chaine, produits)
                 return
+            sautee = self._a_sauter(etape, valeurs, resultats)
+            if sautee is not None:
+                # UNE ÉTAPE FACULTATIVE SANS RAISON D'ÊTRE EST SAUTÉE, ET LE DIT :
+                # son « quand » désigne une valeur vide (un appel final sans
+                # texte). Elle rend son média tel quel en livrable, pour que
+                # l'étape suivante qui la nomme (« $appel.livrable ») reprenne
+                # ce qu'elle aurait reçu — rien n'est rendu, rien n'est perdu.
+                resultats[etape.id] = sautee
+                etapes[rang]["statut"] = "skipped"
+                etapes[rang]["note"] = sautee.get("raison")
+                etapes[rang]["resultat"] = _resume(sautee)
+                store.set_etapes(job_id, etapes)
+                store.append_log(job_id, f"étape {etape.id} ({etape.genre}) sautée : "
+                                         f"{sautee.get('raison')}")
+                continue
             etapes[rang]["statut"] = "running"
             store.set_etapes(job_id, etapes)
             store.set_progress(job_id, rang, len(etapes), etape.id)
@@ -213,6 +229,45 @@ class RunnerDeChaines:
 
     # -- étapes ----------------------------------------------------------------
 
+    @staticmethod
+    def _a_sauter(etape: noyau.Etape, valeurs: dict[str, Any],
+                  resultats: dict[str, Any]) -> dict[str, Any] | None:
+        """Ce qu'une étape SAUTÉE rend — ou None quand elle doit être jouée.
+
+        Une étape porte « quand » : un renvoi vers un champ ou un résultat
+        d'amont. Vide (texte blanc, faux, zéro, liste ou objet vides, absent),
+        l'étape n'a rien à faire. Son résultat est alors un PASSE-PLAT : le
+        premier média qu'elle devait reprendre devient son livrable, pour que
+        l'aval la nomme sans savoir qu'elle n'a pas eu lieu."""
+        if not etape.quand:
+            return None
+        valeur = noyau.resoudre(etape.quand, valeurs, resultats)
+        if isinstance(valeur, str):
+            pleine = bool(valeur.strip())
+        else:
+            pleine = bool(valeur)
+        if pleine:
+            return None
+        resultat: dict[str, Any] = {"sautee": True,
+                                    "raison": f"« {etape.quand} » est vide"}
+        params = etape.params if isinstance(etape.params, dict) else {}
+        sources: list[Any] = []
+        media = params.get("media")
+        if isinstance(media, dict):
+            sources += list(media.values())
+        for cle in ("video", "image", "parts"):
+            if cle in params:
+                sources.append(params[cle])
+        for source in sources:
+            chemin = noyau.resoudre(source, valeurs, resultats, strict=False)
+            if isinstance(chemin, list) and chemin:
+                chemin = chemin[0]
+            if isinstance(chemin, str) and chemin and Path(chemin).is_file():
+                resultat["livrable"] = chemin
+                resultat["mesure"] = {"bytes": Path(chemin).stat().st_size}
+                break
+        return resultat
+
     def _executer_etape(self, job_id: str, etape: noyau.Etape, valeurs: dict[str, Any],
                         resultats: dict[str, Any], travail: Path, label: str,
                         etapes: list[dict[str, Any]], rang: int,
@@ -261,6 +316,21 @@ class RunnerDeChaines:
         reglages = dict(params)
         nom = str(reglages.pop("workflow"))
         media = {k: str(v) for k, v in (reglages.pop("media", None) or {}).items() if v}
+        for cle, valeur in media.items():
+            fichier = Path(valeur)
+            if fichier.is_file():
+                # Le livrable d'une étape précédente est un CHEMIN local : un
+                # « rendre » qui le reprend en média doit le déposer chez le
+                # moteur et citer le nom rendu, comme `extraire_queue` et
+                # `extraire_image` le font déjà pour ce qu'ils produisent —
+                # mesuré (run 98d75906), sans quoi le moteur refusait le
+                # graphe en 40 ms.
+                depose = self._deposer(fichier)
+                c.store.append_log(
+                    parent_id,
+                    f"étape {etape.id} : livrable {fichier.name} déposé chez "
+                    f"le moteur sous « {depose} »")
+                media[cle] = depose
         reglages.pop("label", None)
         reglages.pop("constraints", None)
         genre = reglages.pop("kind", None)
@@ -294,10 +364,15 @@ class RunnerDeChaines:
             raise MediaAssemblyError(
                 f"étape {etape.id!r} ({nom}) : le run a réussi sans livrer de média",
                 job_id=sous.id, workflow=nom)
-        return {"livrable": livrable.path, "job_id": sous.id,
-                "mesure": {**(livrable.measured or {}), "bytes": livrable.bytes},
-                "artefacts": [a.path for a in fini.artifacts],
-                "_duree": fini.duration_s}
+        resultat = {"livrable": livrable.path, "job_id": sous.id,
+                    "mesure": {**(livrable.measured or {}), "bytes": livrable.bytes},
+                    "artefacts": [a.path for a in fini.artifacts],
+                    "_duree": fini.duration_s}
+        recit = _recit(fini.artifacts, lambda raison: c.store.append_log(
+            parent_id, f"étape {etape.id} : récit illisible : {raison}"))
+        if recit is not None:
+            resultat["recit"] = recit
+        return resultat
 
     def _veiller(self, parent_id: str, sous_id: str, etape_id: str, rang: int,
                  total: int, arret: threading.Event) -> None:
@@ -410,15 +485,52 @@ class RunnerDeChaines:
 
 
 def _principal(artefacts: list[Artifact]) -> Artifact | None:
-    """Le média d'un run, parmi ce qu'il a écrit.
+    """Ce qu'un run a livré de PRINCIPAL, parmi ce qu'il a écrit.
 
     Un graphe peut livrer une analyse à côté de sa vidéo : c'est le MÉDIA que
-    l'étape suivante reprend, jamais le fichier de nombres.
+    l'étape suivante reprend, jamais le fichier de nombres. Mais un run peut
+    aussi n'avoir QUE des nombres à livrer — une étape qui documente, une étape
+    qui écrit un plan : il a réussi, et son livrable est ce fichier. Le refuser
+    faisait échouer l'étape sur « le run a réussi sans livrer de média », alors
+    que c'est son récit, et non son média, que la suite attend.
     """
     medias = [a for a in artefacts if a.kind in ("video", "image", "audio", "3d")]
     videos = [a for a in medias if a.kind == "video"]
-    choisis = videos or medias
+    choisis = videos or medias or list(artefacts)
     return max(choisis, key=lambda a: a.bytes or 0) if choisis else None
+
+
+def _recit(artefacts: list[Artifact], signaler: Callable[[str], None]) -> dict[str, Any] | None:
+    """Ce qu'un run a écrit SUR LUI-MÊME, à côté de son média.
+
+    Un graphe qui met en scène peut livrer, avec sa vidéo, le récit de ce
+    qu'il a décidé : à quelle seconde tel temps commence, ce qui est visible
+    quand. C'est le premier fichier de nombres (JSON) que le run a livré, lu
+    tel quel — une étape « verifier » le contrôle ensuite par
+    « $etape.recit.cle », sans que ce module sache ce que le récit raconte ni
+    quel nœud l'a écrit. Le compagnon d'origine est aussi un JSON, posé à côté
+    de chaque livrable : ce n'est pas un récit, il est écarté par son suffixe.
+
+    Un récit illisible ne se tait pas : il est dit au journal, et la clé reste
+    absente — le contrôle qui la lit échoue alors en nommant ce qui manque,
+    au lieu de passer sur un objet vide que personne n'a écrit.
+    """
+    for art in artefacts:
+        chemin = Path(art.path)
+        if (art.kind != "text" or chemin.suffix.lower() != ".json"
+                or chemin.name.lower().endswith(SIDECAR_SUFFIX)):
+            continue
+        try:
+            contenu = json.loads(chemin.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as exc:
+            signaler(f"{chemin.name} : {exc}")
+            return None
+        if not isinstance(contenu, dict):
+            signaler(f"{chemin.name} : un objet JSON était attendu, "
+                     f"trouvé {type(contenu).__name__}")
+            return None
+        return contenu
+    return None
 
 
 def _resume(resultat: dict[str, Any]) -> dict[str, Any]:
@@ -432,6 +544,15 @@ def _resume(resultat: dict[str, Any]) -> dict[str, Any]:
     if "controles" in resultat:
         garde["controles"] = [{"id": l["id"], "ok": l["ok"], "mesure": l["mesure"],
                                "attendu": l["attendu"]} for l in resultat["controles"]]
+    if isinstance(resultat.get("recit"), dict):
+        # Du récit, la fiche ne garde que ce qui se lit d'un coup d'œil : les
+        # valeurs simples de son premier niveau (un nom, une seconde, un
+        # verdict). Son calendrier et sa caméra pèsent des dizaines de milliers
+        # d'octets (mesuré : ≈ 90 Ko sur un récit réel) et restent dans le
+        # résultat complet, là où les étapes suivantes les lisent.
+        garde["recit"] = {k: v for k, v in resultat["recit"].items()
+                          if isinstance(v, (bool, int, float))
+                          or (isinstance(v, str) and len(v) <= 80)}
     return garde
 
 

@@ -109,6 +109,19 @@ class JobNotFoundError(BridgeError):
     status = 404
 
 
+class RaccourciNotFoundError(BridgeError):
+    """Le raccourci nommé n'existe pas (ou plus) pour ce mode.
+
+    Distinct d'un mode inconnu (400) : le mode est bon, c'est le réglage
+    enregistré qui manque. Les confondre faisait chercher une faute dans le nom
+    du mode après un simple « Retirer » fait dans un autre onglet.
+    """
+
+    problem_type = "https://cortex/problems/raccourci-not-found"
+    title = "Raccourci not found"
+    status = 404
+
+
 class DependencyUnavailableError(BridgeError):
     """An optional capability (e.g. the headless browser) is not installed."""
 
