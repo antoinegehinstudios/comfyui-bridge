@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "technique": "brume-et-encre",
+  "libelle": "Brume, refermée à l'encre",
+  "resume": "L'image est là, entière et en couleur, sous une nappe de brume qui se dissipe le long du récit ; puis c'est l'encre qui referme la page sur elle, et l'appel s'écrit à l'encre. Une technique d'ESSAI : elle n'écrit rien de neuf, elle recompose deux façons de tenir les rôles — la preuve qu'une technique de plus est un fichier de plus, sans une ligne de chaîne ni de code.",
+  "expose": {
+    "fond": {
+      "type": "COMBO",
+      "defaut": "brume-dorée",
+      "options": [
+        "brume-dorée",
+        "brume-blanche",
+        "brume-grise"
+      ],
+      "libelle": "Teinte de la brume"
+    },
+    "papier": {
+      "type": "COMBO",
+      "defaut": "sepia",
+      "options": [
+        "sepia",
+        "washi",
+        "gris-atelier"
+      ],
+      "libelle": "Papier de la fermeture"
+    },
+    "bords": {
+      "type": "COMBO",
+      "defaut": "fondus",
+      "options": [
+        "fondus",
+        "francs"
+      ],
+      "libelle": "Bords de l'œuvre"
+    }
+  },
+  "roles": {
+    "deroulement": {
+      "workflow": "video-reveal-brume-dirige",
+      "inputs": {
+        "61.markers_json": "$analyse.recit.markers_json",
+        "61.direction_json": "$intention.recit.direction_json",
+        "61.fond": "$fond",
+        "61.contemplation_s": "$contemplation_s",
+        "61.bords": "$bords"
+      }
+    },
+    "conclusion": {
+      "workflow": "video-reveal-closing",
+      "inputs": {
+        "6.fond": "$papier",
+        "6.ambiance": "selon-le-fond",
+        "6.depart_s": "$deroulement.recit.duree_retenue_s",
+        "6.appel_texte": "$cta",
+        "6.fermeture_json": "$deroulement.recit.fermeture_json"
+      }
+    },
+    "appel": {
+      "workflow": "video-appel-final",
+      "inputs": {
+        "7.texte": "$cta",
+        "7.police": "$cta_police"
+      }
+    }
+  },
+  "controles": {
+    "plan_tenu": [
+      {
+        "id": "l_accroche_est_vue_a_2_5_s",
+        "valeur": "$deroulement.recit.hook_vu.atteint",
+        "op": "gte",
+        "attendu": 0.1
+      },
+      {
+        "id": "le_climax_est_hors_du_cadre_d_ouverture",
+        "valeur": "$deroulement.recit.climax_a_l_ouverture",
+        "op": "lte",
+        "attendu": 0.12
+      },
+      {
+        "id": "le_climax_est_tenu",
+        "valeur": "$deroulement.recit.climax_tenue_s",
+        "op": "gte",
+        "attendu": 2
+      },
+      {
+        "id": "la_camera_glisse",
+        "valeur": "$deroulement.recit.vitesse_camera_max_mesuree",
+        "op": "lte",
+        "attendu": 0.1
+      },
+      {
+        "id": "la_camera_ne_saccade_pas",
+        "valeur": "$deroulement.recit.acceleration_camera_max",
+        "op": "lte",
+        "attendu": 1.0
+      },
+      {
+        "id": "les_temps_sont_lisibles",
+        "valeur": "$deroulement.recit.lisibilite_min",
+        "op": "gte",
+        "attendu": 0.85
+      },
+      {
+        "id": "l_ordre_d_arrivee_est_celui_du_plan",
+        "valeur": "$deroulement.recit.ordre_d_arrivee_respecte",
+        "op": "eq",
+        "attendu": true
+      },
+      {
+        "id": "le_coeur_vient_en_dernier",
+        "valeur": "$deroulement.recit.coeur_en_dernier",
+        "op": "eq",
+        "attendu": true
+      },
+      {
+        "id": "aucun_temps_supprime",
+        "valeur": "$deroulement.recit.nb_hors_champ",
+        "op": "eq",
+        "attendu": 0
+      },
+      {
+        "id": "la_contemplation_ne_fige_pas",
+        "valeur": "$deroulement.recit.contemplation_immobile_s",
+        "op": "lte",
+        "attendu": 0.5
+      }
+    ]
+  },
+  "notes": {
+    "pourquoi": "Antoine, 2026-09-16 au soir : « je veux pouvoir garder ce workflow de création, mais essayer des styles vraiment différents, plus tard, en tout cas le permettre ». Cette technique le prouve sur pièces : déposée dans _data/techniques/ et la passerelle relancée, elle est au menu, ses champs suivent (selon), et une production entière se rend — le plan n'a pas bougé, le code non plus. Ses contrôles plan_tenu sont ceux de la brume (c'est elle qui déroule) ; sa fermeture reçoit un papier à elle (« papier ») parce que la fermeture à l'encre veut un papier, pas une teinte de brume."
+  }
+}

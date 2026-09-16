@@ -1,7 +1,7 @@
 {
   "version": 1,
   "chaine": "video-revelation",
-  "resume": "L'image est d'abord DOCUMENTÉE par Iconographe — une fois pour toutes, dans sa bibliothèque — puis sa CULTURE est documentée par Iconologue : ce que l'œuvre EST, sourcé, et la figure que les bases déclarent sujet reprend sa place. Une INTENTION est ensuite écrite dans la structure d'un média qu'on regarde en défilant, et c'est ELLE qui commande : le DÉROULEMENT peint l'accroche (2,5 s), la mise en place, puis le corps qui croît vers le climax et le tient sans arrêter l'animation ; l'image révélée se CONTEMPLE ensuite (3 à 5 s, la caméra glisse encore). Une CONCLUSION pose la scène (on peut s'en passer), un APPEL FINAL s'écrit à l'encre, et le MONTAGE réunit le tout. Deux contrôles jugent : le plan avant de le peindre, la peinture avant de la clore.",
+  "resume": "L'image est d'abord DOCUMENTÉE par Iconographe — une fois pour toutes, dans sa bibliothèque — puis sa CULTURE est documentée par Iconologue : ce que l'œuvre EST, sourcé, et la figure que les bases déclarent sujet reprend sa place. Une INTENTION est ensuite écrite dans la structure d'un média qu'on regarde en défilant, et c'est ELLE qui commande : le DÉROULEMENT peint l'accroche (2,5 s), la mise en place, puis le corps qui croît vers le climax et le tient sans arrêter l'animation ; l'image révélée se CONTEMPLE ensuite (3 à 5 s, la caméra glisse encore). Une CONCLUSION pose la scène (on peut s'en passer), un APPEL FINAL s'écrit par-dessus ses dernières images, et le MONTAGE réunit le tout. Deux contrôles jugent : le plan avant de le peindre, la peinture avant de la clore.",
   "expose": {
     "image": {
       "media": "image",
@@ -61,24 +61,6 @@
       },
       "libelle": "Approche"
     },
-    "bords": {
-      "type": "COMBO",
-      "defaut": "fondus",
-      "options": [
-        "fondus",
-        "francs"
-      ],
-      "libelle": "Bords de l'œuvre"
-    },
-    "conduite": {
-      "type": "COMBO",
-      "defaut": "le plan",
-      "options": [
-        "le plan",
-        "la camera"
-      ],
-      "libelle": "Qui commande le déroulement"
-    },
     "width": {
       "type": "INT",
       "defaut": 720,
@@ -104,7 +86,6 @@
     },
     "technique": {
       "type": "COMBO",
-      "defaut": "encre",
       "options_depuis": {
         "techniques": true
       },
@@ -259,16 +240,13 @@
       "id": "appel",
       "quand": "$cta",
       "rendre": {
-        "workflow": "video-appel-final",
+        "role": "appel",
+        "technique": "$technique",
         "media": {
           "video": "$conclusion.livrable"
         },
         "fps": "$fps",
-        "seed": "$seed",
-        "inputs": {
-          "7.texte": "$cta",
-          "7.police": "$cta_police"
-        }
+        "seed": "$seed"
       },
       "sinon": {
         "livrable": null,
@@ -336,6 +314,7 @@
     "conclusion_facultative": "À 0 seconde, la fermeture ne dure qu'une image : la scène ne se pose pas, et l'appel final s'écrit directement sur la fin du déroulement. Le montage compte toujours deux parts — le déroulement, puis ce qui le clôt. Depuis le 2026-09-15 la contemplation de l'image révélée appartient au déroulement (voir la note contemplation) : la conclusion commence par un souffle de 0,5 s, puis l'encre reprend la page depuis la lisière vers le climax, et l'appel final — quand cta est renseigné — s'écrit à l'encre quand la fermeture a fini — il ne mord que sur sa dernière seconde (une seconde de chevauchement, pas plus), puis reste le temps de se lire, déduit du texte (écriture 0,06 s le caractère, lecture 0,9 s + 0,35 s le mot : « La suite, bientôt » = 3,5 s). Pour cela la conclusion reçoit le même texte (6.appel_texte) et prolonge sa page refermée, vivante sous la flamme, de cette durée moins la seconde de chevauchement : la conclusion mène au CTA. Sans texte, l'étape « appel » est SAUTÉE (« quand »: « $cta ») et rend le livrable de la conclusion tel quel — on ne met pas de CTA. La police s'injecte par « cta_police » (un nom résolu dans les polices du poste, ou un chemin de fichier ; vide = automatique).",
     "ce_qui_est_appele": "La documentation de l'image (image-iconographe, tenue par le service Iconographe et sa bibliothèque), la CULTURE de l'œuvre (image-iconologue, tenue par le service Iconologue et son catalogue), la structure du récit (le catalogue des structures narratives) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : la chaîne les appelle, elle ne les porte pas. Un autre flux peut les appeler aussi, et la documentation déjà écrite n'est pas repayée.",
     "techniques": "LE PLAN NE NOMME AUCUNE TECHNIQUE. Antoine, 2026-09-16 : « la mention de brume ne doit pas être tenue par le workflow de la passerelle : cela veut dire qu'il porte une dépendance à la brume et devra se faire doublon pour faire autrement ». Jusque-là, « video-revelation » (encre) et « video-revelation-brume » étaient deux chaînes jumelles : même plan de onze étapes, seules la peinture, la conclusion et leurs contrôles « plan_tenu » différaient — une technique de plus était une chaîne de plus, recopiée. Désormais les étapes « deroulement » et « conclusion » nomment un RÔLE et la technique qui le tient (« $technique »), et « plan_tenu » prend la liste de contrôles de cette technique. Quel graphe tient chaque rôle, avec quelles entrées, quels réglages propres (fond, ambiance, tracé, négatif, rendu pour l'encre ; la teinte de la brume pour la brume) et quels contrôles : tout cela vit dans _data/techniques/<nom>.json, et une technique de plus est un FICHIER de plus. Les réglages COMMUNS restent ici — ce sont ceux du plan, pas de la peinture. « conduite » en fait partie, avec ses deux valeurs : une technique qui ne sait pas s'en servir ne la reçoit simplement pas (voir la note de la technique brume), et la passerelle dit au journal ce qui n'a pas été appliqué.",
-    "l_appel_ne_recharge_plus_la_conclusion": "2026-09-16, Antoine : « à la toute fin, tu éprouveras avec une vidéo 4K/60 fps de 20 s ». L'appel final chargeait la conclusion ENTIÈRE pour y écrire son texte, et la rendait entière : en 4K, c'est une vidéo de plus en mémoire pour quelques secondes d'encre. Le nœud InkCaption lit désormais la conclusion PARESSEUSEMENT (son entrée « video ») et ne rend QUE les images qu'il écrit ; son récit dit combien d'images de la conclusion il a reprises (images_reprises). Le montage joint donc trois parts : le déroulement, la conclusion SANS ces dernières images (« sauf_les_dernieres »), puis l'appel — sinon on les verrait deux fois. Sans appel (pas de CTA), l'étape est sautée et son « sinon » rend un livrable nul (la part est ignorée) et zéro image reprise (rien n'est rogné) : le montage retombe sur deux parts, et le contrôle final accepte 2 ou 3."
+    "l_appel_ne_recharge_plus_la_conclusion": "2026-09-16, Antoine : « à la toute fin, tu éprouveras avec une vidéo 4K/60 fps de 20 s ». L'appel final chargeait la conclusion ENTIÈRE pour y écrire son texte, et la rendait entière : en 4K, c'est une vidéo de plus en mémoire pour quelques secondes d'encre. Le nœud InkCaption lit désormais la conclusion PARESSEUSEMENT (son entrée « video ») et ne rend QUE les images qu'il écrit ; son récit dit combien d'images de la conclusion il a reprises (images_reprises). Le montage joint donc trois parts : le déroulement, la conclusion SANS ces dernières images (« sauf_les_dernieres »), puis l'appel — sinon on les verrait deux fois. Sans appel (pas de CTA), l'étape est sautée et son « sinon » rend un livrable nul (la part est ignorée) et zéro image reprise (rien n'est rogné) : le montage retombe sur deux parts, et le contrôle final accepte 2 ou 3.",
+    "parametres_chez_les_techniques": "Antoine, 2026-09-16 au soir : « les paramètres — le style de tracé, le fond, l'ambiance, la technique de style… — ne vivent pas dans le workflow mais se réconcilient avec le workflow quand le paramètre l'appelle ; ce qui permet de les interchanger, d'en créer de nouvelles, avec un rendu drastiquement différent si le style l'est. » Depuis : « bords » et « conduite », que seule la peinture lit, sont exposés par les techniques qui les tiennent (l'encre les deux, la brume les bords) et plus par le plan ; l'appel final est un RÔLE de plus (« appel »), tenu par chaque technique comme le déroulement et la conclusion ; et le champ « technique » ne porte plus de défaut — c'est la technique qui se dit « par_defaut » dans son fichier. Le plan ne nomme ainsi aucune technique, ni par un graphe, ni par un défaut : une technique de plus est un fichier de plus, qui tient les trois rôles et expose ses propres réglages."
   }
 }

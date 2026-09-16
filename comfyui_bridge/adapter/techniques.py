@@ -76,5 +76,6 @@ def vues(techniques: dict[str, Technique]) -> list[dict[str, Any]]:
     un client — c'est la même règle que pour les menus : la liste appartient au
     fournisseur.
     """
-    return [{"valeur": nom, "libelle": technique.libelle or nom, "resume": technique.resume}
+    return [{"valeur": nom, "libelle": technique.libelle or nom, "resume": technique.resume,
+             "par_defaut": bool(technique.par_defaut)}
             for nom, technique in sorted(techniques.items())]

@@ -3,6 +3,7 @@
   "technique": "encre",
   "libelle": "Encre",
   "resume": "L'encre saigne sur une page vierge : une tache par temps du récit, qui fleurit à bords humides et rejoint les autres, sous une lumière posée hors champ.",
+  "par_defaut": true,
   "expose": {
     "fond": {
       "type": "COMBO",
@@ -55,6 +56,24 @@
         "front-organique"
       ],
       "libelle": "Rendu"
+    },
+    "bords": {
+      "type": "COMBO",
+      "defaut": "fondus",
+      "options": [
+        "fondus",
+        "francs"
+      ],
+      "libelle": "Bords de l'œuvre"
+    },
+    "conduite": {
+      "type": "COMBO",
+      "defaut": "le plan",
+      "options": [
+        "le plan",
+        "la camera"
+      ],
+      "libelle": "Qui commande le déroulement"
     }
   },
   "roles": {
@@ -81,6 +100,13 @@
         "6.depart_s": "$deroulement.recit.duree_retenue_s",
         "6.appel_texte": "$cta",
         "6.fermeture_json": "$deroulement.recit.fermeture_json"
+      }
+    },
+    "appel": {
+      "workflow": "video-appel-final",
+      "inputs": {
+        "7.texte": "$cta",
+        "7.police": "$cta_police"
       }
     }
   },
@@ -194,6 +220,7 @@
     "ce_que_la_technique_tient": "Une TECHNIQUE dit quel graphe tient chaque rôle du plan, avec quelles entrées de nœud, quels réglages elle ajoute au formulaire et quels contrôles elle porte. Le plan (la chaîne) n'en sait rien : il nomme « deroulement » et « conclusion », et c'est le champ « technique » de l'appel qui dit laquelle les tient. Antoine, 2026-09-16 : « la mention de brume ne doit pas être tenue par le workflow de la passerelle : cela veut dire qu'il porte une dépendance à la brume et devra se faire doublon pour faire autrement ». Une technique de plus est un FICHIER de plus.",
     "les_reglages_propres": "Fond, ambiance, style de tracé, négatif et rendu n'ont de sens que sous l'encre : ils vivent ici. Les réglages COMMUNS (durée, contemplation, conclusion, appel final et sa police, structure du récit, approche, bords, conduite, format, graine) restent dans la chaîne — ce sont ceux du PLAN, pas de la peinture.",
     "les_defauts_sont_ceux_du_socle": "Les défauts de cette technique sont ceux des vidéos ink livrées le 2026-09-15 à midi (« c'est parfait — assure cette standardisation ») : washi, lanterne, lavis, non, ink-bleed. Le témoin `tests/test_socle_ink.py` les épingle : les changer est une décision à écrire, jamais un accident.",
-    "la_conduite_est_commune": "« conduite » est un champ de la CHAÎNE, avec ses deux valeurs (« le plan », « la camera ») : le rôle « deroulement » de l'encre la passe au nœud (61.conduite). Une autre technique qui ne saurait pas s'en servir ne la reçoit simplement pas — elle n'a pas à faire rétrécir la liste d'un champ commun."
+    "la_conduite_est_commune": "« conduite » est un champ de la CHAÎNE, avec ses deux valeurs (« le plan », « la camera ») : le rôle « deroulement » de l'encre la passe au nœud (61.conduite). Une autre technique qui ne saurait pas s'en servir ne la reçoit simplement pas — elle n'a pas à faire rétrécir la liste d'un champ commun.",
+    "les_bords_la_conduite_et_l_appel": "2026-09-16 au soir : « bords » et « conduite » sont des réglages de la peinture, pas du plan — ils vivent ici. L'appel final est un rôle que l'encre tient avec son graphe d'écriture (le texte s'écrit à l'encre sur les dernières images de la conclusion). Et l'encre se dit « par_defaut » : c'est la technique qui s'ouvre quand l'appelant n'en nomme aucune, le plan ne la nomme pas."
   }
 }

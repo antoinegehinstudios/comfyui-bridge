@@ -179,6 +179,12 @@ class Technique:
     champs: dict[str, Champ] = field(default_factory=dict)
     roles: dict[str, Role] = field(default_factory=dict)
     controles: dict[str, tuple] = field(default_factory=dict)
+    # La technique employée quand l'appelant n'en nomme aucune. C'est la
+    # TECHNIQUE qui se dit par défaut, pas la chaîne qui la nomme : une chaîne
+    # qui écrirait « encre » dans son champ porterait la dépendance qu'on lui
+    # refuse (Antoine, 2026-09-16 : les techniques ne vivent pas dans le
+    # workflow, elles s'y réconcilient quand le paramètre les appelle).
+    par_defaut: bool = False
 
 
 @dataclass(frozen=True)
@@ -530,10 +536,15 @@ def lire_technique(brut: Any, nom_declare: str | None = None) -> Technique:
         raise WorkflowMappingError(f"{contexte} : « controles » doit être un objet nom → liste")
     controles = {str(cle): _controles(valeur, contexte, str(cle))
                  for cle, valeur in listes.items()}
+    par_defaut = brut.get("par_defaut", False)
+    if not isinstance(par_defaut, bool):
+        raise WorkflowMappingError(
+            f"{contexte} : « par_defaut » est vrai ou faux, reçu {par_defaut!r}")
     return Technique(nom=nom, version=int(brut.get("version", 1)),
                      libelle=str(brut.get("libelle") or nom),
                      resume=str(brut.get("resume") or ""),
-                     champs=champs, roles=roles, controles=controles)
+                     champs=champs, roles=roles, controles=controles,
+                     par_defaut=par_defaut)
 
 
 def verifier_techniques(chaine: Chaine, techniques: dict[str, Technique]) -> None:
@@ -545,6 +556,11 @@ def verifier_techniques(chaine: Chaine, techniques: dict[str, Technique]) -> Non
     et coûte cher à découvrir en route — la peinture est la cinquième étape,
     les quatre premières sont déjà dépensées.
     """
+    par_defaut = sorted(nom for nom, t in (techniques or {}).items() if t.par_defaut)
+    if len(par_defaut) > 1:
+        raise WorkflowMappingError(
+            f"chaîne {chaine.nom!r} : {len(par_defaut)} techniques se disent par défaut "
+            f"({', '.join(par_defaut)}) — une seule peut l'être")
     amont: set[str] = set()
     for etape in chaine.etapes:
         for nom, technique in (techniques or {}).items():
@@ -616,10 +632,26 @@ def champs_retenus(chaine: Chaine, technique: Technique | None = None) -> dict[s
     return retenus
 
 
+def technique_par_defaut(techniques: dict[str, Technique] | None) -> Technique | None:
+    """La technique qui se dit par défaut — sinon la première, par son nom.
+
+    Le défaut est DÉCLARÉ par une technique (« par_defaut »), jamais écrit dans
+    la chaîne : la chaîne ne nomme aucune technique, pas même celle qu'on
+    emploie quand on ne choisit pas. Deux qui se le disent : refusées à la
+    lecture (`verifier_techniques`).
+    """
+    if not techniques:
+        return None
+    for technique in techniques.values():
+        if technique.par_defaut:
+            return technique
+    return techniques[sorted(techniques)[0]]
+
+
 def technique_choisie(chaine: Chaine, demande: dict[str, Any],
                       techniques: dict[str, Technique] | None = None) -> Technique | None:
     """La technique que cette demande emploie : celle qu'elle nomme, sinon le
-    défaut du champ qui la choisit."""
+    défaut que le champ porterait encore, sinon celle qui se dit par défaut."""
     techniques = techniques or {}
     champ = chaine.champ_de_technique
     if champ is None or not techniques:
@@ -627,7 +659,9 @@ def technique_choisie(chaine: Chaine, demande: dict[str, Any],
     voulue = demande.get(champ)
     if voulue is None or voulue == "":
         voulue = chaine.champs[champ].defaut
-    return techniques.get(str(voulue)) if voulue is not None else None
+    if voulue is None or voulue == "":
+        return technique_par_defaut(techniques)
+    return techniques.get(str(voulue))
 
 
 # -- renvois ------------------------------------------------------------------
@@ -774,7 +808,8 @@ def valeurs(chaine: Chaine, demande: dict[str, Any],
         raise UnknownWorkflowInputError(
             f"chaîne {chaine.nom!r} : champ(s) qu'elle n'expose pas : {', '.join(inconnus)}",
             workflow=chaine.nom, fields=inconnus, accepts=sorted(admis))
-    retenus = champs_retenus(chaine, technique_choisie(chaine, demande, techniques))
+    technique = technique_choisie(chaine, demande, techniques)
+    retenus = champs_retenus(chaine, technique)
     non_appliques = sorted(k for k in demande if k not in retenus)
     sorties: dict[str, Any] = {}
     for nom, champ in retenus.items():
@@ -787,14 +822,26 @@ def valeurs(chaine: Chaine, demande: dict[str, Any],
                 continue
             brute = champ.defaut
         sorties[nom] = valeur_de(champ, brute, options.get(nom))
+    # Le champ de technique n'a pas de défaut écrit dans la chaîne : c'est la
+    # technique qui se dit par défaut qui le comble, ici, pour que les étapes
+    # à rôle sachent laquelle elles emploient.
+    champ_t = chaine.champ_de_technique
+    if champ_t is not None and technique is not None and champ_t not in sorties:
+        sorties[champ_t] = technique.nom
     return sorties, non_appliques
 
 
 def defauts(chaine: Chaine, technique: Technique | None = None) -> dict[str, Any]:
     """Les valeurs par défaut de ce qui s'applique — la chaîne, et la technique
-    choisie quand il y en a une (son « fond » n'est pas celui d'une autre)."""
-    return {nom: c.defaut for nom, c in champs_retenus(chaine, technique).items()
-            if c.defaut is not None}
+    choisie quand il y en a une (son « fond » n'est pas celui d'une autre). Le
+    champ de technique prend pour défaut la technique employée : c'est elle
+    qui se dit par défaut, la chaîne ne la nomme pas."""
+    sorties = {nom: c.defaut for nom, c in champs_retenus(chaine, technique).items()
+               if c.defaut is not None}
+    champ_t = chaine.champ_de_technique
+    if champ_t is not None and technique is not None and champ_t not in sorties:
+        sorties[champ_t] = technique.nom
+    return sorties
 
 
 # -- contrôles ----------------------------------------------------------------

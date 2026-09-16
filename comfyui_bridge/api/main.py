@@ -489,6 +489,13 @@ def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
         for nom in technique.champs:
             porteuses.setdefault(nom, []).append(nom_technique)
     defaut = _technique_par_defaut(c, chaine)
+    # Le champ de technique n'a pas de défaut ÉCRIT dans la chaîne : le
+    # formulaire s'ouvre sur la technique qui se dit par défaut — sans quoi un
+    # menu s'ouvrirait sur la première venue, par ordre alphabétique.
+    if defaut is not None:
+        for entree in entrees:
+            if entree["param"] == chaine.champ_de_technique and entree.get("value") in (None, ""):
+                entree["value"] = defaut.nom
     for nom, qui in porteuses.items():
         if nom in chaine.champs:
             continue                       # un commun ne devient pas conditionnel

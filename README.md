@@ -872,6 +872,16 @@ compte pas : on ne peut pas y écrire. Sans `segment_index`/`segment_count`,
 rien n'est tranché — trancher un graphe qui ne sait pas le faire rendrait N fois
 la vidéo entière.
 
+**Ce mécanisme ne connaît aucun projet.** Il ne lit que le graphe et son
+budget : un nœud déclare la convention (`segment_index`/`segment_count`, une
+borne d'allonge), la passerelle compte, lance, recolle par copie de flux, mesure
+les jonctions et fusionne les récits par des règles de NOMS (`_min`, `_max`,
+listes) — rien n'y nomme une chaîne, une technique ni un nœud du paquet de
+révélation ; les épreuves du mécanisme tournent sur un nœud d'essai
+(`RenduDEssaiParTranches`) qui n'existe nulle part ailleurs, et la règle
+`flux-hors-du-code` du socle refuse tout nom de flux dans le code. Un autre
+paquet de nœuds, un autre flux, une autre chaîne l'emploient tels quels.
+
 **La taille.** Elle vient des réglages du run (`width`, `height`, `fps`) ou des
 défauts déclarés du mode. Un graphe qui prend sa taille d'une **vidéo d'entrée**
 (une conclusion reprend la queue du déroulement telle qu'elle est) ne la dit
@@ -1051,29 +1061,48 @@ et devra se faire doublon pour faire autrement ». `video-revelation` (encre) et
 différaient. Une technique de plus était une chaîne de plus, recopiée.
 
 Une **chaîne** est donc le PLAN, agnostique : ses étapes nomment des **rôles**
-(`deroulement`, `conclusion`), jamais un graphe de peinture, et elle expose un
-champ dont la liste est celle des techniques déclarées. Une **technique**
+(`deroulement`, `conclusion`, `appel`), jamais un graphe de peinture ni
+d'écriture, et elle expose un champ dont la liste est celle des techniques
+déclarées — **sans défaut** : c'est la technique qui se dit `par_defaut` dans
+son fichier (deux qui se le disent sont refusées à la lecture ; aucune : la
+première par son nom). Une **technique**
 (`_data/techniques/<nom>.json`, copie de référence `resources/techniques-exemples/`)
 dit quel graphe tient chaque rôle et avec quelles entrées de nœud, quels réglages
 elle ajoute, et quels contrôles elle porte :
 
 ```jsonc
-// la chaîne : le plan
-"expose": { "…": "…", "technique": { "type": "COMBO", "defaut": "encre",
+// la chaîne : le plan — aucun nom de technique, ni par un graphe, ni par un défaut
+"expose": { "…": "…", "technique": { "type": "COMBO",
                                      "options_depuis": { "techniques": true } } },
 "etapes": [
   { "id": "deroulement", "rendre": { "role": "deroulement", "technique": "$technique",
       "media": { "image": "$image" }, "duration_s": "$duration_s" } },
-  { "id": "plan_tenu",   "verifier": { "technique": "$technique", "controles": "plan_tenu" } }
+  { "id": "plan_tenu",   "verifier": { "technique": "$technique", "controles": "plan_tenu" } },
+  { "id": "appel", "quand": "$cta", "rendre": { "role": "appel", "technique": "$technique",
+      "media": { "video": "$conclusion.livrable" } }, "sinon": { "…": "…" } }
 ]
 
-// la technique : ce qui tient les rôles
-{ "version": 1, "technique": "encre", "libelle": "Encre", "resume": "…",
-  "expose": { "fond": { "type": "COMBO", "defaut": "washi", "options": ["washi", "…"] } },
+// la technique : ce qui tient les rôles, et ses propres réglages
+{ "version": 1, "technique": "encre", "libelle": "Encre", "resume": "…", "par_defaut": true,
+  "expose": { "fond": { "type": "COMBO", "defaut": "washi", "options": ["washi", "…"] },
+              "bords": { "…": "…" }, "conduite": { "…": "…" } },
   "roles": { "deroulement": { "workflow": "video-reveal-cinematic-dirige",
-                              "inputs": { "61.fond": "$fond", "61.conduite": "$conduite" } } },
+                              "inputs": { "61.fond": "$fond", "61.conduite": "$conduite" } },
+             "conclusion":  { "workflow": "video-reveal-closing", "inputs": { "…": "…" } },
+             "appel":       { "workflow": "video-appel-final",
+                              "inputs": { "7.texte": "$cta", "7.police": "$cta_police" } } },
   "controles": { "plan_tenu": [ { "id": "l_accroche_est_vue_a_2_5_s", "op": "gte" } ] } }
 ```
+
+Antoine, 2026-09-16 au soir : « les paramètres — le style de tracé, le fond,
+l'ambiance, la technique de style… — ne vivent pas dans le workflow mais se
+réconcilient avec le workflow quand le paramètre l'appelle ; ce qui permet de
+les interchanger, d'en créer de nouvelles, avec un rendu drastiquement différent
+si le style l'est ». Le plan n'expose donc que ce que le PLAN lit (durées, appel,
+structure, approche, format, graine, le choix de la technique) ; tout ce que la
+peinture lit (`fond`, `ambiance`, `bords`, `conduite`, …) est exposé par la
+technique qui le lit — l'encre expose `bords` et `conduite`, la brume `bords`
+seulement : sous elle, « qui commande » n'existe pas.
 
 * `rendre` nomme **soit** un `workflow`, **soit** un `role` + `technique` (un
   renvoi : la technique est choisie à l'appel, jamais écrite dans le plan) —
@@ -1105,8 +1134,15 @@ elle ajoute, et quels contrôles elle porte :
   `techniques: [{valeur, libelle, resume}]`.
 
 **Ajouter une technique** : un fichier dans `_data/techniques/`, sa copie dans
-`resources/techniques-exemples/`. Rien dans la chaîne, rien dans le code — la
-règle `flux-hors-du-code` du socle prend aussi les noms de techniques.
+`resources/techniques-exemples/`, qui tient les trois rôles (`deroulement`,
+`conclusion`, `appel`), expose ses propres réglages et porte sa liste
+`plan_tenu`. Rien dans la chaîne, rien dans le code — la règle
+`flux-hors-du-code` du socle prend aussi les noms de techniques. Éprouvé le
+2026-09-16 au soir : une technique `brume-et-encre` (le déroulement de la brume,
+la fermeture et l'appel de l'encre, un réglage `papier` à elle) déposée dans
+`_data/techniques/`, la passerelle relancée — elle est au menu, ses champs
+`selon` avec elle, et une production complète est livrée sans qu'une ligne de
+chaîne ni de code ait bougé.
 
 Deux chaînes sont livrées.
 

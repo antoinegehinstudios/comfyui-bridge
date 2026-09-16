@@ -256,13 +256,74 @@ def test_les_options_d_un_champ_commun_sont_celles_de_la_technique_choisie():
 # -- ce que la passerelle publie -----------------------------------------------
 
 
+def test_c_est_la_technique_qui_se_dit_par_defaut_pas_la_chaine():
+    """Antoine, 2026-09-16 au soir : les techniques ne vivent pas dans le
+    workflow. Une chaîne qui écrirait « trait » dans le défaut de son champ
+    porterait la dépendance qu'on lui refuse : le champ n'a pas de défaut, et
+    c'est la technique qui se dit « par_defaut » — elle comble le champ dans
+    les valeurs et dans les défauts publiés."""
+    sans_defaut = json.loads(json.dumps(CHAINE_A_TECHNIQUES))
+    del sans_defaut["expose"]["technique"]["defaut"]
+    chaine = noyau.lire(sans_defaut, "chaine-a-techniques")
+    voile = noyau.lire_technique({**TECHNIQUE_VOILE, "par_defaut": True})
+    trait = noyau.lire_technique(TECHNIQUE_TRAIT)
+    techniques = {"trait": trait, "voile": voile}
+    noyau.verifier_techniques(chaine, techniques)
+    assert voile.par_defaut is True and trait.par_defaut is False
+    assert noyau.technique_choisie(chaine, {}, techniques).nom == "voile"
+    assert noyau.technique_choisie(chaine, {"technique": "trait"}, techniques).nom == "trait"
+    assert noyau.defauts(chaine, voile)["technique"] == "voile"
+    valeurs, _ = noyau.valeurs(chaine, {}, {}, techniques)
+    assert valeurs["technique"] == "voile" and valeurs["fond"] == "voile-clair"
+    # Aucune ne se dit par défaut : la première par son nom, sans surprise.
+    muettes = {"trait": trait, "voile": noyau.lire_technique(TECHNIQUE_VOILE)}
+    assert noyau.technique_choisie(chaine, {}, muettes).nom == "trait"
+    # Deux qui se le disent : refusées à la lecture, en les nommant.
+    deux = {"trait": noyau.lire_technique({**TECHNIQUE_TRAIT, "par_defaut": True}), "voile": voile}
+    with pytest.raises(WorkflowMappingError, match="se disent par défaut"):
+        noyau.verifier_techniques(chaine, deux)
+    # Et « par_defaut » est vrai ou faux, rien d'autre.
+    with pytest.raises(WorkflowMappingError, match="par_defaut"):
+        noyau.lire_technique({**TECHNIQUE_TRAIT, "par_defaut": "oui"})
+
+
+def test_le_formulaire_s_ouvre_sur_la_technique_qui_se_dit_par_defaut():
+    """Le champ de technique n'a pas de défaut écrit dans la chaîne : /io s'ouvre
+    sur la technique qui se dit « par_defaut », ses champs avec elle, et la
+    vitrine le dit — sans quoi un menu s'ouvrirait sur la première venue."""
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="comfybridge_techniques_defaut_"))
+    _ecrire(tmp, techniques=(TECHNIQUE_TRAIT, {**TECHNIQUE_VOILE, "par_defaut": True}))
+    sans_defaut = json.loads(json.dumps(CHAINE_A_TECHNIQUES))
+    del sans_defaut["expose"]["technique"]["defaut"]
+    (tmp / "chaine-a-techniques.json").write_text(json.dumps(sans_defaut), encoding="utf-8")
+    settings = Settings(comfy_backend="cli", dry_run=True,
+                        comfyui_base_url="http://127.0.0.1:9", comfyui_request_timeout_s=1,
+                        hermes_db=tmp / "hermes.sqlite3", comfy_output_dir=tmp / "out",
+                        hermes_mode="local", workflows_dir=tmp / "workflows",
+                        tranche_octets=0)
+    with TestClient(create_app(settings)) as client:
+        io = client.get("/v1/workflows/chaine-a-techniques/io").json()
+        champs = {e["param"]: e for e in io["intent_inputs"]}
+        assert champs["technique"]["value"] == "voile"
+        assert champs["fond"]["value"] == "voile-clair"          # ouvert comme le voile le déclare
+        vitrine = client.get("/v1/workflows").json()["workflows"]["chaine-a-techniques"]
+        assert [(t["valeur"], t["par_defaut"]) for t in vitrine["techniques"]] ==             [("trait", False), ("voile", True)]
+        assert vitrine["defaults"]["technique"] == "voile"
+        # Sans nommer de technique, c'est le voile qui peint.
+        apercu = client.post("/v1/preview", json={"workflow": "chaine-a-techniques"}).json()
+        peinture = [e for e in apercu["etapes"] if e["id"] == "peinture"][0]
+        assert peinture["workflow"] == "graphe-au-voile"
+
+
 def test_le_catalogue_publie_les_techniques_d_un_mode(atelier):
     """Un lanceur qui tiendrait sa propre liste de techniques la verrait vieillir
     au premier fichier ajouté."""
     entree = atelier.get("/v1/workflows").json()["workflows"]["chaine-a-techniques"]
     assert entree["techniques"] == [
-        {"valeur": "trait", "libelle": "Au trait", "resume": "un trait sec sur un papier"},
-        {"valeur": "voile", "libelle": "Au voile", "resume": "un voile qui se lève"}]
+        {"valeur": "trait", "libelle": "Au trait", "resume": "un trait sec sur un papier",
+         "par_defaut": False},
+        {"valeur": "voile", "libelle": "Au voile", "resume": "un voile qui se lève",
+         "par_defaut": False}]
     # Les étapes annoncent le graphe de la technique par DÉFAUT, et le rôle.
     peinture = [e for e in entree["etapes"] if e["id"] == "peinture"][0]
     assert peinture["workflow"] == "graphe-au-trait" and peinture["role"] == "peinture"

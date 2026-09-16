@@ -84,13 +84,17 @@ est une entrée de plus dans un catalogue ou une table, jamais un défaut de moi
 Depuis le 2026-09-16, **la chaîne ne nomme aucune TECHNIQUE** (Antoine : « la
 mention de brume ne doit pas être tenue par le workflow de la passerelle : cela
 veut dire qu'il porte une dépendance à la brume et devra se faire doublon pour
-faire autrement ») : ses étapes `deroulement` et `conclusion` nomment un RÔLE et
-la technique qui le tient (`"role"` + `"technique": "$technique"`), et
+faire autrement ») : ses étapes `deroulement`, `conclusion` et `appel` nomment
+un RÔLE et la technique qui le tient (`"role"` + `"technique": "$technique"`), et
 `plan_tenu` prend la liste de contrôles de cette technique. Quel graphe tient
-chaque rôle, ses réglages propres et ses contrôles vivent dans
-`_data/techniques/<nom>.json` — une technique de plus est un FICHIER de plus, et
-`video-revelation-brume` a disparu au profit de la technique `brume`. Le témoin
-épingle donc les deux : le plan dans la chaîne, l'encre dans sa technique.
+chaque rôle, ses réglages propres (`fond`, `ambiance`, `bords`, `conduite`… :
+ce que la PEINTURE lit ne vit pas dans le plan) et ses contrôles vivent dans
+`_data/techniques/<nom>.json` — une technique de plus est un FICHIER de plus,
+`video-revelation-brume` a disparu au profit de la technique `brume`, et le
+champ `technique` du plan n'a PAS de défaut : c'est la technique qui se dit
+`par_defaut` (Antoine, 2026-09-16 au soir : « les paramètres ne vivent pas dans
+le workflow mais se réconcilient avec lui quand le paramètre l'appelle »). Le
+témoin épingle donc les deux : le plan dans la chaîne, l'encre dans sa technique.
 Une SEULE exception depuis : le FORMAT par défaut est passé au portrait 720p à
 30 i/s (`width` 720, `height` 1280, `fps` 30) le 2026-09-15 au soir, à la demande
 d'Antoine — un format est un réglage d'usage, pas un trait du style, et rien de

@@ -38,14 +38,20 @@ PLAN = [("analyse", "rendre"), ("culture", "rendre"), ("intention", "rendre"),
         ("raccord", "extraire_queue"), ("conclusion", "rendre"), ("appel", "rendre"),
         ("montage", "recoller"), ("controle", "verifier")]
 
-# Les deux étapes que le plan confie à une TECHNIQUE, par leur rôle.
-ROLES_DU_PLAN = {"deroulement": "deroulement", "conclusion": "conclusion"}
+# Les trois étapes que le plan confie à une TECHNIQUE, par leur rôle.
+# DÉCISION ÉCRITE, 2026-09-16 au soir (Antoine : « les paramètres — le style de
+# tracé, le fond, l'ambiance, la technique de style… — ne vivent pas dans le
+# workflow mais se réconcilient avec le workflow quand le paramètre l'appelle ») :
+# l'appel final est un rôle comme les deux autres — le plan ne nomme plus
+# aucun graphe de peinture ni d'écriture.
+ROLES_DU_PLAN = {"deroulement": "deroulement", "conclusion": "conclusion", "appel": "appel"}
 
 # LES DÉFAUTS COMMUNS — ceux du plan, que toute technique partage.
 DEFAUTS_DU_PLAN = {
     "duration_s": 45, "contemplation_s": 4, "conclusion_s": 8, "cta": "", "cta_police": "",
     "style_narratif": "reseau-social", "style_approche": "peinture-calme",
-    "conduite": "le plan", "bords": "fondus",
+    # « conduite » et « bords » ne sont plus ici : ce sont des réglages de la
+    # PEINTURE (2026-09-16 au soir), exposés par les techniques qui les lisent.
     # DÉCISION ÉCRITE, 2026-09-15 au soir (Antoine : « valeurs par défaut :
     # portrait, 720p, 30 i/s ») : le format n'est pas un trait du style ink, c'est
     # un réglage d'usage — orientation et résolution, vocabulaire « formats » de
@@ -53,17 +59,19 @@ DEFAUTS_DU_PLAN = {
     # à 30 i/s ; le nœud d'encre accepte un pas de 8 en largeur (720 = 90 × 8).
     "width": 720, "height": 1280, "fps": 30, "seed": 71,
     # DÉCISION ÉCRITE, 2026-09-16 : la technique est un CHOIX, et l'encre est
-    # celle qui s'ouvre — c'est le rendu livré le 2026-09-15 à midi.
-    "technique": "encre",
+    # celle qui s'ouvre — c'est le rendu livré le 2026-09-15 à midi. Depuis le
+    # soir, ce n'est plus la chaîne qui la nomme : le champ « technique » n'a
+    # PAS de défaut, c'est l'encre qui se dit « par_defaut » dans son fichier.
 }
 
 # LES DÉFAUTS DU STYLE INK — ceux des vidéos livrées le 2026-09-15 à midi.
 DEFAUTS_INK = {"fond": "washi", "ambiance": "lanterne", "encre": "lavis",
-               "negatif": "non", "rendu": "ink-bleed"}
+               "negatif": "non", "rendu": "ink-bleed",
+               "bords": "fondus", "conduite": "le plan"}
 
 BORNES_DU_PLAN = {"contemplation_s": (3, 5), "conclusion_s": (0, 30), "duration_s": (5, 79)}
-OPTIONS_DU_PLAN = {"conduite": ["le plan", "la camera"], "bords": ["fondus", "francs"]}
 OPTIONS_INK = {
+    "conduite": ["le plan", "la camera"], "bords": ["fondus", "francs"],
     "fond": ["washi", "washi-sans-lampe", "sepia", "gris-atelier"],
     "ambiance": ["lanterne", "chandelle", "atelier", "selon-le-fond"],
     "encre": ["lavis", "trait-sec", "encre-dense"],
@@ -81,7 +89,6 @@ CONTRAT_DU_PLAN = {
                                       "62.markers_json": "$analyse.recit.markers_json",
                                       "62.culture_json": "$culture.recit.culture_json",
                                       "62.anchors_json": "$culture.recit.anchors_json"}),
-    "appel": ("video-appel-final", {"7.texte": "$cta", "7.police": "$cta_police"}),
 }
 
 # CE QUE L'ENCRE MET DERRIÈRE CHAQUE RÔLE : le graphe, et ses entrées de nœud.
@@ -97,6 +104,7 @@ CONTRAT_DE_L_ENCRE = {
         "6.fond": "$fond", "6.ambiance": "$ambiance",
         "6.depart_s": "$deroulement.recit.duree_retenue_s",
         "6.appel_texte": "$cta", "6.fermeture_json": "$deroulement.recit.fermeture_json"}),
+    "appel": ("video-appel-final", {"7.texte": "$cta", "7.police": "$cta_police"}),
 }
 
 CONTROLES_PLAN_VALIDE = [
@@ -147,11 +155,17 @@ def test_le_plan_est_agnostique_et_ne_nomme_aucune_technique(ink):
     # …et le contrôle de la peinture prend sa liste chez la technique.
     plan_tenu = [e for e in chaine.etapes if e.id == "plan_tenu"][0]
     assert plan_tenu.params == {"technique": "$technique", "controles": "plan_tenu"}
-    # Aucun nom de graphe de peinture ne reste dans le plan.
-    ecrit = json.dumps(ink, ensure_ascii=False)
+    # Aucun nom de graphe de peinture ni d'écriture ne reste dans le plan, et
+    # aucun nom de technique non plus — hors des notes, qui racontent l'histoire.
+    sans_notes = json.dumps({k: v for k, v in ink.items() if k != "notes"}, ensure_ascii=False)
     for graphe in ("video-reveal-cinematic-dirige", "video-reveal-closing",
-                   "video-reveal-brume-dirige", "video-reveal-brume-closing"):
-        assert graphe not in ecrit, graphe
+                   "video-reveal-brume-dirige", "video-reveal-brume-closing",
+                   "video-appel-final"):
+        assert graphe not in sans_notes, graphe
+    for mot in ("encre", "brume"):
+        assert mot not in sans_notes.lower(), mot
+    # Le champ de technique ne porte AUCUN défaut : c'est la technique qui se dit.
+    assert "defaut" not in ink["expose"]["technique"]
 
 
 def test_les_defauts_communs_sont_ceux_du_plan(ink):
@@ -160,13 +174,11 @@ def test_les_defauts_communs_sont_ceux_du_plan(ink):
     s'ouvre sur l'encre."""
     expose = ink["expose"]
     assert expose["image"] == {"media": "image", "requis": True, "libelle": "L'image à révéler"}
-    defauts = {k: v["defaut"] for k, v in expose.items() if k != "image"}
+    defauts = {k: v["defaut"] for k, v in expose.items() if k not in ("image", "technique")}
     assert defauts == DEFAUTS_DU_PLAN
     for champ, (mini, maxi) in BORNES_DU_PLAN.items():
         assert (expose[champ]["min"], expose[champ]["max"]) == (mini, maxi), champ
-    for champ, options in OPTIONS_DU_PLAN.items():
-        assert expose[champ]["options"][0] == options[0], champ      # le défaut en tête
-        assert set(expose[champ]["options"]) >= set(options), champ  # rien de retiré
+    assert "conduite" not in expose and "bords" not in expose        # chez les techniques
     assert expose["style_narratif"]["options_depuis"] == {"menu": "style_narratif"}
     assert expose["style_approche"]["options_depuis"] == {"menu": "style_approche"}
     # La liste des techniques n'est écrite nulle part : elle est celle des fichiers.
@@ -194,6 +206,7 @@ def test_chaque_etape_ne_recoit_que_le_contrat_declare(ink):
     assert etapes["conclusion"]["rendre"]["media"] == {"video": "$raccord.depot"}
     assert "inputs" not in etapes["conclusion"]["rendre"]
     assert etapes["appel"]["rendre"]["media"] == {"video": "$conclusion.livrable"}
+    assert "inputs" not in etapes["appel"]["rendre"]
     assert etapes["appel"]["quand"] == "$cta"
     # DÉCISION ÉCRITE, 2026-09-16 (Antoine : « à la toute fin, tu éprouveras avec
     # une vidéo 4K/60 fps de 20 s ») : L'APPEL NE CHARGE PLUS LA CONCLUSION
@@ -271,8 +284,13 @@ def test_la_chaine_et_ses_techniques_tiennent_ensemble(ink):
         techniques[lue.nom] = lue
     assert "encre" in techniques and len(techniques) >= 2
     noyau.verifier_techniques(chaine, techniques)
-    # L'encre est celle qui s'ouvre.
+    # L'encre est celle qui s'ouvre — parce qu'elle SE DIT par défaut, pas
+    # parce que la chaîne la nomme.
+    assert techniques["encre"].par_defaut is True
+    assert sum(1 for t in techniques.values() if t.par_defaut) == 1
     assert noyau.technique_choisie(chaine, {}, techniques).nom == "encre"
+    assert noyau.defauts(chaine, techniques["encre"])["technique"] == "encre"
+    assert noyau.valeurs(chaine, {"image": "x.jpg"}, {}, techniques)[0]["technique"] == "encre"
     # Et le socle de l'encre est bien ce que le mode propose par défaut.
     assert {k: v for k, v in noyau.defauts(chaine, techniques["encre"]).items()
             if k in DEFAUTS_INK} == DEFAUTS_INK
@@ -291,8 +309,8 @@ def test_le_graphe_local_du_deroulement_porte_les_memes_defauts():
     assert noeud["class_type"] == "RevealCinematic"
     for cle in ("fond", "ambiance", "encre", "rendu", "negatif"):
         assert noeud["inputs"][cle] == DEFAUTS_INK[cle], cle
-    assert noeud["inputs"]["conduite"] == DEFAUTS_DU_PLAN["conduite"]
-    assert noeud["inputs"]["bords"] == DEFAUTS_DU_PLAN["bords"]
+    assert noeud["inputs"]["conduite"] == DEFAUTS_INK["conduite"]
+    assert noeud["inputs"]["bords"] == DEFAUTS_INK["bords"]
     assert noeud["inputs"]["contemplation_s"] == DEFAUTS_DU_PLAN["contemplation_s"]
     fermeture = json.loads((graphes / "video-reveal-closing.json").read_text(encoding="utf-8"))["6"]
     assert fermeture["class_type"] == "InkClosing"
