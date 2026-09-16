@@ -1138,11 +1138,28 @@ seulement : sous elle, « qui commande » n'existe pas.
 `conclusion`, `appel`), expose ses propres réglages et porte sa liste
 `plan_tenu`. Rien dans la chaîne, rien dans le code — la règle
 `flux-hors-du-code` du socle prend aussi les noms de techniques. Éprouvé le
-2026-09-16 au soir : une technique `brume-et-encre` (le déroulement de la brume,
-la fermeture et l'appel de l'encre, un réglage `papier` à elle) déposée dans
-`_data/techniques/`, la passerelle relancée — elle est au menu, ses champs
-`selon` avec elle, et une production complète est livrée sans qu'une ligne de
+2026-09-16 au soir, deux fois. D'abord `brume-et-encre` (le déroulement de la
+brume, la fermeture et l'appel de l'encre, un réglage `papier` à elle) : déposée
+dans `_data/techniques/`, la passerelle relancée — elle est au menu, ses champs
+`selon` avec elle, maestro les montre ; ses deux productions d'essai ont été
+REFUSÉES par le contrôle de caméra de la brume elle-même (« la_camera_ne_saccade_pas »,
+1,56 puis 1,61 pour 1,0 admis — le travers connu de la brume sur cette œuvre) :
+le câblage a joué, la technique a jugé sa peinture ; elle reste en exemple
+(`resources/techniques-exemples/brume-et-encre.json`), hors du menu vivant. Puis
+`livre` (voir ci-dessous) : deux nœuds neufs, deux graphes, deux entrées de
+réconciliation, un fichier — et une production complète, sans qu'une ligne de
 chaîne ni de code ait bougé.
+
+**Les pages d'un livre** (`livre`, exemple `resources/techniques-exemples/livre.json`) :
+Antoine, 2026-09-16 au soir : « essayer un nouveau mode : on tourne les pages d'un
+livre pour découvrir petit à petit les éléments, mêmes étapes, même révélation
+progressive — estimer à quel point la répartition socle / paramètres est
+bonne ». Le paquet de nœuds porte `RevealLivre` (chaque temps du plan tourne une
+page et découvre son élément ; la vue se resserre sur la page en cours puis
+recule vers l'œuvre entière, découverte par la dernière page) et `LivreClosing`
+(le livre se referme, la couverture reste vivante pour l'appel) ; la technique
+expose `papier` et porte SES contrôles (pages, couverture, contemplation). Le
+plan lu est celui de l'intention — `beats`, `temps`, `structure` — tel quel.
 
 Deux chaînes sont livrées.
 
