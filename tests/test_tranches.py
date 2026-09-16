@@ -767,6 +767,23 @@ def test_une_tranche_qui_echoue_avec_de_la_place_n_est_pas_reprise(banc, monkeyp
     assert not [l for l in job["logs"] if "reprise" in str(l)]
 
 
+def test_aucune_tranche_ne_depasse_le_budget_meme_d_une_image(banc):
+    """Le compte garantit que la plus longue tranche (ceil(images / N) images)
+    tient dans le budget. Un compte pris sur le poids total laissait la
+    dernière image déborder — mesuré : 30 s d'attente de place pour rien."""
+    from comfyui_bridge.adapter.chaines import RunnerDeChaines
+    # 7 700 000 octets : 33 images au plus par tranche (7 700 000 // 230 400).
+    # 100 images en 3 tranches feraient des tranches de 34 images, 7 833 600
+    # octets — au-dessus du budget. Il en faut 4.
+    runner = RunnerDeChaines(banc(7_700_000).app.state.container)
+    tranches = runner.tranches_pour("video-tranchable", {"duration_s": 2})
+    assert tranches["nombre"] == 4
+    assert math.ceil(tranches["images"] / tranches["nombre"]) * tranches["poids"] <= 7_700_000
+    # Le budget de trois tranches exactes reste à trois : 34 images × 230 400 = 7 833 600 ≤ 8 000 000.
+    assert RunnerDeChaines(banc(BUDGET_POUR_TROIS).app.state.container).tranches_pour(
+        "video-tranchable", {"duration_s": 2})["nombre"] == 3
+
+
 # -- ce qu'un nœud déclare, et la fusion des récits ----------------------------
 
 

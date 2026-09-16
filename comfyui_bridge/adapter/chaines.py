@@ -611,11 +611,20 @@ class RunnerDeChaines:
                          f"({materiel.dire_la_marge(mesure)}, facteur {facteur:g})")
             if parent_id is not None:
                 c.store.append_log(parent_id, f"étape {etape.id} : budget {du_moment}")
-        n = int(math.ceil(images * poids / budget))
+        # Le compte est celui qui garantit qu'AUCUNE tranche ne dépasse le
+        # budget, pas même d'une image : la plus longue a ceil(images / N)
+        # images, et c'est elle que la garde de place mesure ensuite. Un compte
+        # pris sur le poids total (ceil(images × poids / budget)) laissait la
+        # dernière image d'une tranche déborder — mesuré : 84 images à 2 de
+        # crête, 15,6 Gio attendus pour 15,5 de marge, 30 s d'attente pour rien.
+        def compte(pour: int) -> int:
+            return int(math.ceil(images / max(1, pour // poids)))
+
+        n = compte(budget)
         if n <= 1:
             return None
         if n > TRANCHES_MAX:
-            if du_moment and int(math.ceil(images * poids / budget_declare)) <= TRANCHES_MAX:
+            if du_moment and compte(budget_declare) <= TRANCHES_MAX:
                 raise MediaAssemblyError(
                     f"étape {etape.id!r} ({nom}) : il faudrait {n} tranches pour tenir "
                     f"{images} images de {int(largeur)}×{int(hauteur)} dans la marge du "
