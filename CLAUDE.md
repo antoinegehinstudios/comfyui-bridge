@@ -106,8 +106,10 @@ réussit, et ce fichier est son livrable comme son `recit` (`_principal`,
 graphe appelé directement aussi** (`POST /v1/render`, un mode de n'importe quelle
 catégorie, un rejeu : le graphe devient une chaîne d'une seule étape « rendu ») —
 quand le nœud le déclare (entrées littérales `segment_index` + `segment_count`,
-et `duree_max_s` qui borne le compte) et que la mémoire l'oblige
-(`COMFY_TRANCHE_GO`, 8 Gio par défaut) : N runs d'une même simulation, recollés
+et `duree_max_s` — borne absolue — ou `allonge_max_s` — de combien au plus il
+allonge la durée demandée — qui bornent le compte ; la taille d'un graphe qui la
+prend d'une vidéo d'entrée se lit sur cette vidéo) et que la mémoire l'oblige
+(budget calculé sur `_data/materiel.local.json`) : N runs d'une même simulation, recollés
 par copie de flux (aucune image ré-encodée), récits fusionnés. Le job porte alors
 `etapes[].job_ids` et `etapes[].tranches` (un `job_id` par tranche, tous visibles
 dans `/v1/jobs`) ; voir « Rendu par tranches » dans le README.

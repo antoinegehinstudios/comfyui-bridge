@@ -859,19 +859,32 @@ et les recolle.
 entrées et **en littéral**, `segment_index` et `segment_count` : la tranche *i*
 de *N* rend les images `[n·i/N, n·(i+1)/N)` de la même simulation — le grain,
 la caméra et la lumière sont ceux de la seconde ABSOLUE, pas du début de la
-tranche, sans quoi les parts ne se rejoindraient pas. Il déclare aussi
-`duree_max_s`, la durée au-delà de laquelle il n'allonge plus : c'est elle qui
-borne le compte, puisque c'est le nœud qui décide de la durée retenue. Une
-entrée **liée** à un autre nœud (`["12", 0]`) ne compte pas : on ne peut pas y
-écrire. Sans ces deux entrées, rien n'est tranché — trancher un graphe qui ne
-sait pas le faire rendrait N fois la vidéo entière.
+tranche, sans quoi les parts ne se rejoindraient pas. Il déclare aussi de
+combien il peut ALLONGER, puisque c'est lui qui décide de la durée retenue :
+`duree_max_s`, la durée ABSOLUE au-delà de laquelle il n'allonge plus (le
+déroulement, qui allonge un plan pour ne précipiter aucun temps), ou
+`allonge_max_s`, de combien AU PLUS il allonge au-delà de la durée demandée
+(une conclusion, qui garde la page vivante le temps que l'appel s'écrive :
+`frames + allonge_max_s × fps` images, jamais une de plus — le nœud tient la
+borne qu'il déclare). Une entrée **liée** à un autre nœud (`["12", 0]`) ne
+compte pas : on ne peut pas y écrire. Sans `segment_index`/`segment_count`,
+rien n'est tranché — trancher un graphe qui ne sait pas le faire rendrait N fois
+la vidéo entière.
+
+**La taille.** Elle vient des réglages du run (`width`, `height`, `fps`) ou des
+défauts déclarés du mode. Un graphe qui prend sa taille d'une **vidéo d'entrée**
+(une conclusion reprend la queue du déroulement telle qu'elle est) ne la dit
+pas : la passerelle la lit alors sur la vidéo elle-même — un livrable d'étape,
+ou un dépôt qu'elle a fait chez le moteur et dont elle garde le chemin — et le
+journal le dit (« taille lue sur la vidéo d'entrée « raccord-queue.mp4 » —
+720×1280 à 30 i/s »). Rien de lisible : le run part entier, en le disant.
 
 **Le budget.** Il vient du MATÉRIEL déclaré du poste (voir « Le matériel du
 poste », plus bas) :
 
 ```
 budget = (memoire.totale_octets − memoire.reservee_octets) / memoire.facteur_de_crete
-images = ceil(max(duration_s, duree_max_s) × fps)
+images = ceil(max(duration_s + allonge_max_s, duree_max_s) × fps)
 N      = ceil(images × largeur × hauteur × 12 / budget)
 ```
 

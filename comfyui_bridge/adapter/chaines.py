@@ -95,6 +95,10 @@ class RunnerDeChaines:
     def __init__(self, container: Any) -> None:
         self._c = container
         self._force = False
+        # Ce que la passerelle a DÉPOSÉ chez le moteur, et d'où : un graphe ne
+        # cite que le nom rendu, mais c'est sur le fichier qu'on mesure ce que
+        # le graphe ne dit pas (la taille d'une vidéo d'entrée, avant le run).
+        self._deposes: dict[str, Path] = {}
 
     # -- conduite -------------------------------------------------------------
 
@@ -431,7 +435,7 @@ class RunnerDeChaines:
         reglages.pop("label", None)
         reglages.pop("constraints", None)
         genre = reglages.pop("kind", None)
-        tranches = self._tranches_de(parent_id, etape, nom, reglages)
+        tranches = self._tranches_de(parent_id, etape, nom, reglages, media)
         if tranches is None:
             fini = self._executer_run(parent_id, etape, nom, media, genre, reglages,
                                       f"{label}-{etape.id}"[:40], etapes, rang)
@@ -507,16 +511,18 @@ class RunnerDeChaines:
     # nœud décide lui-même de la durée retenue.
 
     def tranches_pour(self, nom: str, reglages: dict[str, Any],
-                      etiquette: str = "rendu") -> dict[str, Any] | None:
+                      etiquette: str = "rendu",
+                      media: dict[str, str] | None = None) -> dict[str, Any] | None:
         """Le découpage qu'un rendu DIRECT de ce graphe demanderait — la même
         règle que pour une étape de chaîne, pour n'importe quel appelant (un
         mode de maestro de n'importe quelle catégorie, un appel d'API, un
         rejeu) : le mécanisme ne connaît que le graphe et son budget."""
         return self._tranches_de(None, noyau.Etape(id=etiquette, genre="rendre", params={}),
-                                 nom, reglages)
+                                 nom, reglages, media)
 
     def _tranches_de(self, parent_id: str | None, etape: noyau.Etape, nom: str,
-                     reglages: dict[str, Any]) -> dict[str, Any] | None:
+                     reglages: dict[str, Any],
+                     media: dict[str, str] | None = None) -> dict[str, Any] | None:
         """Combien de tranches il faut pour que ce run tienne dans le budget —
         ou None quand il tient d'un seul tenant, ou que le nœud ne sait pas
         trancher (et alors le run part entier, comme avant)."""
@@ -548,16 +554,42 @@ class RunnerDeChaines:
 
         largeur, hauteur, fps = nombre("width"), nombre("height"), nombre("fps")
         if largeur <= 0 or hauteur <= 0 or fps <= 0:
+            # Un graphe qui prend sa taille (ou sa cadence) d'une VIDÉO
+            # D'ENTRÉE ne la porte pas dans ses réglages — une conclusion
+            # reprend la queue du déroulement telle qu'elle est. Elle se lit
+            # alors sur la vidéo elle-même, avant le run.
+            lu = self._mesure_du_media(media)
+            if lu:
+                largeur = largeur if largeur > 0 else float(lu.get("width") or 0)
+                hauteur = hauteur if hauteur > 0 else float(lu.get("height") or 0)
+                fps = fps if fps > 0 else float(lu.get("fps") or 0)
+                if parent_id is not None and largeur > 0 and hauteur > 0 and fps > 0:
+                    c.store.append_log(
+                        parent_id,
+                        f"étape {etape.id} : taille lue sur la vidéo d'entrée "
+                        f"« {lu['nom']} » — {int(largeur)}×{int(hauteur)} à {fps:g} i/s")
+        if largeur <= 0 or hauteur <= 0 or fps <= 0:
             if parent_id is not None:
                 c.store.append_log(parent_id, f"étape {etape.id} : pas de tranches — largeur, "
                                               f"hauteur ou cadence inconnues avant le run")
             return None
-        plafond = (graphe.get(noeud) or {}).get("inputs", {}).get("duree_max_s")
-        try:
-            plafond = 0.0 if isinstance(plafond, list) else float(plafond or 0)
-        except (TypeError, ValueError):
-            plafond = 0.0
-        duree = max(nombre("duration_s"), plafond)
+
+        def declare(cle: str) -> float:
+            valeur = (graphe.get(noeud) or {}).get("inputs", {}).get(cle)
+            try:
+                return 0.0 if isinstance(valeur, list) else float(valeur or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        # Deux bornes qu'un nœud déclare, en littéral : `duree_max_s`, la durée
+        # ABSOLUE au-delà de laquelle il n'allonge plus ; `allonge_max_s`, de
+        # combien AU PLUS il allonge au-delà de la durée demandée (une
+        # conclusion qui garde la page vivante le temps de l'appel). C'est le
+        # plus grand des deux comptes qui fixe les tranches : jamais moins
+        # d'images que le nœud n'en rendra.
+        plafond, allonge = declare("duree_max_s"), declare("allonge_max_s")
+        demandee = nombre("duration_s")
+        duree = max(demandee + allonge if demandee > 0 else 0.0, plafond)
         if duree <= 0:
             return None
         images = int(math.ceil(duree * fps))
@@ -781,10 +813,33 @@ class RunnerDeChaines:
             raise MediaAssemblyError(
                 f"dépôt de {fichier.name} impossible : aucun moteur n'est configuré")
         try:
-            return upload_image(base, fichier.name, fichier.read_bytes(), True, 300.0)
+            nom = upload_image(base, fichier.name, fichier.read_bytes(), True, 300.0)
         except Exception as exc:
             raise MediaAssemblyError(
                 f"dépôt de {fichier.name} chez le moteur refusé : {exc}") from exc
+        self._deposes[str(nom)] = fichier
+        return nom
+
+    def _mesure_du_media(self, media: dict[str, str] | None) -> dict[str, Any] | None:
+        """Ce qu'une vidéo d'entrée de l'étape dit d'elle-même — taille et
+        cadence — quand le graphe ne le dit pas dans ses réglages.
+
+        Le média est un chemin local (le livrable d'une étape précédente) ou le
+        nom d'un dépôt que la passerelle a fait elle-même : elle sait d'où il
+        vient. Rien de lisible : None, et le run partira entier, en le disant.
+        """
+        for valeur in (media or {}).values():
+            chemin = Path(str(valeur))
+            fichier = chemin if chemin.is_file() else self._deposes.get(str(valeur))
+            if fichier is None or not fichier.is_file():
+                continue
+            try:
+                mesure = montage_video.mesurer(fichier)
+            except MediaAssemblyError:
+                continue
+            if mesure.get("width") and mesure.get("height"):
+                return {**mesure, "nom": fichier.name}
+        return None
 
 
 # -- tranches : ce qu'un nœud déclare, et comment ses récits se fusionnent -----

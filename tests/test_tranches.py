@@ -57,6 +57,17 @@ GRAPHE_TRANCHABLE = {
           "inputs": {"filename_prefix": "cortex/tranche", "images": [NOEUD, 0]}},
 }
 
+# Le même nœud, qui déclare ALLONGER au-delà de la durée demandée plutôt
+# qu'une borne absolue : une conclusion qui garde la page vivante pour l'appel.
+ALLONGE_MAX = 2.0
+GRAPHE_QUI_ALLONGE = {
+    NOEUD: {"class_type": "RenduDEssaiParTranches",
+            "inputs": {"segment_index": 0, "segment_count": 1,
+                       "allonge_max_s": ALLONGE_MAX, "graine": 71}},
+    "9": {"class_type": "SaveVideo",
+          "inputs": {"filename_prefix": "cortex/tranche", "images": [NOEUD, 0]}},
+}
+
 # Le récit qu'écrit CHAQUE tranche : des mesures prises sur ses images à elle.
 # Le minimum d'encre est sur la deuxième, la lumière la plus basse aussi, la
 # plus haute également — de quoi voir que la fusion va chercher l'extrême là où
@@ -175,6 +186,8 @@ def banc():
         tmp = pathlib.Path(tempfile.mkdtemp(prefix="comfybridge_tranches_"))
         (tmp / "video-tranchable.json").write_text(json.dumps(GRAPHE_TRANCHABLE),
                                                    encoding="utf-8")
+        (tmp / "video-qui-allonge.json").write_text(json.dumps(GRAPHE_QUI_ALLONGE),
+                                                    encoding="utf-8")
         (tmp / "chaine-tranchee.json").write_text(json.dumps(CHAINE_TRANCHEE), encoding="utf-8")
         (tmp / "chaine-non-tranchee.json").write_text(json.dumps(CHAINE_NON_TRANCHEE),
                                                       encoding="utf-8")
@@ -191,6 +204,17 @@ def banc():
                     "kind": "video", "workflow": "workflow_template.json",
                     "bindings": {"filename_prefix": {"node": "9", "input": "filename_prefix"}},
                     "defaults": {"width": LARGEUR, "height": HAUTEUR, "fps": CADENCE}},
+                # Le nœud qui allonge la durée demandée d'au plus ALLONGE_MAX.
+                "video-qui-allonge": {
+                    "kind": "video", "workflow": str(tmp / "video-qui-allonge.json"),
+                    "bindings": {"filename_prefix": {"node": "9", "input": "filename_prefix"}},
+                    "defaults": {"width": LARGEUR, "height": HAUTEUR, "fps": CADENCE}},
+                # Le graphe tranchable SANS taille déclarée : celle d'un graphe
+                # qui la prend d'une vidéo d'entrée.
+                "video-sans-taille": {
+                    "kind": "video", "workflow": str(tmp / "video-tranchable.json"),
+                    "bindings": {"filename_prefix": {"node": "9", "input": "filename_prefix"}},
+                    "defaults": {}},
                 "chaine-tranchee": {"kind": "video", "chaine": str(tmp / "chaine-tranchee.json"),
                                     "titre": "Chaîne tranchée", "categorie": "essais",
                                     "ordre": 1},
@@ -520,6 +544,55 @@ def test_le_decoupage_se_demande_sans_job_et_sans_journal(banc):
                                 {"duration_s": 2, "width": 0, "height": 0, "fps": 0}) is None
     assert runner.tranches_pour("jamais-declare", reglages) is None
     assert not atelier.get("/v1/jobs").json()["jobs"]
+
+
+def test_un_noeud_qui_allonge_declare_de_combien(banc):
+    """`allonge_max_s` : le nœud allonge d'au plus tant AU-DELÀ de la durée
+    demandée — le compte des tranches le prend en plus, là où `duree_max_s`
+    est une borne absolue. Jamais moins d'images que le nœud n'en rendra."""
+    from comfyui_bridge.adapter.chaines import RunnerDeChaines
+    runner = RunnerDeChaines(banc(BUDGET_POUR_TROIS).app.state.container)
+    # 2 s demandées + 2 s d'allonge = 100 images : trois tranches, comme le
+    # graphe qui déclare une borne absolue de 4 s.
+    tranches = runner.tranches_pour("video-qui-allonge", {"duration_s": 2})
+    assert tranches["nombre"] == 3
+    assert tranches["images"] == int(math.ceil((2 + ALLONGE_MAX) * CADENCE))
+    # 0,5 s demandée + 2 s d'allonge : 63 images, deux tranches — l'allonge
+    # s'ajoute à la durée demandée, elle ne la remplace pas.
+    moins = runner.tranches_pour("video-qui-allonge", {"duration_s": 0.5})
+    assert moins["images"] == int(math.ceil((0.5 + ALLONGE_MAX) * CADENCE)) == 63
+    assert moins["nombre"] == 2
+    # Sans durée demandée, rien à compter : le run part entier.
+    assert runner.tranches_pour("video-qui-allonge", {}) is None
+
+
+@SANS_FFMPEG
+def test_la_taille_se_lit_sur_la_video_d_entree_quand_le_graphe_ne_la_dit_pas(banc):
+    """Une conclusion reprend la queue du déroulement telle qu'elle est : son
+    graphe ne porte ni largeur ni hauteur. La passerelle les lit sur la vidéo
+    d'entrée AVANT le run — sans quoi une conclusion 4K partirait entière."""
+    from comfyui_bridge.adapter.chaines import RunnerDeChaines
+    atelier = banc(BUDGET_POUR_TROIS)
+    runner = RunnerDeChaines(atelier.app.state.container)
+    # Sans taille et sans vidéo : rien à mesurer, le run part entier.
+    assert runner.tranches_pour("video-sans-taille", {"duration_s": 2}) is None
+    video = atelier.tmp / "queue.mp4"
+    subprocess.run([montage_video.outil(), "-y", "-v", "error", "-f", "lavfi",
+                    "-i", f"testsrc=size={LARGEUR}x{HAUTEUR}:rate={CADENCE}:duration=1",
+                    "-pix_fmt", "yuv420p", str(video)], check=True)
+    tranches = runner.tranches_pour("video-sans-taille", {"duration_s": 2},
+                                    media={"video": str(video)})
+    assert tranches is not None and tranches["nombre"] == 3
+    assert (tranches["largeur"], tranches["hauteur"], tranches["fps"]) == (LARGEUR, HAUTEUR, CADENCE)
+    # Une cadence donnée par le run l'emporte sur celle de la vidéo ; la taille
+    # manquante vient toujours de la vidéo.
+    moins_vite = runner.tranches_pour("video-sans-taille", {"duration_s": 2, "fps": 5},
+                                      media={"video": str(video)})
+    assert moins_vite is None                     # 20 images de 160×120 tiennent d'un seul tenant
+    # Un média qui n'existe pas ne fait pas échouer le compte : il se lit comme
+    # « rien à mesurer ».
+    assert runner.tranches_pour("video-sans-taille", {"duration_s": 2},
+                                media={"video": str(atelier.tmp / "absente.mp4")}) is None
 
 
 # -- ce qu'un nœud déclare, et la fusion des récits ----------------------------
