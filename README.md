@@ -912,15 +912,21 @@ d'exemple `resources/materiel.exemple.json`) :
 {
   "memoire": { "totale_octets": 68719476736,     // la RAM du poste
                "reservee_octets": 30064771072,   // ce que le reste de la machine garde
-               "facteur_de_crete": 2.5 },        // le pic d'un run, en fois le poids des images
+               "facteur_de_crete": 3.5 },        // le pic d'un run, en fois le poids des images
   "memoire_graphique": { "totale_octets": 12884901888 },   // déclaré pour ce qui viendra
   "coeurs": 28                                             // idem : rien ne le lit encore
 }
 ```
 
-`facteur_de_crete` sort d'une mesure (2026-09-15) : 20 Gio d'images passaient
-avec 36 Go libres, 23,3 Gio échouaient — un pic à ≈ 1,6× ; 2,5 laisse de la
-marge. Avec les valeurs ci-dessus : (64 − 28) / 2,5 = **14,4 Gio par tranche**.
+`facteur_de_crete` sort de mesures. Le 2026-09-15, à 720p, un run seul :
+20 Gio d'images passaient avec 36 Go libres, 23,3 Gio échouaient — un pic à
+≈ 1,6×. Le 2026-09-16, à 4K/60 rendu par tranches, la RAM libre échantillonnée
+toutes les 30 s : 9,3 Gio d'images par tranche, **30 Gio au pic** — 3,2× — parce
+que le moteur gardait en cache les images du run précédent pendant le suivant
+(≈ 9 Gio) et que l'encodage copie. D'où 3,5, et le moteur lancé en
+`--cache-none` par la commande déclarée dans `engines.local.json` (nos graphes
+n'ont rien à réutiliser d'un run à l'autre). Avec les valeurs ci-dessus :
+(64 − 28) / 3,5 = **10,3 Gio par tranche**.
 
 L'ordre, écrit une seule fois : **surcharge** (`COMFY_TRANCHE_GO`, pour un
 essai — dite quand elle s'applique) > **fichier** > **repli de 8 Gio**, dit
