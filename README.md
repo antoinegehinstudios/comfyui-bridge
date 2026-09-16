@@ -888,10 +888,26 @@ images = ceil(max(duration_s + allonge_max_s, duree_max_s) × fps)
 N      = ceil(images × largeur × hauteur × 12 / budget)
 ```
 
+**La place du moment.** Le budget est déclaré, pas mesuré — mais le poste
+change pendant un rendu de cinq heures. Mesuré le 2026-09-16 : un voisin a
+chargé un modèle de 26 Go à la tranche 15/31 d'un 4K/60, et l'allocation de
+8,6 Gio a été refusée avec 18 Gio de RAM physique libre — c'est la **limite de
+commit** de Windows (RAM + fichier d'échange) qui était atteinte. Depuis, avant
+chaque tranche, la passerelle mesure la marge du moment (le plus petit de la RAM
+physique libre et du commit restant) et la compare au pic attendu (poids d'une
+tranche × `facteur_de_crete`) : si ça ne tient pas, la tranche **attend** que
+la place revienne, en le disant au journal (« le poste n'a que 6,8 Gio de marge
+(physique 18,1 Gio, commit 6,8 Gio) pour un pic attendu de 32 Gio ; il garde en
+ce moment 57 Go, plus que les 28 Go déclarés réservés — attente, jusqu'à
+30 min »), puis refuse en disant pourquoi (`COMFY_ATTENTE_PLACE_S`, 1 800 s ;
+pas de 30 s). Sans mesure possible, personne n'est retenu. `GET /v1/materiel`
+porte `marge_du_moment_octets` et avertit quand le poste garde plus que le
+déclaré.
+
 `N ≤ 1` : le run part entier, comme avant. `N > 64` (la borne de `segment_count`) :
 la demande est refusée **avant le premier run**, en le disant — c'est le poste
 qui est hors de portée, pas le découpage qui manque. Le journal du job dit le
-budget ET d'où il vient (« budget de 14,4 Gio par tranche, d'après
+budget ET d'où il vient (« budget de 10,3 Gio par tranche, d'après
 materiel.local.json ») : un découpage qui change parce qu'un fichier a bougé
 doit se lire, jamais se deviner.
 

@@ -118,6 +118,39 @@ def test_un_fichier_qui_annonce_plus_que_le_poste_est_signale(tmp_path):
     assert not [a for a in juste["avertissements"] if "le fichier dit" in a]
 
 
+def test_la_marge_du_moment_est_la_plus_petite_des_deux_mesures():
+    """Sous Windows, une allocation heurte d'abord la limite de COMMIT (RAM +
+    fichier d'échange) : 8,6 Gio refusés avec 18 Gio de RAM physique libre,
+    mesuré le 2026-09-16. La marge est donc le plus petit des deux."""
+    assert materiel.marge_du_moment({"libre_octets": 18 * 2 ** 30,
+                                     "commit_libre_octets": 6 * 2 ** 30}) == 6 * 2 ** 30
+    assert materiel.marge_du_moment({"libre_octets": 18 * 2 ** 30}) == 18 * 2 ** 30
+    assert materiel.marge_du_moment(None) is None
+    assert materiel.marge_du_moment({"par": "rien"}) is None
+    assert materiel.dire_la_marge({"libre_octets": 18 * 2 ** 30,
+                                   "commit_libre_octets": 6 * 2 ** 30}) ==         "physique 18.0 Gio, commit 6.0 Gio"
+    assert materiel.dire_la_marge(None) == "mémoire non mesurable"
+
+
+def test_un_poste_qui_garde_plus_que_le_declare_est_signale(tmp_path, monkeypatch):
+    """Le budget reste déclaré ; mais quand le poste garde EN CE MOMENT plus que
+    le fichier ne dit (un voisin a chargé 26 Go), la route le dit — c'est la
+    raison pour laquelle une tranche attend."""
+    monkeypatch.setattr(materiel, "mesure_du_poste",
+                        lambda: {"totale_octets": 64 * 2 ** 30, "libre_octets": 18 * 2 ** 30,
+                                 "commit_libre_octets": 7 * 2 ** 30, "par": "essai"})
+    vu = materiel.etat(materiel.lire(_poser(tmp_path)), 0)
+    assert vu["marge_du_moment_octets"] == 7 * 2 ** 30
+    assert any("le poste garde en ce moment 57 Go" in a and "28 Go déclarés" in a
+               for a in vu["avertissements"])
+    # Le poste dans son état déclaré : rien à dire.
+    monkeypatch.setattr(materiel, "mesure_du_poste",
+                        lambda: {"totale_octets": 64 * 2 ** 30, "libre_octets": 36 * 2 ** 30,
+                                 "commit_libre_octets": 40 * 2 ** 30, "par": "essai"})
+    calme = materiel.etat(materiel.lire(_poser(tmp_path)), 0)
+    assert not [a for a in calme["avertissements"] if "garde en ce moment" in a]
+
+
 # -- ce que la passerelle en fait ----------------------------------------------
 
 

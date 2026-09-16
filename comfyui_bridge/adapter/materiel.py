@@ -18,14 +18,23 @@ Le BUDGET d'une tranche, en octets d'images de sortie :
 
 `reservee_octets` est ce que le reste de la machine garde (moteur, modèles,
 services, bureau — mesuré à 28–30 Go ici) ; `facteur_de_crete` est combien de
-fois le poids des images un run occupe à son pic. Mesuré le 2026-09-15 :
-20 Gio d'images passaient avec 36 Go libres, 23,3 Gio échouaient — un pic à
-environ 1,6× ; 2,5 laisse de la marge.
+fois le poids des images un run occupe à son pic. Mesuré le 2026-09-15 à
+720p, un run seul : 20 Gio d'images passaient avec 36 Go libres, 23,3 Gio
+échouaient — un pic à environ 1,6×. Mesuré le 2026-09-16 à 4K/60, tranche
+après tranche : 3,2× (9,3 Gio d'images, 30 Gio au pic — le moteur gardait en
+cache les images du run précédent, et l'encodage copie) ; 3,5 est déclaré, et
+le moteur lancé sans ce cache.
 
 Ce module MESURE aussi la RAM réellement présente, pour pouvoir dire qu'un
 fichier ment (« le fichier dit 64 Go, le poste en a 32 »). La mesure n'est
-jamais une source : elle ne sert qu'à avertir. Un poste qui répond mal sur sa
-propre mémoire ne doit pas faire varier le découpage d'un run à l'autre.
+jamais une source du BUDGET : un poste qui répond mal sur sa propre mémoire ne
+doit pas faire varier le découpage d'un run à l'autre. Elle sert à deux
+choses : avertir, et dire la MARGE DU MOMENT — ce qu'une allocation peut
+encore prendre maintenant, RAM physique libre et commit restant (sous Windows,
+la limite de commit = RAM + fichier d'échange, et c'est elle qu'une allocation
+heurte en premier : le 2026-09-16, 8,6 Gio refusés avec 18 Gio de RAM physique
+libre, parce qu'un voisin venait d'engager 26 Go). Avant chaque tranche, le
+rendu attend que cette marge tienne le pic attendu (voir chaines.py).
 """
 
 from __future__ import annotations
@@ -128,41 +137,81 @@ def mesure_du_poste() -> dict[str, Any] | None:
     ment. Rendre zéro plutôt que rien aurait fait croire à une machine sans
     mémoire.
     """
+    mesure: dict[str, Any] | None = None
     try:
         import psutil                                    # noqa: PLC0415
         v = psutil.virtual_memory()
-        return {"totale_octets": int(v.total), "libre_octets": int(v.available),
-                "par": "psutil"}
+        mesure = {"totale_octets": int(v.total), "libre_octets": int(v.available),
+                  "par": "psutil"}
     except Exception:                                    # noqa: BLE001
         # repli: psutil n'est pas une dépendance de ce service ; son absence est
         # normale et n'a rien à dire. La suite essaie l'API du système.
         pass
     if os.name == "nt":
-        try:
-            import ctypes                                # noqa: PLC0415
+        systeme = _mesure_windows()
+        if systeme is not None:
+            if mesure is None:
+                mesure = systeme
+            else:
+                # psutil ne dit pas le commit ; l'API du système, si.
+                mesure["commit_total_octets"] = systeme["commit_total_octets"]
+                mesure["commit_libre_octets"] = systeme["commit_libre_octets"]
+    return mesure
 
-            class _Etat(ctypes.Structure):
-                _fields_ = [("dwLength", ctypes.c_ulong),
-                            ("dwMemoryLoad", ctypes.c_ulong),
-                            ("ullTotalPhys", ctypes.c_ulonglong),
-                            ("ullAvailPhys", ctypes.c_ulonglong),
-                            ("ullTotalPageFile", ctypes.c_ulonglong),
-                            ("ullAvailPageFile", ctypes.c_ulonglong),
-                            ("ullTotalVirtual", ctypes.c_ulonglong),
-                            ("ullAvailVirtual", ctypes.c_ulonglong),
-                            ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
 
-            etat = _Etat()
-            etat.dwLength = ctypes.sizeof(_Etat)
-            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(etat)):
-                return {"totale_octets": int(etat.ullTotalPhys),
-                        "libre_octets": int(etat.ullAvailPhys),
-                        "par": "GlobalMemoryStatusEx"}
-        except Exception:                                # noqa: BLE001
-            # repli: une API système qui ne répond pas ne doit pas empêcher un
-            # rendu ; l'absence de mesure est DITE par l'appelant.
-            return None
+def _mesure_windows() -> dict[str, Any] | None:
+    """La mémoire vue par Windows : physique ET commit (RAM + fichier d'échange,
+    ce qu'une allocation heurte en premier). ``None`` si l'API ne répond pas."""
+    try:
+        import ctypes                                    # noqa: PLC0415
+
+        class _Etat(ctypes.Structure):
+            _fields_ = [("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+        etat = _Etat()
+        etat.dwLength = ctypes.sizeof(_Etat)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(etat)):
+            return {"totale_octets": int(etat.ullTotalPhys),
+                    "libre_octets": int(etat.ullAvailPhys),
+                    "commit_total_octets": int(etat.ullTotalPageFile),
+                    "commit_libre_octets": int(etat.ullAvailPageFile),
+                    "par": "GlobalMemoryStatusEx"}
+    except Exception:                                    # noqa: BLE001
+        # repli: une API système qui ne répond pas ne doit pas empêcher un
+        # rendu ; l'absence de mesure est DITE par l'appelant.
+        return None
     return None
+
+
+def marge_du_moment(mesure: dict[str, Any] | None) -> int | None:
+    """Ce qu'une allocation peut encore prendre MAINTENANT : le plus petit de la
+    RAM physique libre et du commit restant, quand le poste les dit. ``None``
+    quand rien n'est mesurable — et alors personne n'est retenu."""
+    if not mesure:
+        return None
+    valeurs = [int(mesure[cle]) for cle in ("libre_octets", "commit_libre_octets")
+               if mesure.get(cle) is not None]
+    return min(valeurs) if valeurs else None
+
+
+def dire_la_marge(mesure: dict[str, Any] | None) -> str:
+    """« physique 18,1 Gio, commit 6,8 Gio » — ou ce qu'on sait."""
+    if not mesure:
+        return "mémoire non mesurable"
+    parts = []
+    if mesure.get("libre_octets") is not None:
+        parts.append(f"physique {int(mesure['libre_octets']) / 2 ** 30:.1f} Gio")
+    if mesure.get("commit_libre_octets") is not None:
+        parts.append(f"commit {int(mesure['commit_libre_octets']) / 2 ** 30:.1f} Gio")
+    return ", ".join(parts) or "mémoire non mesurable"
 
 
 def etat(materiel: dict[str, Any] | None, surcharge: int = 0) -> dict[str, Any]:
@@ -171,14 +220,29 @@ def etat(materiel: dict[str, Any] | None, surcharge: int = 0) -> dict[str, Any]:
     mesure = mesure_du_poste()
     du_fichier = budget_tranche(materiel)
     budget, provenance = _budget_et_provenance(du_fichier, surcharge)
+    marge = marge_du_moment(mesure)
     vu: dict[str, Any] = {
         "declare": materiel,
         "mesure": mesure,
+        "marge_du_moment_octets": marge,
         "budget_tranche_octets": budget,
         "budget_tranche_gio": round(budget / 2 ** 30, 2) if budget else 0,
         "provenance": provenance,
         "avertissements": [],
     }
+    # Le poste garde-t-il EN CE MOMENT plus que le fichier ne déclare ? Le
+    # budget est déclaré, pas mesuré — mais un rendu par tranches attend sa
+    # place avant chaque tranche, et cet avertissement dit pourquoi il attend.
+    reservee = int(((materiel or {}).get("memoire") or {}).get("reservee_octets") or 0)
+    totale_vue = int((mesure or {}).get("totale_octets") or 0)
+    if marge is not None and totale_vue and reservee:
+        garde = totale_vue - marge
+        if garde > reservee * 1.1:
+            vu["avertissements"].append(
+                f"le poste garde en ce moment {garde / 2 ** 30:.0f} Go "
+                f"({dire_la_marge(mesure)}), plus que les {reservee / 2 ** 30:.0f} Go déclarés "
+                f"réservés : le budget déclaré ne tient pas tant que ça dure — un rendu par "
+                f"tranches attend sa place avant chaque tranche")
     if materiel is None and not surcharge:
         vu["avertissements"].append(
             f"aucun fichier matériel ({FICHIER}) : repli "

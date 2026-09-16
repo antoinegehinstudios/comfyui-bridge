@@ -96,6 +96,13 @@ class Settings:
     # elle s'applique ; 0 (le défaut) veut dire « d'après le matériel », et sans
     # fichier le repli est de 8 Gio, dit lui aussi.
     tranche_octets: int = int(float(os.getenv("COMFY_TRANCHE_GO", "0")) * 2 ** 30)
+    # Avant chaque tranche, la MARGE DU MOMENT du poste (RAM physique libre et
+    # commit restant) doit tenir le pic attendu ; sinon la tranche attend que la
+    # place revienne, jusqu'à cette borne (secondes), en le disant — puis refuse.
+    # Mesuré le 2026-09-16 : un voisin qui charge un modèle de 26 Go au milieu
+    # d'un rendu de cinq heures faisait échouer la tranche 15/31 d'un 4K.
+    attente_place_s: float = float(os.getenv("COMFY_ATTENTE_PLACE_S", "1800"))
+    attente_place_pas_s: float = float(os.getenv("COMFY_ATTENTE_PLACE_PAS_S", "30"))
 
     # --- Hermes (hardware reconciliation) ------------------------------------
     # Knowledge base is LOCAL to this pipeline (private _data dir) and SCOPED to

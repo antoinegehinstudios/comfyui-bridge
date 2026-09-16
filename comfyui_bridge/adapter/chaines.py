@@ -607,6 +607,66 @@ class RunnerDeChaines:
                 "hauteur": int(hauteur), "fps": int(fps), "poids": poids, "budget": budget,
                 "provenance": provenance}
 
+    def _attendre_la_place(self, parent_id: str, etape: noyau.Etape, nom: str,
+                           i: int, n: int, tranches: dict[str, Any]) -> None:
+        """Avant une tranche, la MARGE DU MOMENT du poste doit tenir le pic
+        attendu : le poids d'une tranche × le facteur de crête déclaré.
+
+        Le fichier matériel dit ce que le poste garde d'ordinaire ; il ne peut
+        pas dire qu'un voisin chargera un modèle de 26 Go au milieu d'un rendu
+        de cinq heures (mesuré le 2026-09-16 : la tranche 15/31 d'un 4K a
+        échoué à allouer 8,6 Gio avec 18 Gio de RAM physique libre — c'est la
+        limite de COMMIT de Windows qui était atteinte). Plutôt que d'échouer
+        après deux heures de rendu, on attend que la place revienne, en le
+        disant, jusqu'à la borne — puis on refuse, en disant pourquoi.
+        """
+        c = self._c
+        store = c.store
+        memoire = (c.materiel or {}).get("memoire") or {}
+        facteur = float(memoire.get("facteur_de_crete") or 1.0)
+        par_tranche = int(math.ceil(tranches["images"] / n))
+        besoin = int(par_tranche * tranches["poids"] * facteur)
+        limite_s = float(getattr(c.settings, "attente_place_s", 0) or 0)
+        pas_s = float(getattr(c.settings, "attente_place_pas_s", 30) or 0)
+        debut = time.monotonic()
+        dit = False
+        while True:
+            mesure = materiel.mesure_du_poste()
+            marge = materiel.marge_du_moment(mesure)
+            if marge is None or marge >= besoin:
+                if dit:
+                    store.append_log(
+                        parent_id,
+                        f"étape {etape.id} : la place est revenue pour la tranche {i + 1}/{n} "
+                        f"({marge / 2 ** 30:.1f} Gio de marge) après "
+                        f"{time.monotonic() - debut:.0f} s")
+                return
+            garde = int((mesure or {}).get("totale_octets") or 0) - marge
+            reservee = int(memoire.get("reservee_octets") or 0)
+            if not dit:
+                store.append_log(
+                    parent_id,
+                    f"étape {etape.id} : tranche {i + 1}/{n} — le poste n'a que "
+                    f"{marge / 2 ** 30:.1f} Gio de marge ({materiel.dire_la_marge(mesure)}) "
+                    f"pour un pic attendu de {besoin / 2 ** 30:.1f} Gio "
+                    f"({par_tranche} images × {facteur:g} de crête) ; il garde en ce moment "
+                    f"{garde / 2 ** 30:.0f} Go, plus que les {reservee / 2 ** 30:.0f} Go "
+                    f"déclarés réservés — attente, jusqu'à {limite_s / 60:.0f} min")
+                dit = True
+            ecoule = time.monotonic() - debut
+            if ecoule >= limite_s:
+                raise MediaAssemblyError(
+                    f"étape {etape.id!r} ({nom}) : la tranche {i + 1}/{n} n'a pas trouvé sa "
+                    f"place en {limite_s / 60:.0f} min — le poste garde en ce moment "
+                    f"{garde / 2 ** 30:.0f} Go, plus que les {reservee / 2 ** 30:.0f} Go déclarés "
+                    f"réservés ({materiel.FICHIER}) ; libérer la mémoire, ou déclarer ce que le "
+                    f"poste garde vraiment", workflow=nom)
+            if store.get(parent_id).cancel_requested:
+                raise MediaAssemblyError(
+                    f"étape {etape.id!r} : arrêt demandé pendant l'attente de la tranche "
+                    f"{i + 1}/{n}")
+            time.sleep(max(0.0, min(pas_s, limite_s - ecoule)))
+
     def _rendre_par_tranches(self, parent_id: str, etape: noyau.Etape, nom: str,
                              media: dict[str, str], genre: Any, reglages: dict[str, Any],
                              label: str, etapes: list[dict[str, Any]], rang: int,
@@ -633,6 +693,7 @@ class RunnerDeChaines:
                     f"étape {etape.id!r} : arrêt demandé avant la tranche {i + 1}/{n}")
             etapes[rang]["note"] = f"tranche {i + 1}/{n}"
             store.set_etapes(parent_id, etapes)
+            self._attendre_la_place(parent_id, etape, nom, i, n, tranches)
             entrees = dict(reglages.get("inputs") or {})
             entrees[f"{noeud}.segment_index"] = i
             entrees[f"{noeud}.segment_count"] = n
