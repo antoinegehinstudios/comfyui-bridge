@@ -1057,18 +1057,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return info
 
     def _creer(c, intent_in: IntentIn, corps: dict, background: BackgroundTasks,
-               response: Response, force: bool = False) -> JobOut:
+               response: Response, force: bool = False,
+               reprise_de: str | None = None) -> JobOut:
         """Le seul verbe de création, qu'on vise un graphe ou une chaîne.
 
-        Écrit une fois : le rejeu passe exactement par ici, sinon il aurait
-        fallu tenir deux façons de lancer un run, qui auraient divergé.
+        Écrit une fois : le rejeu et la reprise passent exactement par ici,
+        sinon il aurait fallu tenir plusieurs façons de lancer un run, qui
+        auraient divergé.
         """
         _extras_admis(c, intent_in)
         spec = c.catalog.get_spec(intent_in.workflow)
         if spec.est_chaine:
-            job = _lancer_chaine(c, spec, corps, background, force)
+            job = _lancer_chaine(c, spec, corps, background, force, reprise_de)
             response.headers["Location"] = f"/v1/jobs/{job.id}"
             return JobOut.of(job)
+        if reprise_de:
+            raise InputValueRefusedError(
+                f"le run {reprise_de} n'est pas une chaîne : rien à reprendre — le rejouer",
+                job_id=reprise_de)
         orch = c.orchestrator
         # UN RENDU DIRECT SE TRANCHE COMME UNE ÉTAPE DE CHAÎNE. Le mécanisme
         # ne regarde ni le mode ni sa catégorie ni qui appelle : seulement le
@@ -1175,7 +1181,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return c.store.get(job.id)
 
     def _lancer_chaine(c, spec, corps: dict, background: BackgroundTasks,
-                       force: bool = False):
+                       force: bool = False, reprise_de: str | None = None):
         from ..adapter.chaines import RunnerDeChaines, etapes_initiales
         from ..core.cost import config_fingerprint
         chaine = c.catalog.chaine(spec)
@@ -1200,7 +1206,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             c.store.append_log(
                 job.id, f"non appliqué — n'est pas un réglage de la technique {quelle} : "
                         f"{', '.join(non_appliques)}")
-        background.add_task(runner.executer, job.id, chaine, valeurs, etiquette, force)
+        if reprise_de:
+            c.store.append_log(job.id, f"reprise demandée du job {reprise_de}")
+        background.add_task(runner.executer, job.id, chaine, valeurs, etiquette, force,
+                            reprise_de)
         return c.store.get(job.id)
 
     @app.post("/v1/render", status_code=202, response_model=JobOut, tags=["render"])
@@ -1239,6 +1248,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         demande.update(dict((corps.reglages if corps else {}) or {}))
         return _creer(c, IntentIn.model_validate(demande), demande, background,
                       response, force)
+
+    @app.post("/v1/jobs/{job_id}/reprendre", status_code=202, response_model=JobOut,
+              tags=["render"])
+    async def reprendre(job_id: str, request: Request, response: Response,
+                        background: BackgroundTasks, force: bool = False) -> JobOut:
+        """Reprendre une chaîne échouée LÀ OÙ elle s'est arrêtée.
+
+        Les étapes qui avaient abouti sont reprises telles quelles — leurs
+        livrables relus, leurs récits relus sur leurs sous-jobs — et la chaîne
+        repart à l'étape en échec, avec la même demande. Six heures de
+        déroulement 4K ne se perdent pas pour un dépôt refusé à l'étape
+        suivante (mesuré le 2026-09-16). Un run qui n'a pas échoué, ou qui
+        n'est pas une chaîne, n'a rien à reprendre : 422, dit.
+        """
+        c = request.app.state.container
+        job = c.store.get(job_id)                         # 404 si inconnu
+        if job.status not in (JobStatus.FAILED, JobStatus.CANCELLED):
+            raise InputValueRefusedError(
+                f"le run {job_id} a fini {job.status.value} : rien à reprendre",
+                job_id=job_id)
+        if not job.etapes:
+            raise InputValueRefusedError(
+                f"le run {job_id} n'est pas une chaîne : rien à reprendre — le rejouer",
+                job_id=job_id)
+        demande = dict(job.demande or {})
+        if not demande:
+            raise UnknownWorkflowInputError(
+                f"le run {job_id} n'a pas gardé la demande qui l'a produit : "
+                f"il est antérieur à cette mémoire", job_id=job_id)
+        demande.setdefault("workflow", job.workflow)
+        return _creer(c, IntentIn.model_validate(demande), demande, background,
+                      response, force, reprise_de=job_id)
 
     @app.post("/v1/preview", tags=["render"])
     async def preview(intent_in: IntentIn, request: Request) -> dict:

@@ -180,6 +180,7 @@ python -m comfyui_bridge workflows
 | GET     | `/v1/jobs`                     | **Les runs**, du plus récent au plus ancien (mémoire + persistés) ; les sous-jobs d'une chaîne sur demande (`?enfants=1`) |
 | GET     | `/v1/jobs/{id}`                | État du job + artefacts + **journal (logs)** + `etapes` d'une chaîne |
 | POST    | `/v1/jobs/{id}/rejouer`        | **Rejouer** un run, à l'identique ou avec `{"reglages": {…}}` |
+| POST    | `/v1/jobs/{id}/reprendre`      | **Reprendre** une chaîne échouée là où elle s'est arrêtée : les étapes abouties sont reprises (livrables et récits relus), la chaîne repart à l'étape en échec — 422 si rien n'a échoué ou si ce n'est pas une chaîne |
 | GET     | `/v1/jobs/{id}/events`         | **Progression live (SSE)** jusqu'à l'état final  |
 | GET     | `/v1/jobs/{id}/artifacts`      | Artefacts seuls (avec `url` servable)            |
 | GET     | `/artifacts/…`                 | **Livraison** : fichiers de sortie servis (aperçu direct) |

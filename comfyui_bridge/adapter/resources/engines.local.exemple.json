@@ -3,7 +3,7 @@
   "default": "local",
   "engines": {
     "local": {
-      "description": "ComfyUI lancé par la passerelle, en --lowvram. Lancé en --cache-none : le moteur ne garde pas les images du run précédent pendant le suivant (9 Gio de moins au pic d'une tranche 4K, mesuré le 2026-09-16).",
+      "description": "ComfyUI lancé par la passerelle, en --lowvram. Lancé en --cache-none : le moteur ne garde pas les images du run précédent pendant le suivant (9 Gio de moins au pic d'une tranche 4K, mesuré le 2026-09-16). Et en --max-upload-size 4096 : la passerelle dépose chez le moteur la queue d'un déroulement (50 images 4K sans perte : 164 Mo) et la conclusion entière pour l'appel ; la limite par défaut (100 Mo) a refusé le dépôt d'un 4K/60 après six heures de rendu (mesuré le 2026-09-16, « 413 Content Too Large »).",
       "base_url": "http://127.0.0.1:8188",
       "manage": true,
       "cwd": "/chemin/vers/ComfyUI",
@@ -13,7 +13,9 @@
         "--port",
         "8188",
         "--lowvram",
-        "--cache-none"
+        "--cache-none",
+        "--max-upload-size",
+        "4096"
       ]
     }
   }

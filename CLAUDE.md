@@ -36,7 +36,8 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   uniquement dessus ;
 - `POST /v1/render` (corps plat, `label` = nom de la production),
   `POST /v1/estimate`, `GET /v1/jobs`, `GET /v1/jobs/{id}` + `/events`,
-  `POST /v1/jobs/{id}/cancel` et `/rejouer`, `PUT /v1/workflows/{nom}/apercu`,
+  `POST /v1/jobs/{id}/cancel`, `/rejouer` et `/reprendre` (une chaîne échouée
+  repart à l'étape en échec, ses étapes abouties reprises), `PUT /v1/workflows/{nom}/apercu`,
   `GET|POST /v1/workflows/{nom}/raccourcis` et
   `GET|PUT|DELETE /v1/workflows/{nom}/raccourcis/{id}` (+ `…/{id}/apercu`) —
   le lanceur DÉSIGNE (une livraison devient un raccourci), la passerelle

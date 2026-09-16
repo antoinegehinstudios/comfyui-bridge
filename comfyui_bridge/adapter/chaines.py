@@ -103,7 +103,8 @@ class RunnerDeChaines:
     # -- conduite -------------------------------------------------------------
 
     def executer(self, job_id: str, chaine: noyau.Chaine, valeurs: dict[str, Any],
-                 label: str = "", force: bool = False) -> None:
+                 label: str = "", force: bool = False,
+                 reprise_de: str | None = None) -> None:
         c = self._c
         self._force = force              # passe outre un souvenir, étape par étape
         store = c.store
@@ -115,11 +116,42 @@ class RunnerDeChaines:
         resultats: dict[str, Any] = {}
         produits: list[str] = []
         duree = 0.0
+        repris: dict[str, dict[str, Any]] = {}
+        if reprise_de:
+            try:
+                repris = self._etapes_reprises(job_id, chaine, reprise_de)
+            except BridgeError as exc:
+                self._echouer(job_id, etapes, 0, chaine, valeurs, exc, produits)
+                return
 
         for rang, etape in enumerate(chaine.etapes):
             if store.get(job_id).cancel_requested:
                 self._abandonner(job_id, etapes, rang, chaine, produits)
                 return
+            if etape.id in repris:
+                # UNE ÉTAPE REPRISE D'UN JOB ÉCHOUÉ : son résultat est relu, pas
+                # recalculé — six heures de déroulement 4K ne se perdent pas pour
+                # un dépôt refusé à l'étape suivante (mesuré le 2026-09-16).
+                resultat = repris[etape.id]
+                statut = str(resultat.pop("_statut", "done"))
+                resultats[etape.id] = resultat
+                etapes[rang]["statut"] = statut
+                etapes[rang]["note"] = f"repris du job {reprise_de}"
+                etapes[rang]["resultat"] = _resume(resultat)
+                for cle in ("job_id", "job_ids", "tranches"):
+                    if cle in resultat:
+                        etapes[rang][cle] = resultat[cle]
+                store.set_etapes(job_id, etapes)
+                quoi = ("sautée" if statut == "skipped"
+                        else _dire(resultat) if resultat.get("livrable") or "livrable" not in resultat
+                        else "sans livrable")
+                store.append_log(job_id, f"étape {etape.id} ({etape.genre}) reprise du job "
+                                         f"{reprise_de} : {quoi}")
+                for cle in ("livrable", "fichier"):
+                    chemin = resultat.get(cle)
+                    if isinstance(chemin, str) and chemin not in produits:
+                        produits.append(chemin)
+                continue
             sautee = self._a_sauter(etape, valeurs, resultats)
             if sautee is not None:
                 # UNE ÉTAPE FACULTATIVE SANS RAISON D'ÊTRE EST SAUTÉE, ET LE DIT :
@@ -189,6 +221,89 @@ class RunnerDeChaines:
                              duration_s=duree)
         c.registry.record(c.settings.host_id, chaine.nom, valeurs, status="succeeded",
                           duration_s=duree)
+
+    # -- reprise ---------------------------------------------------------------
+
+    def _etapes_reprises(self, job_id: str, chaine: noyau.Chaine,
+                         reprise_de: str) -> dict[str, dict[str, Any]]:
+        """Ce qu'un job échoué a déjà fait, et que celui-ci reprend tel quel.
+
+        Les étapes sont reprises DANS L'ORDRE, jusqu'à la première qui n'a pas
+        abouti : une étape faite (« done ») est relue — son livrable doit
+        encore exister, son récit est relu sur ses sous-jobs, fusionné s'il y
+        avait des tranches — ; une étape légitimement sautée l'est encore ; la
+        première étape en échec (et tout ce qui la suit) est rejouée. Un job
+        d'une autre chaîne, ou dont les fichiers ont disparu, ne se reprend
+        pas : c'est dit, et la chaîne échoue avant d'avoir rien dépensé.
+        """
+        store = self._c.store
+        ancien = store.get(reprise_de)                  # inconnu : dit par le magasin
+        if ancien.workflow != chaine.nom:
+            raise MediaAssemblyError(
+                f"reprise impossible : le job {reprise_de} est un run de "
+                f"« {ancien.workflow} », pas de « {chaine.nom} »")
+        enregs = {e.get("id"): e for e in (ancien.etapes or []) if isinstance(e, dict)}
+        repris: dict[str, dict[str, Any]] = {}
+        for etape in chaine.etapes:
+            e = enregs.get(etape.id)
+            if not e:
+                break
+            if e.get("statut") == "done":
+                repris[etape.id] = self._resultat_repris(reprise_de, etape, e)
+            elif e.get("statut") == "skipped" and isinstance(e.get("resultat"), dict):
+                # Une étape SAUTÉE par sa définition (« quand » vide) porte un
+                # résultat ; une étape sautée parce que la chaîne avait échoué
+                # avant elle n'en porte pas — celle-là se rejoue.
+                repris[etape.id] = {**e["resultat"], "_statut": "skipped"}
+            else:
+                break
+        if repris:
+            store.append_log(job_id, f"reprise du job {reprise_de} : {len(repris)} étape(s) "
+                                     f"reprise(s) — {', '.join(repris)}")
+        else:
+            store.append_log(job_id, f"reprise du job {reprise_de} : aucune étape aboutie "
+                                     f"à reprendre, la chaîne repart du début")
+        return repris
+
+    def _resultat_repris(self, ancien_id: str, etape: noyau.Etape,
+                         e: dict[str, Any]) -> dict[str, Any]:
+        """Le résultat COMPLET d'une étape faite, reconstruit depuis sa fiche.
+
+        La fiche ne garde qu'un résumé (le récit y perd son calendrier et sa
+        caméra) ; ce que les étapes suivantes lisent — « $deroulement.recit… »
+        — est relu sur les sous-jobs, et fusionné comme au premier passage
+        quand l'étape était rendue par tranches.
+        """
+        store = self._c.store
+        res = dict(e.get("resultat") or {})
+        if etape.genre == "rendre":
+            ids = list(res.get("job_ids") or ([res["job_id"]] if res.get("job_id") else []))
+            recits: list[dict[str, Any]] = []
+            for sid in ids:
+                try:
+                    sous = store.get(sid)
+                except BridgeError as exc:
+                    raise MediaAssemblyError(
+                        f"reprise impossible : le sous-job {sid} de l'étape {etape.id!r} "
+                        f"du job {ancien_id} n'existe plus") from exc
+                recit = _recit(sous.artifacts, lambda raison: None)
+                if recit is not None:
+                    recits.append(recit)
+            if len(recits) > 1:
+                res["recit"] = {**fusionner_recits(recits), "tranches": len(ids),
+                                "tranches_au_recit": len(recits)}
+            elif recits:
+                res["recit"] = recits[0]
+        for cle in ("livrable", "fichier"):
+            chemin = res.get(cle)
+            if isinstance(chemin, str) and chemin and not Path(chemin).is_file():
+                raise MediaAssemblyError(
+                    f"reprise impossible : le fichier de l'étape {etape.id!r} du job "
+                    f"{ancien_id} n'existe plus ({Path(chemin).name}) — relancer la chaîne")
+        if res.get("depot") and isinstance(res.get("fichier"), str):
+            # Un dépôt repris : la passerelle sait encore d'où il vient.
+            self._deposes[str(res["depot"])] = Path(res["fichier"])
+        return res
 
     # -- fins ------------------------------------------------------------------
 
