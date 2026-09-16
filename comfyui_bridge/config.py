@@ -78,6 +78,17 @@ class Settings:
     # propriétaire.
     workflows_dir: Path = Path(os.getenv("COMFY_WORKFLOWS_DIR", str(_DATA / "workflows")))
 
+    # --- Rendu par tranches ----------------------------------------------------
+    # Un nœud qui tient toute une vidéo en mémoire (une image RVB float32 par
+    # image rendue : largeur × hauteur × 12 octets) dépasse la mémoire du poste
+    # dès qu'un plan s'allonge — mesuré le 2026-09-15 : 2 258 images en
+    # 720×1280 (75 s à 30 i/s) → 23,3 Gio demandés d'un coup, refusés ; 1 980
+    # images (20 Gio) passaient de justesse. Au-delà de ce budget d'images en
+    # mémoire, la passerelle demande le rendu par TRANCHES d'une même simulation
+    # (voir adapter/chaines.py, « rendu par tranches ») et les recolle sans
+    # ré-encoder. 0 = jamais de tranche.
+    tranche_octets: int = int(float(os.getenv("COMFY_TRANCHE_GO", "8")) * 2 ** 30)
+
     # --- Hermes (hardware reconciliation) ------------------------------------
     # Knowledge base is LOCAL to this pipeline (private _data dir) and SCOPED to
     # the tool it concerns, so it never leaks to / mixes with other pipelines.

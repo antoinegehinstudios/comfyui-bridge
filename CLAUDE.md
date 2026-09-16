@@ -80,6 +80,14 @@ socle ink » du README.
 réussit, et ce fichier est son livrable comme son `recit` (`_principal`,
 `adapter/chaines.py`). C'est le cas de `analyse` et `intention`.
 
+**Un `rendre` peut être rendu en TRANCHES par la passerelle** quand le nœud le
+déclare (entrées littérales `segment_index` + `segment_count`, et `duree_max_s`
+qui borne le compte) et que la mémoire l'oblige (`COMFY_TRANCHE_GO`, 8 Gio par
+défaut) : N runs d'une même simulation, recollés par copie de flux, récits
+fusionnés. Un job de chaîne porte alors `etapes[].job_ids` et `etapes[].tranches`
+(un `job_id` par tranche, tous visibles dans `/v1/jobs`) ; voir « Rendu par
+tranches » dans le README.
+
 **Nommage des fichiers livrés** (règle générale, tenue ici) :
 `cortex/<nom donné>_<type>…` — le type est le workflow, ou la chaîne pour un
 livrable final (`<nom>_<chaine>-final_<id>`), et chaque étape rendue porte

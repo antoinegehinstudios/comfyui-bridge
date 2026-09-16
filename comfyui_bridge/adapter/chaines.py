@@ -16,6 +16,7 @@ livrables offrait cinquante images de travail avant la vidéo commandée.
 from __future__ import annotations
 
 import json
+import math
 import threading
 import time
 import urllib.parse
@@ -276,7 +277,8 @@ class RunnerDeChaines:
             return self._verifier(etape, valeurs, resultats)
         params = noyau.resoudre(etape.params, valeurs, resultats)
         if etape.genre == "rendre":
-            return self._rendre(job_id, etape, params, label, etapes, rang)
+            return self._rendre(job_id, etape, params, label, etapes, rang,
+                                travail=travail, chaine_nom=chaine_nom)
         if etape.genre == "extraire_queue":
             source = self._fichier_local(params["video"], travail)
             sortie = travail / f"{etape.id}-queue.mp4"
@@ -311,7 +313,8 @@ class RunnerDeChaines:
         return {"controles": lignes}
 
     def _rendre(self, parent_id: str, etape: noyau.Etape, params: dict[str, Any],
-                label: str, etapes: list[dict[str, Any]], rang: int) -> dict[str, Any]:
+                label: str, etapes: list[dict[str, Any]], rang: int,
+                travail: Path | None = None, chaine_nom: str = "") -> dict[str, Any]:
         c = self._c
         reglages = dict(params)
         nom = str(reglages.pop("workflow"))
@@ -334,9 +337,24 @@ class RunnerDeChaines:
         reglages.pop("label", None)
         reglages.pop("constraints", None)
         genre = reglages.pop("kind", None)
+        tranches = self._tranches_de(parent_id, etape, nom, reglages)
+        if tranches is None:
+            fini = self._executer_run(parent_id, etape, nom, media, genre, reglages,
+                                      f"{label}-{etape.id}"[:40], etapes, rang)
+            return self._resultat_du_run(parent_id, etape, nom, fini)
+        return self._rendre_par_tranches(parent_id, etape, nom, media, genre, reglages,
+                                         label, etapes, rang, tranches, travail, chaine_nom)
+
+    def _executer_run(self, parent_id: str, etape: noyau.Etape, nom: str,
+                      media: dict[str, str], genre: Any, reglages: dict[str, Any],
+                      etiquette: str, etapes: list[dict[str, Any]], rang: int):
+        """UN run ordinaire pour cette étape, conduit jusqu'à sa fin — et refusé
+        s'il ne réussit pas. Le sous-job est visible dans /v1/jobs comme les
+        autres ; le parent ne fait qu'attendre et relayer."""
+        c = self._c
         intention = RenderIntent(workflow=nom, media=media,
                                  kind=MediaKind(genre) if genre else None,
-                                 label=f"{label}-{etape.id}"[:40], **reglages)
+                                 label=etiquette, **reglages)
         sous, plan = c.orchestrator.accept(intention, force=self._force)
         c.store.set_parent(sous.id, parent_id)
         etapes[rang]["job_id"] = sous.id
@@ -359,19 +377,190 @@ class RunnerDeChaines:
             detail = (fini.problem or {}).get("detail") or f"le run a fini {fini.status.value}"
             raise MediaAssemblyError(f"étape {etape.id!r} ({nom}) : {detail}",
                                      job_id=sous.id, workflow=nom)
+        return fini
+
+    def _resultat_du_run(self, parent_id: str, etape: noyau.Etape, nom: str,
+                         fini) -> dict[str, Any]:
         livrable = _principal(fini.artifacts)
         if livrable is None:
             raise MediaAssemblyError(
                 f"étape {etape.id!r} ({nom}) : le run a réussi sans livrer de média",
-                job_id=sous.id, workflow=nom)
-        resultat = {"livrable": livrable.path, "job_id": sous.id,
+                job_id=fini.id, workflow=nom)
+        resultat = {"livrable": livrable.path, "job_id": fini.id,
                     "mesure": {**(livrable.measured or {}), "bytes": livrable.bytes},
                     "artefacts": [a.path for a in fini.artifacts],
                     "_duree": fini.duration_s}
-        recit = _recit(fini.artifacts, lambda raison: c.store.append_log(
+        recit = _recit(fini.artifacts, lambda raison: self._c.store.append_log(
             parent_id, f"étape {etape.id} : récit illisible : {raison}"))
         if recit is not None:
             resultat["recit"] = recit
+        return resultat
+
+    # -- rendu par tranches -----------------------------------------------------
+    #
+    # Un nœud qui tient toute une vidéo en mémoire (une image RVB float32 par
+    # image rendue) dépasse la mémoire du poste dès qu'un plan s'allonge :
+    # mesuré le 2026-09-15, 2 258 images en 720×1280 demandaient 23,3 Gio d'un
+    # coup, refusés. Ce n'est pas au demandeur de raccourcir sa vidéo ni de la
+    # rendre plus petite : la passerelle demande le rendu par TRANCHES d'une
+    # seule et même simulation, l'une après l'autre, et les recolle par copie de
+    # flux — aucune image n'est ré-encodée, la jonction est celle des images
+    # elles-mêmes. Un nœud qui sait le faire le déclare par deux entrées,
+    # `segment_index` et `segment_count` (la tranche i de n rend les images
+    # [n·i/N, n·(i+1)/N) de la même simulation, au grain et à la lumière près
+    # de la seconde ABSOLUE), et par `duree_max_s`, la durée au-delà de laquelle
+    # il n'allonge plus : c'est elle qui borne le nombre de tranches, puisque le
+    # nœud décide lui-même de la durée retenue.
+
+    def _tranches_de(self, parent_id: str, etape: noyau.Etape, nom: str,
+                     reglages: dict[str, Any]) -> dict[str, Any] | None:
+        """Combien de tranches il faut pour que ce run tienne dans le budget —
+        ou None quand il tient d'un seul tenant, ou que le nœud ne sait pas
+        trancher (et alors le run part entier, comme avant)."""
+        c = self._c
+        budget = int(getattr(c.settings, "tranche_octets", 0) or 0)
+        if budget <= 0:
+            return None
+        try:
+            spec = c.catalog.get_spec(nom)
+            if spec.est_chaine:
+                return None
+            graphe, _liaisons = c.catalog.monter(spec, reglages)
+        except Exception as exc:                    # noqa: BLE001
+            # repli: un graphe qui ne se lit pas ici sera refusé au run, qui le
+            # dira ; on ne tranche pas ce qu'on ne sait pas lire — et on le dit.
+            c.store.append_log(parent_id, f"étape {etape.id} : pas de tranches ({exc})")
+            return None
+        noeud = noeud_de_tranches(graphe)
+        if noeud is None:
+            return None
+        defauts = dict(spec.defaults or {})
+
+        def nombre(cle: str) -> float:
+            try:
+                return float(reglages.get(cle, defauts.get(cle)) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        largeur, hauteur, fps = nombre("width"), nombre("height"), nombre("fps")
+        if largeur <= 0 or hauteur <= 0 or fps <= 0:
+            c.store.append_log(parent_id, f"étape {etape.id} : pas de tranches — largeur, "
+                                          f"hauteur ou cadence inconnues avant le run")
+            return None
+        plafond = (graphe.get(noeud) or {}).get("inputs", {}).get("duree_max_s")
+        try:
+            plafond = 0.0 if isinstance(plafond, list) else float(plafond or 0)
+        except (TypeError, ValueError):
+            plafond = 0.0
+        duree = max(nombre("duration_s"), plafond)
+        if duree <= 0:
+            return None
+        images = int(math.ceil(duree * fps))
+        poids = int(largeur) * int(hauteur) * OCTETS_PAR_IMAGE
+        n = int(math.ceil(images * poids / budget))
+        if n <= 1:
+            return None
+        if n > TRANCHES_MAX:
+            raise MediaAssemblyError(
+                f"étape {etape.id!r} ({nom}) : il faudrait {n} tranches pour tenir "
+                f"{images} images de {int(largeur)}×{int(hauteur)} dans "
+                f"{budget / 2 ** 30:.1f} Gio, plus que les {TRANCHES_MAX} qu'un nœud "
+                f"accepte — baisser la résolution ou la durée", workflow=nom)
+        return {"noeud": noeud, "nombre": n, "images": images, "largeur": int(largeur),
+                "hauteur": int(hauteur), "fps": int(fps), "poids": poids, "budget": budget}
+
+    def _rendre_par_tranches(self, parent_id: str, etape: noyau.Etape, nom: str,
+                             media: dict[str, str], genre: Any, reglages: dict[str, Any],
+                             label: str, etapes: list[dict[str, Any]], rang: int,
+                             tranches: dict[str, Any], travail: Path | None,
+                             chaine_nom: str) -> dict[str, Any]:
+        c = self._c
+        store = c.store
+        n, noeud = tranches["nombre"], tranches["noeud"]
+        store.append_log(
+            parent_id,
+            f"étape {etape.id} : rendu en {n} tranches — jusqu'à {tranches['images']} images "
+            f"de {tranches['largeur']}×{tranches['hauteur']} "
+            f"({tranches['images'] * tranches['poids'] / 2 ** 30:.1f} Gio en mémoire d'un seul "
+            f"tenant) pour un budget de {tranches['budget'] / 2 ** 30:.1f} Gio par tranche")
+        parts: list[str] = []
+        recits: list[dict[str, Any]] = []
+        sous_ids: list[str] = []
+        artefacts: list[str] = []
+        duree = 0.0
+        for i in range(n):
+            if store.get(parent_id).cancel_requested:
+                raise MediaAssemblyError(
+                    f"étape {etape.id!r} : arrêt demandé avant la tranche {i + 1}/{n}")
+            etapes[rang]["note"] = f"tranche {i + 1}/{n}"
+            store.set_etapes(parent_id, etapes)
+            entrees = dict(reglages.get("inputs") or {})
+            entrees[f"{noeud}.segment_index"] = i
+            entrees[f"{noeud}.segment_count"] = n
+            fini = self._executer_run(parent_id, etape, nom, media, genre,
+                                      {**reglages, "inputs": entrees},
+                                      f"{label}-{etape.id}-{i + 1}sur{n}"[:40], etapes, rang)
+            livrable = _principal(fini.artifacts)
+            if livrable is None or livrable.kind != "video":
+                raise MediaAssemblyError(
+                    f"étape {etape.id!r} ({nom}) : la tranche {i + 1}/{n} n'a pas livré de vidéo",
+                    job_id=fini.id, workflow=nom)
+            parts.append(livrable.path)
+            sous_ids.append(fini.id)
+            # Posés à CHAQUE tranche, pas à la fin : une chaîne qui échoue à la
+            # tranche 2/3 doit encore dire quelles tranches sont rendues, et où.
+            etapes[rang]["job_ids"] = list(sous_ids)
+            etapes[rang]["tranches"] = n
+            artefacts += [a.path for a in fini.artifacts]
+            duree += fini.duration_s or 0.0
+            recit = _recit(fini.artifacts, lambda raison, i=i: store.append_log(
+                parent_id, f"étape {etape.id} : récit de la tranche {i + 1} illisible : {raison}"))
+            if recit is not None:
+                recits.append(recit)
+        etapes[rang]["note"] = f"{n} tranches"
+        store.set_etapes(parent_id, etapes)
+
+        sortie = self._sortie(parent_id, label, etape.id, ".mp4", chaine=chaine_nom)
+        try:
+            fait = montage_video.concatener(parts, sortie)
+        except MediaAssemblyError as exc:
+            # repli: des tranches que la copie de flux ne sait pas joindre (un
+            # encodeur ou des réglages qui diffèrent) sont recollées en
+            # ré-encodant — une génération de perte de plus, jamais silencieuse.
+            store.append_log(parent_id, f"étape {etape.id} : copie de flux impossible "
+                                        f"({exc.detail}) — recollage ré-encodé")
+            fait = montage_video.recoller(parts, sortie, fps=tranches["fps"],
+                                          largeur=tranches["largeur"], hauteur=tranches["hauteur"])
+        jonctions: dict[str, Any] | None = None
+        if travail is not None:
+            try:
+                mesure = montage_video.mesurer_raccords(parts, Path(travail) / f"{etape.id}-jonctions")
+                jonctions = {"pire": mesure["pire"], "moyenne": mesure["moyenne"],
+                             "nombre": mesure["nombre"]}
+            except MediaAssemblyError as exc:
+                # repli: une jonction qui ne se mesure pas n'invalide pas le
+                # livrable — elle se dit au journal.
+                store.append_log(parent_id, f"étape {etape.id} : jonctions non mesurées "
+                                            f"({exc.detail})")
+        comment = "sans ré-encodage" if fait.get("reencode") is False else "en ré-encodant"
+        store.append_log(
+            parent_id,
+            f"étape {etape.id} : {n} tranches recollées {comment}"
+            + (f" — jonctions mesurées : pire {jonctions['pire']:.4f}, "
+               f"moyenne {jonctions['moyenne']:.4f}" if jonctions else ""))
+        chemin = Path(fait["livrable"])
+        resultat: dict[str, Any] = {
+            "livrable": str(chemin), "job_id": sous_ids[-1], "job_ids": sous_ids, "tranches": n,
+            "mesure": {**(fait.get("mesure") or {}), "bytes": chemin.stat().st_size},
+            "artefacts": artefacts, "_duree": duree}
+        if jonctions is not None:
+            resultat["jonctions"] = jonctions
+        if recits:
+            # Le compte est celui des tranches RENDUES, posé ici : la fusion ne
+            # connaît que les récits lisibles, et un récit illisible sur trois
+            # aurait fait dire « 2 tranches » à un contrôle qui en attend 3.
+            resultat["recit"] = {**fusionner_recits(recits), "tranches": n,
+                                 "tranches_au_recit": len(recits)}
         return resultat
 
     def _veiller(self, parent_id: str, sous_id: str, etape_id: str, rang: int,
@@ -484,6 +673,112 @@ class RunnerDeChaines:
                 f"dépôt de {fichier.name} chez le moteur refusé : {exc}") from exc
 
 
+# -- tranches : ce qu'un nœud déclare, et comment ses récits se fusionnent -----
+
+# Une image rendue en mémoire : RVB en float32, ce qu'un nœud d'image rend au
+# moteur. C'est ce poids, fois le nombre d'images, que le budget borne.
+OCTETS_PAR_IMAGE = 3 * 4
+
+# Le plus grand nombre de tranches qu'un nœud accepte (la borne de son entrée
+# `segment_count`). Au-delà, c'est la demande qui est hors de portée du poste,
+# et il vaut mieux le dire que de tenter soixante-cinq runs.
+TRANCHES_MAX = 64
+
+
+def noeud_de_tranches(graphe: dict[str, Any]) -> str | None:
+    """Le nœud qui sait rendre une TRANCHE, s'il y en a un.
+
+    C'est celui dont les entrées portent, en littéral, `segment_index` et
+    `segment_count` : la convention par laquelle un nœud déclare rendre les
+    images [n·i/N, n·(i+1)/N) d'une seule et même simulation. Une entrée liée
+    à un autre nœud (une liste `[nœud, sortie]`) n'est pas un réglage qu'on
+    puisse écrire : elle ne compte pas.
+    """
+    for ident, noeud in (graphe or {}).items():
+        entrees = noeud.get("inputs") if isinstance(noeud, dict) else None
+        if not isinstance(entrees, dict):
+            continue
+        if ("segment_index" in entrees and "segment_count" in entrees
+                and not isinstance(entrees["segment_index"], list)
+                and not isinstance(entrees["segment_count"], list)):
+            return str(ident)
+    return None
+
+
+def fusionner_recits(recits: list[dict[str, Any]]) -> dict[str, Any]:
+    """Le récit d'un rendu par tranches, fait des récits de chacune.
+
+    Ce qui est IDENTIQUE d'une tranche à l'autre est un fait du plan — la même
+    simulation l'a écrit — et reste tel quel. Ce qui DIFFÈRE est une mesure
+    prise sur les images de la tranche : un nombre dont le nom finit en `_min`
+    prend le minimum (et son instant `_s`, celui de la tranche qui le porte),
+    en `_max` le maximum, une liste se concatène dans l'ordre des tranches (la
+    série de l'encre dans le cadre), un objet se fusionne de même ; tout autre
+    scalaire qui diffère garde la valeur de la première tranche et se nomme
+    dans `tranches_divergentes`, pour qu'un contrôle sache ce qu'il lit.
+    """
+    presents = [r for r in recits if isinstance(r, dict)]
+    if not presents:
+        return {}
+    if len(presents) == 1:
+        return dict(presents[0])
+    divergents: list[str] = []
+
+    def nombres(valeurs: list[Any]) -> bool:
+        return all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in valeurs)
+
+    def fusion(parties: list[dict[str, Any]], prefixe: str) -> dict[str, Any]:
+        sortie: dict[str, Any] = {}
+        for cle in parties[0]:
+            if cle.endswith("_min_s") or cle.endswith("_max_s"):
+                continue                      # posé avec son extrême, ci-dessous
+            valeurs = [p.get(cle) for p in parties]
+            if all(v == valeurs[0] for v in valeurs[1:]):
+                sortie[cle] = valeurs[0]
+                continue
+            nom = f"{prefixe}{cle}"
+            if nombres(valeurs) and (cle.endswith("_min") or cle.endswith("_max")):
+                rang = (valeurs.index(min(valeurs)) if cle.endswith("_min")
+                        else valeurs.index(max(valeurs)))
+                sortie[cle] = valeurs[rang]
+                if f"{cle}_s" in parties[0]:
+                    sortie[f"{cle}_s"] = parties[rang].get(f"{cle}_s")
+                continue
+            if all(isinstance(v, list) for v in valeurs):
+                sortie[cle] = [x for v in valeurs for x in v]
+                continue
+            if all(isinstance(v, dict) for v in valeurs):
+                sortie[cle] = fusion(valeurs, nom + ".")
+                continue
+            sortie[cle] = valeurs[0]
+            divergents.append(nom)
+        # les instants des extrêmes qui n'ont pas trouvé leur extrême : la
+        # première tranche fait foi, et l'écart se nomme
+        for cle in parties[0]:
+            if (cle.endswith("_min_s") or cle.endswith("_max_s")) and cle not in sortie:
+                valeurs = [p.get(cle) for p in parties]
+                sortie[cle] = valeurs[0]
+                if any(v != valeurs[0] for v in valeurs[1:]):
+                    divergents.append(f"{prefixe}{cle}")
+        # Une clé qu'une tranche SUIVANTE est seule à porter n'a rien à quoi se
+        # fusionner — la première ne l'a pas écrite. La perdre en silence
+        # laissait un contrôle chercher une clé qu'un nœud avait pourtant
+        # écrite, alors que la clé manquante de l'autre côté (portée par la
+        # première et non par les suivantes) se nommait déjà : elle se nomme
+        # aussi.
+        for partie in parties[1:]:
+            for cle in partie:
+                if cle not in sortie and f"{prefixe}{cle}" not in divergents:
+                    divergents.append(f"{prefixe}{cle}")
+        return sortie
+
+    fusionne = fusion(presents, "")
+    fusionne["tranches"] = len(presents)
+    if divergents:
+        fusionne["tranches_divergentes"] = divergents
+    return fusionne
+
+
 def _principal(artefacts: list[Artifact]) -> Artifact | None:
     """Ce qu'un run a livré de PRINCIPAL, parmi ce qu'il a écrit.
 
@@ -537,8 +832,8 @@ def _resume(resultat: dict[str, Any]) -> dict[str, Any]:
     """Ce qu'on garde d'une étape dans la fiche du job : de quoi comprendre,
     pas la totalité (une mesure de raccords porte une ligne par frontière)."""
     garde = {}
-    for cle in ("livrable", "fichier", "depot", "images", "job_id", "mesure",
-                "pire", "moyenne", "nombre", "parts"):
+    for cle in ("livrable", "fichier", "depot", "images", "job_id", "job_ids", "tranches",
+                "jonctions", "mesure", "pire", "moyenne", "nombre", "parts"):
         if cle in resultat:
             garde[cle] = resultat[cle]
     if "controles" in resultat:

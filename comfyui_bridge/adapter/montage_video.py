@@ -320,6 +320,42 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
             "mesure": mesurer(cible)}
 
 
+def concatener(parts: Any, sortie: str | Path) -> dict[str, Any]:
+    """Joindre des parts SANS les ré-encoder : la copie de flux.
+
+    Réservée aux parts qu'un MÊME encodeur a écrites avec les MÊMES réglages —
+    les tranches d'un seul rendu, découpé pour tenir en mémoire. Le démultiplexeur
+    « concat » d'ffmpeg réécrit les horodatages et ne touche à aucune image :
+    la jonction est celle des images elles-mêmes, et le livrable ne subit
+    aucune génération de perte de plus que le rendu d'un seul tenant. Un
+    rognage de tête (``depuis_image``) est refusé : une copie ne coupe pas.
+    """
+    pieces = parts_normalisees(parts)
+    if any(piece["depuis_image"] for piece in pieces):
+        raise MediaAssemblyError("concaténation sans ré-encodage : une part demande un rognage "
+                                 "de tête, ce qu'une copie de flux ne sait pas faire")
+    cible = Path(sortie)
+    cible.parent.mkdir(parents=True, exist_ok=True)
+    liste = cible.with_name(f".{cible.stem}.parts.txt")
+    # Le format du démultiplexeur : une ligne « file '<chemin>' » par part, le
+    # chemin en barres obliques et les apostrophes échappées à sa façon.
+    lignes = []
+    for piece in pieces:
+        chemin = Path(piece["fichier"]).resolve().as_posix().replace("'", "'\\''")
+        lignes.append("file '" + chemin + "'\n")
+    liste.write_text("".join(lignes), encoding="utf-8")
+    try:
+        _lancer(outil(), ["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(liste),
+                          "-c", "copy", "-movflags", "+faststart", str(cible)],
+                "concaténation sans ré-encodage")
+    finally:
+        liste.unlink(missing_ok=True)
+    if not cible.exists() or not cible.stat().st_size:
+        raise MediaAssemblyError(f"concaténation sans ré-encodage : rien n'a été écrit dans {cible}")
+    return {"livrable": str(cible.resolve()), "mesure": mesurer(cible), "parts": len(pieces),
+            "reencode": False}
+
+
 def mesurer_raccords(parts: Any, travail: str | Path,
                      chevauchement: int = 0) -> dict[str, Any]:
     """La ressemblance de part en part, aux frontières du montage RÉEL."""

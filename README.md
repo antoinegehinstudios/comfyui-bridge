@@ -802,7 +802,7 @@ quand le plan ne tient pas la règle des quatre temps.
 
 | genre | ce qu'il fait | résultat |
 |---|---|---|
-| `rendre` | un run de workflow, par les moyens ordinaires | `livrable`, `artefacts`, `mesure`, `job_id`, `recit` (le premier artefact `.json` du run, hors compagnon, parsé ; la fiche du job n'en garde que les valeurs simples du premier niveau, le récit entier reste lisible par les étapes `verifier`) |
+| `rendre` | un run de workflow, par les moyens ordinaires — ou N runs successifs quand la mémoire l'oblige (voir « Rendu par tranches », plus bas) | `livrable`, `artefacts`, `mesure`, `job_id`, `recit` (le premier artefact `.json` du run, hors compagnon, parsé ; la fiche du job n'en garde que les valeurs simples du premier niveau, le récit entier reste lisible par les étapes `verifier`) ; tranché, il porte en plus `job_ids`, `tranches`, `jonctions` |
 | `extraire_queue` | les N dernières images, en clip SANS PERTE (`-qp 0`, compte revérifié), déposé chez le moteur | `fichier`, `depot`, `images` |
 | `extraire_image` | une image, par son index exact (`first`/`last`/N) | `fichier`, `depot` |
 | `recoller` | joindre des parts (ré-encodage uniforme, piste silencieuse si muet) | `livrable`, `mesure`, `parts` |
@@ -819,6 +819,72 @@ puisque c'est en les regardant qu'on comprend. Les pièces intermédiaires viven
 sous `<sortie>/cortex/_travail/<job>/` et ne sont jamais listées comme
 livrables. Annuler le parent arrête le sous-job en cours par les moyens du
 moteur et saute le reste.
+
+### Rendu par tranches : la mémoire ne borne plus la durée
+
+Un nœud qui tient toute une vidéo en mémoire — une image RVB en float32 par
+image rendue — dépasse la mémoire du poste dès qu'un plan s'allonge. **Mesuré le
+2026-09-15** : 2 258 images en 720×1280 (75 s à 30 i/s) demandaient **23,3 Gio
+d'un coup, refusés** ; 1 980 images (20 Gio) passaient de justesse. Ce n'est pas
+au demandeur de raccourcir sa vidéo ni de la rendre plus petite : la passerelle
+demande le rendu d'**une seule et même simulation** en N tranches successives,
+et les recolle.
+
+**Ce qu'un nœud déclare.** Un nœud qui sait rendre une tranche porte, dans ses
+entrées et **en littéral**, `segment_index` et `segment_count` : la tranche *i*
+de *N* rend les images `[n·i/N, n·(i+1)/N)` de la même simulation — le grain,
+la caméra et la lumière sont ceux de la seconde ABSOLUE, pas du début de la
+tranche, sans quoi les parts ne se rejoindraient pas. Il déclare aussi
+`duree_max_s`, la durée au-delà de laquelle il n'allonge plus : c'est elle qui
+borne le compte, puisque c'est le nœud qui décide de la durée retenue. Une
+entrée **liée** à un autre nœud (`["12", 0]`) ne compte pas : on ne peut pas y
+écrire. Sans ces deux entrées, rien n'est tranché — trancher un graphe qui ne
+sait pas le faire rendrait N fois la vidéo entière.
+
+**Le budget.** `COMFY_TRANCHE_GO` (8 Gio par défaut, `0` = jamais de tranche) :
+
+```
+images = ceil(max(duration_s, duree_max_s) × fps)
+N      = ceil(images × largeur × hauteur × 12 / budget)
+```
+
+`N ≤ 1` : le run part entier, comme avant. `N > 64` (la borne de `segment_count`) :
+la demande est refusée **avant le premier run**, en le disant — c'est le poste
+qui est hors de portée, pas le découpage qui manque.
+
+**Le recollage.** Les N parts viennent du même encodeur avec les mêmes réglages :
+elles sont jointes par **copie de flux** (démultiplexeur `concat`, `-c copy`) —
+aucune image n'est ré-encodée, et le livrable ne subit **aucune génération de
+perte de plus** que le rendu d'un seul tenant. Si la copie refuse (des parts qui
+ne se ressemblent pas assez), le recollage ré-encode, et le journal le dit :
+« copie de flux impossible (…) — recollage ré-encodé », puis
+« N tranches recollées en ré-encodant ». Les **jonctions sont mesurées** (SSIM
+de la dernière image d'une part à la première de la suivante) et dites :
+« jonctions mesurées : pire …, moyenne … ». Une jonction qui ne se mesure pas
+n'invalide pas le livrable — elle se dit au journal.
+
+**Les récits fusionnent.** Une étape `verifier` contrôle le récit sans savoir
+qu'il a été rendu en N fois. Ce qui est **identique** d'une tranche à l'autre
+est un fait du plan (la même simulation l'a écrit) et reste tel quel ; ce qui
+**diffère** est une mesure prise sur les images de la tranche :
+
+| dans le récit | ce que la fusion en fait |
+|---|---|
+| un nombre en `_min` / `_max` | le minimum / le maximum de toutes — et son instant `_s` est celui de LA tranche qui le porte |
+| une liste | concaténée, dans l'ordre des tranches |
+| un objet | fusionné de même, récursivement |
+| tout autre scalaire qui diffère | la valeur de la **première** tranche, et la clé est nommée dans `tranches_divergentes` |
+| une clé qu'une seule tranche porte | absente ou de la première tranche, et nommée dans `tranches_divergentes` |
+
+Le récit fusionné porte `tranches` (le compte). Un contrôle sait ainsi ce qu'il
+lit : une valeur nommée dans `tranches_divergentes` n'a pas été mesurée sur
+toute la vidéo.
+
+**Ce que l'étape en montre** : `job_ids` (un par tranche — ce sont des runs
+ordinaires, visibles dans `/v1/jobs`, chacun avec `parent`), `tranches` (le
+compte), `note` (« tranche 2/3 » pendant, « 3 tranches » après) et, dans son
+résultat, `jonctions` (`pire`, `moyenne`, `nombre`). Un arrêt demandé au parent
+est honoré **entre deux tranches** comme il l'est pendant un run.
 
 Trois chaînes sont livrées.
 
@@ -1073,6 +1139,7 @@ modifier ça ? » a donc une réponse par nature de changement :
 | l'ORDRE des étapes, les durées, les contrôles d'un flux composé | `_data/chaines/<nom>.json` (et sa copie `resources/chaines-exemples/`) | le runner de chaînes |
 | un CONTRÔLE sur ce que le nœud a MESURÉ (hook vu, climax tenu, durée retenue) | l'étape `verifier` de la chaîne, sur `$etape.recit.<clé>` (le premier artefact `.json` d'un run est parsé sous `recit`) | le runner de chaînes |
 | une RÉPÉTITION (blocs de boucle, conditions) | le montage `_data/workflows/<montage>.json`, ses blocs `_data/blocs/` | le dépliage |
+| le BUDGET MÉMOIRE d'une tranche (combien d'images un run tient d'un coup) | la variable d'environnement `COMFY_TRANCHE_GO` — c'est une propriété du POSTE, jamais de la chaîne ni du flux | le rendu par tranches |
 | ce que l'utilisateur VOIT (titre, catégorie, résumé, libellés, aides) | `_data/reconciliation.local.json` : `titre`, `categorie`, `menus`, `aides` | `/v1/workflows`, `/io` |
 | un RACCOURCI (un ensemble de réglages nommé, son aperçu) | `_data/raccourcis/<mode>/` — par l'API, jamais à la main | `/v1/workflows`, `…/raccourcis` |
 | le VOCABULAIRE des styles | `styles/*.json` du paquet de direction de style | `/io` (`options` + `choix`) |
@@ -1100,6 +1167,7 @@ référence d'une chaîne qui diverge de `_data/` est refusée par les tests.
 | `HERMES_MODE`       | `local`                   | `local` (registre) \| `off`             |
 | `HERMES_SCOPE`      | `comfyui`                 | Cloisonnement de la connaissance        |
 | `COMFYUI_TIMEOUT`   | `3600`                    | Budget d'un run (vidéo = long)          |
+| `COMFY_TRANCHE_GO`  | `8`                       | Gio d'images qu'un run tient d'un coup ; au-delà, rendu par TRANCHES (`0` = jamais) |
 
 ## Tests
 
