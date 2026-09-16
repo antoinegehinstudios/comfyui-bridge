@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "technique": "livre",
+  "libelle": "Les pages d'un livre",
+  "resume": "L'œuvre est imprimée dans un livre : chaque temps du plan tourne une page et découvre son élément — l'accroche d'abord, puis la mise en place, le corps, et la dernière page découvre l'œuvre entière, qui se contemple ; le livre se referme, et l'appel s'écrit sur la couverture. Une technique d'ESSAI de la répartition socle / paramètres : les étapes et le plan ne bougent pas, la façon de découvrir est tout autre.",
+  "expose": {
+    "papier": {
+      "type": "COMBO",
+      "defaut": "ivoire",
+      "options": [
+        "ivoire",
+        "creme",
+        "blanc-casse",
+        "gris-perle"
+      ],
+      "libelle": "Papier du livre"
+    }
+  },
+  "roles": {
+    "deroulement": {
+      "workflow": "video-reveal-livre-dirige",
+      "inputs": {
+        "61.markers_json": "$analyse.recit.markers_json",
+        "61.direction_json": "$intention.recit.direction_json",
+        "61.papier": "$papier",
+        "61.contemplation_s": "$contemplation_s"
+      }
+    },
+    "conclusion": {
+      "workflow": "video-reveal-livre-closing",
+      "inputs": {
+        "6.papier": "$papier",
+        "6.depart_s": "$deroulement.recit.duree_retenue_s",
+        "6.appel_texte": "$cta",
+        "6.fermeture_json": "$deroulement.recit.fermeture_json"
+      }
+    },
+    "appel": {
+      "workflow": "video-appel-final",
+      "inputs": {
+        "7.texte": "$cta",
+        "7.police": "$cta_police"
+      }
+    }
+  },
+  "controles": {
+    "plan_tenu": [
+      {
+        "id": "l_accroche_est_vue_a_2_5_s",
+        "valeur": "$deroulement.recit.hook_vu.atteint",
+        "op": "gte",
+        "attendu": 0.5
+      },
+      {
+        "id": "chaque_temps_a_sa_page",
+        "valeur": "$deroulement.recit.nb_pages",
+        "op": "gte",
+        "attendu": 2
+      },
+      {
+        "id": "l_ordre_d_arrivee_est_celui_du_plan",
+        "valeur": "$deroulement.recit.ordre_d_arrivee_respecte",
+        "op": "eq",
+        "attendu": true
+      },
+      {
+        "id": "le_coeur_vient_en_dernier",
+        "valeur": "$deroulement.recit.coeur_en_dernier",
+        "op": "eq",
+        "attendu": true
+      },
+      {
+        "id": "l_oeuvre_entiere_est_decouverte",
+        "valeur": "$deroulement.recit.couverture_finale",
+        "op": "gte",
+        "attendu": 0.99
+      },
+      {
+        "id": "l_oeuvre_se_contemple",
+        "valeur": "$deroulement.recit.contemplation_s",
+        "op": "gte",
+        "attendu": 3
+      }
+    ]
+  },
+  "notes": {
+    "pourquoi": "Antoine, 2026-09-16 au soir : « essayer un nouveau mode qui résulte à, en ayant toujours les mêmes étapes réseaux sociaux, révélation progressive : on tourne les pages d'un livre pour découvrir petit à petit les éléments — et estimer à quel point l'agnosticité est bien placée et les paramètres intelligemment réconciliés ». Cette technique est deux nœuds neufs (RevealLivre, LivreClosing), deux graphes, deux entrées de réconciliation et ce fichier : le plan de onze étapes n'a pas bougé, le code de la passerelle non plus. Ses contrôles sont les siens : ce qu'un livre mesure (pages, couverture, contemplation) n'est pas ce qu'une encre mesure."
+  }
+}
