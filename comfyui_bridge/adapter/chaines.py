@@ -412,7 +412,16 @@ class RunnerDeChaines:
     # il n'allonge plus : c'est elle qui borne le nombre de tranches, puisque le
     # nœud décide lui-même de la durée retenue.
 
-    def _tranches_de(self, parent_id: str, etape: noyau.Etape, nom: str,
+    def tranches_pour(self, nom: str, reglages: dict[str, Any],
+                      etiquette: str = "rendu") -> dict[str, Any] | None:
+        """Le découpage qu'un rendu DIRECT de ce graphe demanderait — la même
+        règle que pour une étape de chaîne, pour n'importe quel appelant (un
+        mode de maestro de n'importe quelle catégorie, un appel d'API, un
+        rejeu) : le mécanisme ne connaît que le graphe et son budget."""
+        return self._tranches_de(None, noyau.Etape(id=etiquette, genre="rendre", params={}),
+                                 nom, reglages)
+
+    def _tranches_de(self, parent_id: str | None, etape: noyau.Etape, nom: str,
                      reglages: dict[str, Any]) -> dict[str, Any] | None:
         """Combien de tranches il faut pour que ce run tienne dans le budget —
         ou None quand il tient d'un seul tenant, ou que le nœud ne sait pas
@@ -429,7 +438,8 @@ class RunnerDeChaines:
         except Exception as exc:                    # noqa: BLE001
             # repli: un graphe qui ne se lit pas ici sera refusé au run, qui le
             # dira ; on ne tranche pas ce qu'on ne sait pas lire — et on le dit.
-            c.store.append_log(parent_id, f"étape {etape.id} : pas de tranches ({exc})")
+            if parent_id is not None:
+                c.store.append_log(parent_id, f"étape {etape.id} : pas de tranches ({exc})")
             return None
         noeud = noeud_de_tranches(graphe)
         if noeud is None:
@@ -444,8 +454,9 @@ class RunnerDeChaines:
 
         largeur, hauteur, fps = nombre("width"), nombre("height"), nombre("fps")
         if largeur <= 0 or hauteur <= 0 or fps <= 0:
-            c.store.append_log(parent_id, f"étape {etape.id} : pas de tranches — largeur, "
-                                          f"hauteur ou cadence inconnues avant le run")
+            if parent_id is not None:
+                c.store.append_log(parent_id, f"étape {etape.id} : pas de tranches — largeur, "
+                                              f"hauteur ou cadence inconnues avant le run")
             return None
         plafond = (graphe.get(noeud) or {}).get("inputs", {}).get("duree_max_s")
         try:

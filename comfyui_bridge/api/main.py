@@ -25,9 +25,10 @@ from ..adapter import raccourcis
 from ..config import Settings
 from ..container import build_container
 from ..core.errors import (DependencyUnavailableError, InputValueRefusedError,
-                           RaccourciNotFoundError, UnknownWorkflowInputError)
+                           MediaAssemblyError, RaccourciNotFoundError,
+                           UnknownWorkflowInputError)
 from ..core.jobs import JobStatus
-from ..core.intention import intent_fields, is_media_param
+from ..core.intention import RenderIntent, intent_fields, is_media_param
 from ..core.orchestrator import Orchestrator, derivable_params
 from .problems import install_problem_handlers
 from .schemas import (ArtifactOut, IntentIn, JobOut, RaccourciIn, RejeuIn,
@@ -917,6 +918,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response.headers["Location"] = f"/v1/jobs/{job.id}"
             return JobOut.of(job)
         orch = c.orchestrator
+        # UN RENDU DIRECT SE TRANCHE COMME UNE ÉTAPE DE CHAÎNE. Le mécanisme
+        # ne regarde ni le mode ni sa catégorie ni qui appelle : seulement le
+        # graphe (un nœud qui déclare la tranche) et le budget. Sans cela, le
+        # même nœud tenait en mémoire dans une chaîne et débordait appelé seul.
+        tranche = _lancer_par_tranches(c, spec, intent_in, corps, background, force)
+        if tranche is not None:
+            response.headers["Location"] = f"/v1/jobs/{tranche.id}"
+            return JobOut.of(tranche)
         # accept() plans + reconciles synchronously; a strict rejection raises
         # HardwareReconciliationError here and leaves as a 422 problem+json.
         job, plan = orch.accept(intent_in.to_domain(), force=force)
@@ -937,6 +946,81 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         background.add_task(orch.execute, job.id, plan)
         response.headers["Location"] = f"/v1/jobs/{job.id}"
         return JobOut.of(job)
+
+    def _lancer_par_tranches(c, spec, intent_in: IntentIn, corps: dict,
+                             background: BackgroundTasks, force: bool = False):
+        """Un graphe appelé directement, rendu par tranches quand il le faut.
+
+        La même boucle que pour une étape de chaîne — le graphe devient une
+        chaîne d'une seule étape « rendu », dont le livrable est le recollage
+        des tranches. Rend None quand le rendu tient d'un seul tenant (ou que
+        le nœud ne sait pas trancher) : le chemin ordinaire reprend alors.
+        Hermes est consulté AVANT, comme pour un run entier : un problème
+        connu se refuse en 422 ici, pas à la troisième tranche.
+        """
+        from ..adapter.chaines import RunnerDeChaines, etapes_initiales
+        from ..core import chaine as _noyau
+        from ..core.cost import config_fingerprint
+        intention = intent_in.to_domain()
+        reglages = {champ: getattr(intention, champ)
+                    for champ in RenderIntent.__dataclass_fields__
+                    if champ not in ("workflow", "media", "label", "kind", "constraints")
+                    and getattr(intention, champ) not in (None, "", {}, ())}
+        if intention.constraints:
+            return None                      # une contrainte n'est pas une valeur de nœud
+        # Un texte qui commence par « $ » serait lu comme un renvoi de chaîne :
+        # ce rendu-là part entier, comme avant.
+        if any(isinstance(v, str) and v.startswith("$") for v in reglages.values()):
+            return None
+        runner = RunnerDeChaines(c)
+        try:
+            tranches = runner.tranches_pour(spec.name, reglages)
+        except MediaAssemblyError as exc:
+            # Une demande qui dépasse ce que ce poste sait découper n'est pas une
+            # panne du service : c'est la DEMANDE qui est hors de portée, et le
+            # message dit déjà quoi baisser. Rendue en 500, elle faisait porter à
+            # la passerelle la faute d'un appelant qui a demandé trop grand — la
+            # même confusion que « entrée inconnue » pour une durée trop longue.
+            # Dans une CHAÎNE le même refus reste un échec d'étape : là, le job
+            # a déjà été accepté.
+            raise InputValueRefusedError(exc.detail, **exc.extensions) from exc
+        if tranches is None:
+            return None
+        c.orchestrator.plan_and_reconcile(intention, force=force)     # 422 si Hermes refuse
+        brut = {"version": 1, "chaine": spec.name,
+                "resume": f"{spec.name}, rendu par tranches",
+                "etapes": [{"id": "rendu", "rendre": {"workflow": spec.name,
+                                                        "media": dict(intention.media),
+                                                        **reglages}}],
+                "livrable": "$rendu.livrable"}
+        chaine = _noyau.lire(brut, spec.name)
+        etiquette = "".join(ch for ch in str(corps.get("label") or "")
+                            if ch.isalnum() or ch in "-_")[:40] or spec.name
+        job = c.store.create(kind=spec.kind, workflow=spec.name,
+                             config=config_fingerprint(reglages), params=reglages,
+                             demande=dict(corps or {}))
+        c.store.set_etapes(job.id, etapes_initiales(chaine))
+        # Le même avertissement que le chemin ordinaire : ce sont les rendus les
+        # plus longs qui tournent ici, et ce sont eux qui perdraient le plus à
+        # rendre une analyse périmée sans un mot.
+        state = _freshness(c, spec)
+        if state.get("source_changed"):
+            c.store.append_log(
+                job.id, "ATTENTION : ce workflow a changé dans ComfyUI depuis son "
+                        f"extraction ({state.get('source_change_reason')}) — c'est "
+                        "l'analyse précédente qui tourne ; ré-extrais pour prendre "
+                        "les nouveautés")
+        c.store.append_log(job.id, f"accepted: '{spec.name}' rendu par tranches "
+                                   f"({tranches['nombre']} tranches pour tenir en mémoire) — "
+                                   f"sortie « cortex/{etiquette} »")
+        # Les réglages, et non {} : ce sont eux que le runner porte à la mémoire
+        # des problèmes à la fin (`registry.record`). Vides, le succès comme
+        # l'échec d'un rendu tranché se classaient sous une configuration vide,
+        # alors que le job lui-même est créé sous « 160x120 » juste au-dessus :
+        # un OOM rencontré en tranches n'aurait pas refusé le même run ensuite.
+        # La chaîne synthétique n'expose aucun champ : rien d'autre ne les lit.
+        background.add_task(runner.executer, job.id, chaine, reglages, etiquette, force)
+        return c.store.get(job.id)
 
     def _lancer_chaine(c, spec, corps: dict, background: BackgroundTasks,
                        force: bool = False):

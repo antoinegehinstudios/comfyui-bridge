@@ -886,6 +886,35 @@ compte), `note` (« tranche 2/3 » pendant, « 3 tranches » après) et, dans so
 résultat, `jonctions` (`pire`, `moyenne`, `nombre`). Un arrêt demandé au parent
 est honoré **entre deux tranches** comme il l'est pendant un run.
 
+**Pour n'importe quel appelant.** Le découpage ne regarde ni le mode, ni sa
+catégorie, ni qui appelle : seulement le graphe (un nœud qui déclare la tranche)
+et le budget. Un mode de maestro de n'importe quelle catégorie, un appel d'API,
+un rejeu — un `POST /v1/render` sur un graphe qui déborde devient **une chaîne
+d'une seule étape « rendu »** dont le livrable est le recollage des tranches :
+mêmes journaux, mêmes `etapes[].job_ids` / `tranches`, mêmes sous-jobs visibles
+dans `/v1/jobs`. Le job accepté annonce déjà son étape, comme une vraie chaîne.
+Sans cela, le même nœud tenait en mémoire appelé depuis une chaîne et débordait
+appelé seul. Hermes est consulté **avant** la première tranche (un souvenir qui
+tient encore refuse en 422, pas au troisième run), les champs hors modèle
+restent refusés comme avant, et un rendu qui tient d'un seul tenant reprend le
+chemin ordinaire — sans étapes, un appelant ne voit rien changer. Une demande
+qui dépasserait 64 tranches est refusée en **422** : c'est la demande qui est
+hors de portée du poste, et le message dit quoi baisser.
+
+**Sans bruit d'encodage visible.** Les tranches sont recollées par copie de
+flux : **aucune image n'est ré-encodée**, donc aucune génération de perte de
+plus qu'un rendu d'un seul tenant. Une jonction tombe sur une **image-clé** —
+un rendu entier en porte déjà une toutes les 250 images (mesuré sur un rendu de
+1 539 images : I aux images 1, 251, 501, 751, 1001), si bien qu'une frontière de
+tranche ne se distingue pas des frontières que l'encodeur pose de lui-même. Et
+depuis le 2026-09-16, les graphes **intermédiaires** de la révélation
+(déroulement, conclusion, appel, encre et brume) encodent en **h264 crf 10**
+(quasi sans perte) au lieu du crf 23 par défaut : mesuré à 435 kb/s sur un
+rendu 352×640, le grain du papier était mangé **avant** le montage final à
+crf 18 — la perte ne venait pas du recollage mais de l'intermédiaire. Réglé dans
+`_data/workflows/*.json` (nœud `SaveVideo` : `codec` `h264`, `codec.encoding`
+`re-encode`, `codec.encoding.crf` `10`).
+
 Trois chaînes sont livrées.
 
 `video-revelation` — « Révéler une image », le seul flux publié de sa
@@ -1140,6 +1169,7 @@ modifier ça ? » a donc une réponse par nature de changement :
 | un CONTRÔLE sur ce que le nœud a MESURÉ (hook vu, climax tenu, durée retenue) | l'étape `verifier` de la chaîne, sur `$etape.recit.<clé>` (le premier artefact `.json` d'un run est parsé sous `recit`) | le runner de chaînes |
 | une RÉPÉTITION (blocs de boucle, conditions) | le montage `_data/workflows/<montage>.json`, ses blocs `_data/blocs/` | le dépliage |
 | le BUDGET MÉMOIRE d'une tranche (combien d'images un run tient d'un coup) | la variable d'environnement `COMFY_TRANCHE_GO` — c'est une propriété du POSTE, jamais de la chaîne ni du flux | le rendu par tranches |
+| la QUALITÉ d'un INTERMÉDIAIRE (ce qu'un graphe écrit avant le montage final) | le nœud `SaveVideo` du graphe, dans `_data/workflows/<nom>.json` : `codec`, `codec.encoding`, `codec.encoding.crf` (10 sur les graphes de la révélation) | le moteur, à l'écriture du fichier |
 | ce que l'utilisateur VOIT (titre, catégorie, résumé, libellés, aides) | `_data/reconciliation.local.json` : `titre`, `categorie`, `menus`, `aides` | `/v1/workflows`, `/io` |
 | un RACCOURCI (un ensemble de réglages nommé, son aperçu) | `_data/raccourcis/<mode>/` — par l'API, jamais à la main | `/v1/workflows`, `…/raccourcis` |
 | le VOCABULAIRE des styles | `styles/*.json` du paquet de direction de style | `/io` (`options` + `choix`) |

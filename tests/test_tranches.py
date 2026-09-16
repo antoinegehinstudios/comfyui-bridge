@@ -374,6 +374,151 @@ def test_une_demande_hors_de_portee_du_poste_est_refusee_en_le_disant(banc):
     assert atelier.faux.tranches_recues == []                   # rien n'a été lancé
 
 
+# -- n'importe quel appelant ---------------------------------------------------
+
+
+@SANS_FFMPEG
+def test_un_graphe_appele_directement_est_tranche_comme_une_etape(banc):
+    """Le mécanisme ne regarde ni le mode, ni sa catégorie, ni qui appelle :
+    seulement le graphe et le budget. Sans cela, le même nœud tenait en mémoire
+    dans une chaîne et débordait appelé seul."""
+    atelier = banc(BUDGET_POUR_TROIS)
+    r = atelier.post("/v1/render", json={"workflow": "video-tranchable", "duration_s": 2,
+                                         "width": LARGEUR, "height": HAUTEUR, "fps": CADENCE,
+                                         "label": "direct"})
+    assert r.status_code == 202, r.text
+    # Le job accepté dit DÉJÀ ce qu'il va faire, comme une chaîne.
+    assert [e["id"] for e in r.json()["etapes"]] == ["rendu"]
+    job = _job(atelier, r)
+    assert job["status"] == "succeeded", job.get("problem")
+    rendu = _etape(job, "rendu")
+    assert rendu["tranches"] == 3 and len(rendu["job_ids"]) == 3
+    assert atelier.faux.tranches_recues == [(0, 3), (1, 3), (2, 3)]
+    for sous_id in rendu["job_ids"]:
+        assert atelier.get(f"/v1/jobs/{sous_id}").json()["parent"] == job["id"]
+    assert "rendu par tranches" in "\n".join(job["logs"])
+    # UN livrable, pas trois : les tranches ne sont pas des livraisons.
+    assert len(job["artifacts"]) == 1
+    livrable = pathlib.Path(job["artifacts"][0]["path"])
+    assert livrable.is_file() and 1.7 <= montage_video.mesurer(livrable)["duration_s"] <= 2.3
+
+
+@SANS_FFMPEG
+def test_un_rendu_direct_qui_tient_reste_un_run_ordinaire(banc):
+    """La mécanique ne s'invite pas là où on n'en veut pas : sans budget, ou sur
+    un graphe qui ne déclare rien, le run part entier et le job n'a pas
+    d'étapes — un appelant ne voit rien changer."""
+    sans_budget = banc(0)
+    job = _job(sans_budget, sans_budget.post("/v1/render", json={
+        "workflow": "video-tranchable", "duration_s": 2, "width": LARGEUR,
+        "height": HAUTEUR, "fps": CADENCE}))
+    assert job["status"] == "succeeded", job.get("problem")
+    assert not job["etapes"]
+    assert sans_budget.faux.tranches_recues == [(None, None)]
+
+    muet = banc(BUDGET_POUR_TROIS)
+    entier = _job(muet, muet.post("/v1/render", json={
+        "workflow": "video-entiere", "duration_s": 2, "width": LARGEUR,
+        "height": HAUTEUR, "fps": CADENCE}))
+    assert entier["status"] == "succeeded", entier.get("problem")
+    assert not entier["etapes"] and muet.faux.tranches_recues == [(None, None)]
+
+
+@SANS_FFMPEG
+def test_le_rejeu_d_un_rendu_tranche_est_tranche_aussi(banc):
+    """Rejouer, c'est renvoyer la demande gardée : elle repasse par le même
+    chemin et retrouve le même découpage. Le rejeu n'est pas une seconde façon
+    de lancer un run."""
+    atelier = banc(BUDGET_POUR_TROIS)
+    premier = _job(atelier, atelier.post("/v1/render", json={
+        "workflow": "video-tranchable", "duration_s": 2, "width": LARGEUR,
+        "height": HAUTEUR, "fps": CADENCE, "label": "origine"}))
+    assert _etape(premier, "rendu")["tranches"] == 3
+
+    r = atelier.post(f"/v1/jobs/{premier['id']}/rejouer", json={"reglages": {}})
+    assert r.status_code == 202, r.text
+    rejoue = _job(atelier, r)
+    assert rejoue["id"] != premier["id"] and rejoue["status"] == "succeeded"
+    assert _etape(rejoue, "rendu")["tranches"] == 3
+    assert rejoue["demande"]["label"] == "origine"          # la demande ne bouge pas
+    assert atelier.faux.tranches_recues == [(0, 3), (1, 3), (2, 3)] * 2
+
+
+def test_un_probleme_connu_refuse_avant_la_premiere_tranche(banc):
+    """Hermes est consulté AVANT, comme pour un run entier : un souvenir qui
+    tient encore refuse ici, et non à la troisième tranche — trois runs dépensés
+    pour redécouvrir ce que la mémoire savait déjà."""
+    from comfyui_bridge.core.problems import OOM
+    atelier = banc(BUDGET_POUR_TROIS)
+    c = atelier.app.state.container
+    # La configuration telle que le plan la signe : 160×120, et les 50 images
+    # que 2 s à 25 i/s demandent (`latent_batch`).
+    c.registry.record(c.settings.host_id, "video-tranchable",
+                      {"width": LARGEUR, "height": HAUTEUR, "latent_batch": 50},
+                      status="failed", problem=OOM, detail="CUDA out of memory")
+    r = atelier.post("/v1/render", json={"workflow": "video-tranchable", "duration_s": 2,
+                                         "width": LARGEUR, "height": HAUTEUR, "fps": CADENCE})
+    assert r.status_code == 422
+    assert r.headers["content-type"].startswith("application/problem+json")
+    assert r.json()["type"].endswith("/reconciliation-refused")
+    assert r.json()["problem"] == OOM
+    assert atelier.faux.tranches_recues == []               # rien n'a été lancé
+    assert not atelier.get("/v1/jobs").json()["jobs"]       # …et aucun job créé
+
+
+def test_une_demande_hors_de_portee_est_refusee_a_l_appelant_pas_au_service(banc):
+    """Appelé directement, un rendu qui demanderait 231 tranches est refusé en
+    **422** : c'est la demande qui est hors de portée du poste, pas le service
+    qui est en panne — et le message dit quoi baisser. En 500, la passerelle
+    portait la faute d'un appelant qui a demandé trop grand."""
+    atelier = banc(BUDGET_IMPOSSIBLE)
+    r = atelier.post("/v1/render", json={"workflow": "video-tranchable", "duration_s": 2,
+                                         "width": LARGEUR, "height": HAUTEUR, "fps": CADENCE})
+    assert r.status_code == 422
+    assert r.json()["type"].endswith("/input-value-refused")
+    assert "tranches" in r.json()["detail"] and str(TRANCHES_MAX) in r.json()["detail"]
+    assert atelier.faux.tranches_recues == []
+    assert not atelier.get("/v1/jobs").json()["jobs"]
+
+
+def test_un_champ_hors_modele_reste_refuse_sur_un_graphe(banc):
+    """Le découpage s'insère avant le plan, jamais avant le contrôle des champs :
+    un nom mal orthographié repartirait sinon avec un 202 sans rien piloter."""
+    atelier = banc(BUDGET_POUR_TROIS)
+    r = atelier.post("/v1/render", json={"workflow": "video-tranchable", "duration_s": 2,
+                                         "width": LARGEUR, "height": HAUTEUR,
+                                         "fps": CADENCE, "profondeur": 3})
+    assert r.status_code == 422
+    assert r.json()["type"].endswith("/unknown-workflow-input")
+    assert "profondeur" in r.json()["detail"]
+    assert atelier.faux.tranches_recues == []
+
+
+def test_le_decoupage_se_demande_sans_job_et_sans_journal(banc):
+    """`tranches_pour` répond la même chose qu'une étape de chaîne, avant même
+    qu'un job existe — c'est ce qui permet de trancher un appel direct. Sans
+    parent, rien n'est journalisé : il n'y a personne à qui le dire, et les
+    chemins qui parlent d'ordinaire ne doivent pas échouer pour autant."""
+    from comfyui_bridge.adapter.chaines import RunnerDeChaines
+    atelier = banc(BUDGET_POUR_TROIS)
+    runner = RunnerDeChaines(atelier.app.state.container)
+    reglages = {"duration_s": 2, "width": LARGEUR, "height": HAUTEUR, "fps": CADENCE}
+    tranches = runner.tranches_pour("video-tranchable", reglages)
+    assert tranches["nombre"] == 3 and tranches["noeud"] == NOEUD
+    assert tranches["images"] == int(math.ceil(DUREE_MAX * CADENCE))
+    assert runner.tranches_pour("video-entiere", reglages) is None
+    # La taille peut venir des défauts DÉCLARÉS du mode : un appelant qui ne
+    # pose que la durée est tranché comme il le sera au rendu.
+    assert runner.tranches_pour("video-tranchable", {"duration_s": 2})["nombre"] == 3
+    # Les deux chemins qui parlent d'ordinaire à un parent : une taille qu'on ne
+    # connaît pas avant le run, et un graphe qui ne se lit pas. Sans parent, ils
+    # n'ont personne à qui le dire — et ne doivent pas échouer pour autant.
+    assert runner.tranches_pour("video-tranchable",
+                                {"duration_s": 2, "width": 0, "height": 0, "fps": 0}) is None
+    assert runner.tranches_pour("jamais-declare", reglages) is None
+    assert not atelier.get("/v1/jobs").json()["jobs"]
+
+
 # -- ce qu'un nœud déclare, et la fusion des récits ----------------------------
 
 
