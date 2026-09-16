@@ -1,67 +1,67 @@
 {
-  "commentaire": "Règles qui tiennent ce projet. Chemins résolus dans le projet, puis dans le socle (E:/Claude Code/Programmes/garde). Ajouter ici les règles propres au projet ; retirer celles qui ne le concernent pas, en écrivant pourquoi.",
-  "regles": [
-    {
-      "id": "controle-qui-ne-peut-pas-echouer",
-      "enonce": "Un point de contrôle dont le verdict est une constante vraie ne peut pas échouer : il affiche vert quoi qu'il arrive.",
-      "tenue_par": {
-        "cmd": [
-          "node",
-          "regles/controle-qui-ne-peut-pas-echouer.js"
-        ]
-      },
-      "epreuve": "epreuves/controle-qui-ne-peut-pas-echouer"
-    },
-    {
-      "id": "repli-muet",
-      "enonce": "Un repli est légitime ; un repli qui ne laisse aucune trace ne l'est pas — l'écart doit se déclarer, jamais se taire.",
-      "tenue_par": {
-        "cmd": [
-          "node",
-          "regles/repli-muet.js"
-        ]
-      },
-      "epreuve": "epreuves/repli-muet"
-    },
-    {
-      "id": "declare-sans-code",
-      "enonce": "Ce qu'un manifeste déclare doit exister dans le code : une promesse sans implémentation se lit comme un fait.",
-      "tenue_par": {
-        "cmd": [
-          "node",
-          "regles/declare-sans-code.js",
-          "--options",
-          "{\"manifestes\":[\"**/adapter.json\"],\"champs\":[\"/operations\"]}"
-        ]
-      },
-      "epreuve": "epreuves/declare-sans-code"
-    },
-    {
-      "id": "octet-de-controle",
-      "enonce": "Un fichier source ne contient pas d'octet de contrôle : une édition par substitution de chaîne laisse un fichier valide qui se comporte faux.",
-      "tenue_par": {
-        "cmd": [
-          "node",
-          "regles/octet-de-controle.js"
-        ]
-      },
-      "epreuve": "epreuves/octet-de-controle",
-      "pourquoi_malgre_le_plafond": "Le plafond de trois règles protège du BRUIT. Celle-ci n'en produit aucun (aucun faux positif possible dans un fichier texte) et la panne a coûté deux diagnostics dans la seule séance qui a produit ce socle."
-    },
-    {
-      "id": "flux-hors-du-code",
-      "enonce": "Un flux de création (workflow, chaîne, montage) ne se nomme que dans ses données : un nom de flux dans le code est un cas particulier qui s'installe, et la modification suivante ne saura plus où aller.",
-      "tenue_par": {
-        "cmd": [
-          "node",
-          "regles/flux-hors-du-code.js",
-          "--options",
-          "{\"sources\":[{\"fichiers\":\"_data/reconciliation.local.json\",\"noms\":\"cles:/workflows\"},{\"fichiers\":\"_data/workflows/index.json\",\"noms\":\"cles:/workflows\"},{\"fichiers\":\"_data/chaines/*.json\",\"noms\":\"champ:/chaine\"},{\"fichiers\":\"comfyui_bridge/adapter/resources/*-exemples/reconciliation*.json\",\"noms\":\"cles:/workflows\"},{\"fichiers\":\"comfyui_bridge/adapter/resources/chaines-exemples/*.json\",\"noms\":\"champ:/chaine\"}],\"code\":[\"comfyui_bridge/**\"],\"sauf\":[\"comfyui_bridge/adapter/resources/**\"]}"
-        ]
-      },
-      "epreuve": "epreuves/flux-hors-du-code",
-      "pourquoi_malgre_le_plafond": "Cinquième règle : c'est celle qui répond à « où modifier un flux ? » — sans elle, la réponse n'est qu'une doctrine (references du lanceur, cadre.md), et une doctrine sans témoin ne tient pas."
-    }
-  ],
-  "ignorer": []
+ "commentaire": "Règles qui tiennent ce projet. Chemins résolus dans le projet, puis dans le socle (E:/Claude Code/Programmes/garde). Ajouter ici les règles propres au projet ; retirer celles qui ne le concernent pas, en écrivant pourquoi.",
+ "regles": [
+  {
+   "id": "controle-qui-ne-peut-pas-echouer",
+   "enonce": "Un point de contrôle dont le verdict est une constante vraie ne peut pas échouer : il affiche vert quoi qu'il arrive.",
+   "tenue_par": {
+    "cmd": [
+     "node",
+     "regles/controle-qui-ne-peut-pas-echouer.js"
+    ]
+   },
+   "epreuve": "epreuves/controle-qui-ne-peut-pas-echouer"
+  },
+  {
+   "id": "repli-muet",
+   "enonce": "Un repli est légitime ; un repli qui ne laisse aucune trace ne l'est pas — l'écart doit se déclarer, jamais se taire.",
+   "tenue_par": {
+    "cmd": [
+     "node",
+     "regles/repli-muet.js"
+    ]
+   },
+   "epreuve": "epreuves/repli-muet"
+  },
+  {
+   "id": "declare-sans-code",
+   "enonce": "Ce qu'un manifeste déclare doit exister dans le code : une promesse sans implémentation se lit comme un fait.",
+   "tenue_par": {
+    "cmd": [
+     "node",
+     "regles/declare-sans-code.js",
+     "--options",
+     "{\"manifestes\":[\"**/adapter.json\"],\"champs\":[\"/operations\"]}"
+    ]
+   },
+   "epreuve": "epreuves/declare-sans-code"
+  },
+  {
+   "id": "octet-de-controle",
+   "enonce": "Un fichier source ne contient pas d'octet de contrôle : une édition par substitution de chaîne laisse un fichier valide qui se comporte faux.",
+   "tenue_par": {
+    "cmd": [
+     "node",
+     "regles/octet-de-controle.js"
+    ]
+   },
+   "epreuve": "epreuves/octet-de-controle",
+   "pourquoi_malgre_le_plafond": "Le plafond de trois règles protège du BRUIT. Celle-ci n'en produit aucun (aucun faux positif possible dans un fichier texte) et la panne a coûté deux diagnostics dans la seule séance qui a produit ce socle."
+  },
+  {
+   "id": "flux-hors-du-code",
+   "enonce": "Un flux de création (workflow, chaîne, montage) ne se nomme que dans ses données : un nom de flux dans le code est un cas particulier qui s'installe, et la modification suivante ne saura plus où aller.",
+   "tenue_par": {
+    "cmd": [
+     "node",
+     "regles/flux-hors-du-code.js",
+     "--options",
+     "{\"sources\":[{\"fichiers\":\"_data/reconciliation.local.json\",\"noms\":\"cles:/workflows\"},{\"fichiers\":\"_data/workflows/index.json\",\"noms\":\"cles:/workflows\"},{\"fichiers\":\"_data/chaines/*.json\",\"noms\":\"champ:/chaine\"},{\"fichiers\":\"comfyui_bridge/adapter/resources/*-exemples/reconciliation*.json\",\"noms\":\"cles:/workflows\"},{\"fichiers\":\"comfyui_bridge/adapter/resources/chaines-exemples/*.json\",\"noms\":\"champ:/chaine\"},{\"fichiers\":\"_data/techniques/*.json\",\"noms\":\"champ:/technique\"},{\"fichiers\":\"comfyui_bridge/adapter/resources/techniques-exemples/*.json\",\"noms\":\"champ:/technique\"}],\"code\":[\"comfyui_bridge/**\"],\"sauf\":[\"comfyui_bridge/adapter/resources/**\"]}"
+    ]
+   },
+   "epreuve": "epreuves/flux-hors-du-code",
+   "pourquoi_malgre_le_plafond": "Cinquième règle : c'est celle qui répond à « où modifier un flux ? » — sans elle, la réponse n'est qu'une doctrine (references du lanceur, cadre.md), et une doctrine sans témoin ne tient pas."
+  }
+ ],
+ "ignorer": []
 }

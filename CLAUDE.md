@@ -23,11 +23,17 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   et `raccourcis[]` (les ensembles de réglages enregistrés sous ce mode :
   `id`, `titre`, `resume`, `valeurs`, `ecarts[].{champ,libelle,valeur,libelle_valeur}`,
   `apercu_url` s'il existe, `job_id`, `ordre` — liste vide sinon ; le MODE
-  lui-même, avec ses défauts, est le raccourci implicite, affiché en premier) ;
+  lui-même, avec ses défauts, est le raccourci implicite, affiché en premier),
+  et sur une CHAÎNE `techniques[]` (`valeur`, `libelle`, `resume` — les façons
+  de tenir ses rôles, liste vide si elle n'en emploie aucune) ;
 - `GET /v1/workflows/{nom}/io` : `intent_inputs[]` (`field`, `type`, `value`,
   `min`, `max`, `step`, `options`, `choix`, `libelle`, `unite`, `aide`,
-  `derived`, `requis`) et `media_inputs[]` (`param`, `category`, `label`,
-  `accept`, `carried`) — le formulaire est bâti uniquement dessus ;
+  `derived`, `requis`, et pour un champ qu'une TECHNIQUE apporte : `selon`
+  (`{champ, valeurs}` — le lanceur ne le montre que sous ces techniques-là),
+  plus `selon_options` / `selon_defauts` par technique quand deux techniques
+  exposent le même nom avec des valeurs différentes) et `media_inputs[]`
+  (`param`, `category`, `label`, `accept`, `carried`) — le formulaire est bâti
+  uniquement dessus ;
 - `POST /v1/render` (corps plat, `label` = nom de la production),
   `POST /v1/estimate`, `GET /v1/jobs`, `GET /v1/jobs/{id}` + `/events`,
   `POST /v1/jobs/{id}/cancel` et `/rejouer`, `PUT /v1/workflows/{nom}/apercu`,
@@ -37,7 +43,13 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   valide, range et fabrique l'image ;
   un job porte `demande`, `etapes` (chaque étape rendue : `resultat`, dont
   `recit`, le récit compact écrit par le nœud — ce sur quoi l'étape `verifier`
-  de la chaîne a jugé), `artifacts[].{kind,path,url}`, `problem`.
+  de la chaîne a jugé), `artifacts[].{kind,path,url}`, `problem`. Un job de
+  CHAÎNE réussi ne livre QUE son livrable (la production finale montée) : les
+  produits d'étapes — déroulement recollé, conclusion, appel, clips, récits,
+  tranches — restent dans `etapes[].resultat` et dans les sous-jobs
+  (`/v1/jobs?enfants=1`), jamais dans `artifacts` (2026-09-16 : « il doit
+  toujours livrer l'état terminé »). En ÉCHEC, tout ce qui a été écrit reste
+  listé.
 Les tests `tests/test_chaines_api.py` tiennent ces formes ; une chaîne modifiée
 dans `_data/chaines/` doit garder sa copie `resources/chaines-exemples/`.
 
@@ -68,6 +80,16 @@ documentation : elle dit d'où elles viennent.
 standardisation ») : le plan des onze étapes est agnostique, tout le reste est un
 paramètre dont le DÉFAUT est celui du rendu ink livré ce jour-là ; un style de plus
 est une entrée de plus dans un catalogue ou une table, jamais un défaut de moins.
+Depuis le 2026-09-16, **la chaîne ne nomme aucune TECHNIQUE** (Antoine : « la
+mention de brume ne doit pas être tenue par le workflow de la passerelle : cela
+veut dire qu'il porte une dépendance à la brume et devra se faire doublon pour
+faire autrement ») : ses étapes `deroulement` et `conclusion` nomment un RÔLE et
+la technique qui le tient (`"role"` + `"technique": "$technique"`), et
+`plan_tenu` prend la liste de contrôles de cette technique. Quel graphe tient
+chaque rôle, ses réglages propres et ses contrôles vivent dans
+`_data/techniques/<nom>.json` — une technique de plus est un FICHIER de plus, et
+`video-revelation-brume` a disparu au profit de la technique `brume`. Le témoin
+épingle donc les deux : le plan dans la chaîne, l'encre dans sa technique.
 Une SEULE exception depuis : le FORMAT par défaut est passé au portrait 720p à
 30 i/s (`width` 720, `height` 1280, `fps` 30) le 2026-09-15 au soir, à la demande
 d'Antoine — un format est un réglage d'usage, pas un trait du style, et rien de
@@ -89,6 +111,21 @@ et `duree_max_s` qui borne le compte) et que la mémoire l'oblige
 par copie de flux (aucune image ré-encodée), récits fusionnés. Le job porte alors
 `etapes[].job_ids` et `etapes[].tranches` (un `job_id` par tranche, tous visibles
 dans `/v1/jobs`) ; voir « Rendu par tranches » dans le README.
+
+**Les LIMITES du poste sont déclarées, jamais devinées** : `_data/materiel.local.json`
+(RAM totale, part réservée au reste de la machine, facteur de crête, VRAM, cœurs)
+— « les limitations matérielles du PC doivent être dans un fichier de
+réconciliation […] au cas où la RAM du PC venait à changer » (Antoine,
+2026-09-16). Le budget d'une tranche en sort : `(totale − reservee) /
+facteur_de_crete`. Ordre : surcharge `COMFY_TRANCHE_GO` > fichier > repli 8 Gio,
+DIT au démarrage, dans le journal du job et sur `GET /v1/materiel`.
+
+**Une étape facultative déclare ce qu'elle rend quand elle n'a pas lieu**
+(`"sinon": {…}`, fusionné par-dessus le passe-plat), et une part de montage
+accepte `sauf_les_dernieres` (rognage de QUEUE) à côté de `depuis_image`
+(rognage de tête) ; une part au fichier nul est ignorée, et dite. C'est ce qui
+permet à l'appel final de ne plus charger la conclusion entière : le montage
+joint la conclusion sans les images que l'appel a reprises.
 
 **Nommage des fichiers livrés** (règle générale, tenue ici) :
 `cortex/<nom donné>_<type>…` — le type est le workflow, ou la chaîne pour un

@@ -70,8 +70,8 @@ def test_une_etape_ne_peut_pas_porter_le_nom_d_un_champ():
 
 def test_les_defauts_comblent_et_les_bornes_refusent():
     chaine = noyau.lire(_minimale())
-    assert noyau.valeurs(chaine, {}) == {"duration_s": 5.0}
-    assert noyau.valeurs(chaine, {"duration_s": 7}) == {"duration_s": 7.0}
+    assert noyau.valeurs(chaine, {})[0] == {"duration_s": 5.0}
+    assert noyau.valeurs(chaine, {"duration_s": 7})[0] == {"duration_s": 7.0}
     with pytest.raises(InputValueRefusedError) as bas:
         noyau.valeurs(chaine, {"duration_s": 1})
     assert "minimum 2" in bas.value.detail
@@ -86,7 +86,7 @@ def test_un_champ_requis_absent_est_refuse():
     with pytest.raises(InputValueRefusedError) as refus:
         noyau.valeurs(chaine, {})
     assert "image" in refus.value.detail
-    assert noyau.valeurs(chaine, {"image": "a.png"}) == {"image": "a.png"}
+    assert noyau.valeurs(chaine, {"image": "a.png"})[0] == {"image": "a.png"}
 
 
 def test_un_champ_que_la_chaine_n_expose_pas_est_refuse():
@@ -100,12 +100,12 @@ def test_une_valeur_hors_menu_est_refusee_et_le_menu_peut_venir_du_dehors():
     chaine = noyau.lire(_minimale(expose={
         "mode": {"type": "COMBO", "defaut": "a", "options": ["a", "b"]}},
         etapes=[{"id": "un", "rendre": {"workflow": "$mode"}}]))
-    assert noyau.valeurs(chaine, {"mode": "b"}) == {"mode": "b"}
+    assert noyau.valeurs(chaine, {"mode": "b"})[0] == {"mode": "b"}
     with pytest.raises(InputValueRefusedError):
         noyau.valeurs(chaine, {"mode": "c"})
     # La liste peut être remplie par la passerelle (options_depuis) : c'est
     # celle-là qui fait autorité au moment de valider.
-    assert noyau.valeurs(chaine, {"mode": "z"}, {"mode": ("z",)}) == {"mode": "z"}
+    assert noyau.valeurs(chaine, {"mode": "z"}, {"mode": ("z",)})[0] == {"mode": "z"}
 
 
 def test_une_liste_peut_venir_du_catalogue_ou_d_un_menu_declare():
@@ -200,11 +200,11 @@ def test_un_texte_facultatif_vaut_sa_chaine_vide_et_un_booleen_son_faux():
                 "libre": {"type": "STRING"}},
         etapes=[{"id": "un", "rendre": {"workflow": "wf",
                                         "inputs": {"7.texte": "$cta", "7.signer": "$signer"}}}]))
-    assert noyau.valeurs(chaine, {}) == {"cta": "", "signer": False}
-    assert noyau.valeurs(chaine, {"cta": "Abonnez-vous", "signer": "oui"}) == {
+    assert noyau.valeurs(chaine, {})[0] == {"cta": "", "signer": False}
+    assert noyau.valeurs(chaine, {"cta": "Abonnez-vous", "signer": "oui"})[0] == {
         "cta": "Abonnez-vous", "signer": True}
     # …et le renvoi se résout sur la chaîne vide, au lieu de lever.
-    assert noyau.resoudre(chaine.etapes[0].params, noyau.valeurs(chaine, {}), {})["inputs"] == {
+    assert noyau.resoudre(chaine.etapes[0].params, noyau.valeurs(chaine, {})[0], {})["inputs"] == {
         "7.texte": "", "7.signer": False}
 
 

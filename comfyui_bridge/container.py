@@ -37,12 +37,19 @@ class Container:
     store: JobStore
     orchestrator: Orchestrator
     inflight: InflightLog
+    # Les limites MATÉRIELLES déclarées de ce poste (ou None si rien n'est
+    # déclaré) : c'est sur elles que le découpage d'un rendu se calcule.
+    materiel: dict | None = None
 
 
 def build_container(settings: Settings | None = None) -> Container:
     settings = settings or Settings.from_env()
     registry = ProblemRegistry(settings.hermes_db, scope=settings.hermes_scope)
     data_dir = settings.hermes_db.parent
+    # Le matériel du poste, lu une fois : un fichier qui ne tient pas est refusé
+    # ici, au démarrage, et non au premier rendu long.
+    from .adapter import materiel as _materiel
+    limites = _materiel.lire(data_dir)
     catalog = load_catalog(settings.catalog_file, settings.workflows_dir, data_dir=data_dir)
 
     # Resolve WHERE ComfyUI runs before anything talks to it.
@@ -79,6 +86,8 @@ def build_container(settings: Settings | None = None) -> Container:
         host_id=settings.host_id,
         registry=catalog,
     )
+    budget, provenance = _materiel.budget_et_provenance(limites, settings.tranche_octets)
+    print(f"[comfyui-bridge] {_materiel.dire(budget, provenance)}")
     return Container(
         settings=settings,
         registry=registry,
@@ -91,4 +100,5 @@ def build_container(settings: Settings | None = None) -> Container:
         store=store,
         orchestrator=orchestrator,
         inflight=inflight,
+        materiel=limites,
     )

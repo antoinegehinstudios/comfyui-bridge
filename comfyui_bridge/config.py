@@ -86,8 +86,16 @@ class Settings:
     # images (20 Gio) passaient de justesse. Au-delà de ce budget d'images en
     # mémoire, la passerelle demande le rendu par TRANCHES d'une même simulation
     # (voir adapter/chaines.py, « rendu par tranches ») et les recolle sans
-    # ré-encoder. 0 = jamais de tranche.
-    tranche_octets: int = int(float(os.getenv("COMFY_TRANCHE_GO", "8")) * 2 ** 30)
+    # ré-encoder.
+    #
+    # Ce budget n'est plus codé ici : il se DÉDUIT du matériel déclaré du poste
+    # (`_data/materiel.local.json`, voir adapter/materiel.py) — « les
+    # limitations matérielles du PC doivent être dans un fichier de
+    # réconciliation […] au cas où la RAM du PC venait à changer » (Antoine,
+    # 2026-09-16). `COMFY_TRANCHE_GO` reste une SURCHARGE d'essai, dite quand
+    # elle s'applique ; 0 (le défaut) veut dire « d'après le matériel », et sans
+    # fichier le repli est de 8 Gio, dit lui aussi.
+    tranche_octets: int = int(float(os.getenv("COMFY_TRANCHE_GO", "0")) * 2 ** 30)
 
     # --- Hermes (hardware reconciliation) ------------------------------------
     # Knowledge base is LOCAL to this pipeline (private _data dir) and SCOPED to

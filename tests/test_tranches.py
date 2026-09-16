@@ -262,6 +262,9 @@ def test_les_tranches_sont_recollees_sans_reencodage_et_les_jonctions_mesurees(b
     journal = "\n".join(job["logs"])
     assert "3 tranches recollées sans ré-encodage" in journal
     assert "jonctions mesurées" in journal
+    # UNE TRANCHE N'EST JAMAIS UNE LIVRAISON : le job réussi ne porte que le
+    # recollé, jamais les trois parts qui l'ont fait.
+    assert len(job["artifacts"]) == 1
     rendu = _etape(job, "rendu")
     assert rendu["resultat"]["jonctions"]["nombre"] == 2       # trois parts, deux frontières
     assert 0.0 <= rendu["resultat"]["jonctions"]["pire"] <= 1.0

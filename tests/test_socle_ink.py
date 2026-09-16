@@ -6,12 +6,19 @@ type de tracé sont des paramètres ajustables ; ce qui n'est pas soumis à un
 paramètre est un plan agnostique qui donne les étapes ; tous les réglages par
 défaut sont ceux de ce style ink ; cette base ne doit pas changer ».
 
-Ce fichier ÉPINGLE cette base sur la chaîne de référence commitée : le plan (les
-onze étapes, leur ordre, leurs genres), les défauts de chaque champ exposé, les
-contrôles qui gardent le plan et la peinture, et le contrat par lequel chaque
-étape parle à la suivante. Une modification qui le fait échouer est une
-décision à écrire ici, jamais un accident. Un style de plus s'ajoute dans les
-catalogues et les tables ; il ne touche à rien de ce qui est épinglé.
+Antoine, 2026-09-16 : LA CHAÎNE NE NOMME AUCUNE TECHNIQUE — « la mention de
+brume ne doit pas être tenue par le workflow de la passerelle : cela veut dire
+qu'il porte une dépendance à la brume et devra se faire doublon pour faire
+autrement ». Le socle se lit donc à deux endroits depuis ce jour : le PLAN dans
+la chaîne (onze étapes, leurs genres, les rôles qu'elle nomme, ses contrôles
+communs) et l'ENCRE dans sa technique (défauts, options, quel graphe tient
+chaque rôle et ce qu'il reçoit, ses contrôles « plan_tenu »). Rien n'a bougé
+dans ce qui est épinglé : ce qui était écrit dans la chaîne est écrit dans la
+technique, mot pour mot, et l'encre reste la technique PAR DÉFAUT.
+
+Une modification qui fait échouer ce fichier est une décision à écrire ici,
+jamais un accident. Une technique de plus est un FICHIER de plus : elle ne
+touche à rien de ce qui est épinglé.
 """
 
 import json
@@ -23,6 +30,7 @@ from comfyui_bridge.core import chaine as noyau
 
 RACINE = pathlib.Path(__file__).resolve().parents[1]
 EXEMPLES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "chaines-exemples"
+TECHNIQUES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "techniques-exemples"
 
 # LE PLAN AGNOSTIQUE : les étapes et leurs genres, dans cet ordre.
 PLAN = [("analyse", "rendre"), ("culture", "rendre"), ("intention", "rendre"),
@@ -30,32 +38,41 @@ PLAN = [("analyse", "rendre"), ("culture", "rendre"), ("intention", "rendre"),
         ("raccord", "extraire_queue"), ("conclusion", "rendre"), ("appel", "rendre"),
         ("montage", "recoller"), ("controle", "verifier")]
 
-# LES DÉFAUTS DU STYLE INK — ceux des vidéos livrées le 2026-09-15 à midi.
-DEFAUTS_INK = {
+# Les deux étapes que le plan confie à une TECHNIQUE, par leur rôle.
+ROLES_DU_PLAN = {"deroulement": "deroulement", "conclusion": "conclusion"}
+
+# LES DÉFAUTS COMMUNS — ceux du plan, que toute technique partage.
+DEFAUTS_DU_PLAN = {
     "duration_s": 45, "contemplation_s": 4, "conclusion_s": 8, "cta": "", "cta_police": "",
     "style_narratif": "reseau-social", "style_approche": "peinture-calme",
-    "fond": "washi", "ambiance": "lanterne", "encre": "lavis", "negatif": "non",
-    "rendu": "ink-bleed", "conduite": "le plan", "bords": "fondus",
+    "conduite": "le plan", "bords": "fondus",
     # DÉCISION ÉCRITE, 2026-09-15 au soir (Antoine : « valeurs par défaut :
     # portrait, 720p, 30 i/s ») : le format n'est pas un trait du style ink, c'est
     # un réglage d'usage — orientation et résolution, vocabulaire « formats » de
     # la réconciliation. Le défaut passe de 704×1280 à 25 i/s (midi) à 720×1280
     # à 30 i/s ; le nœud d'encre accepte un pas de 8 en largeur (720 = 90 × 8).
     "width": 720, "height": 1280, "fps": 30, "seed": 71,
+    # DÉCISION ÉCRITE, 2026-09-16 : la technique est un CHOIX, et l'encre est
+    # celle qui s'ouvre — c'est le rendu livré le 2026-09-15 à midi.
+    "technique": "encre",
 }
-BORNES_INK = {"contemplation_s": (3, 5), "conclusion_s": (0, 30), "duration_s": (5, 79)}
+
+# LES DÉFAUTS DU STYLE INK — ceux des vidéos livrées le 2026-09-15 à midi.
+DEFAUTS_INK = {"fond": "washi", "ambiance": "lanterne", "encre": "lavis",
+               "negatif": "non", "rendu": "ink-bleed"}
+
+BORNES_DU_PLAN = {"contemplation_s": (3, 5), "conclusion_s": (0, 30), "duration_s": (5, 79)}
+OPTIONS_DU_PLAN = {"conduite": ["le plan", "la camera"], "bords": ["fondus", "francs"]}
 OPTIONS_INK = {
     "fond": ["washi", "washi-sans-lampe", "sepia", "gris-atelier"],
     "ambiance": ["lanterne", "chandelle", "atelier", "selon-le-fond"],
     "encre": ["lavis", "trait-sec", "encre-dense"],
     "negatif": ["non", "oui", "selon-l-oeuvre"],
     "rendu": ["ink-bleed", "classique", "front-organique"],
-    "conduite": ["le plan", "la camera"],
-    "bords": ["fondus", "francs"],
 }
 
-# CE QUE CHAQUE ÉTAPE RENDUE APPELLE, ET CE QU'ELLE REÇOIT DE L'AMONT.
-CONTRAT_INK = {
+# CE QUE CHAQUE ÉTAPE DU PLAN APPELLE, ET CE QU'ELLE REÇOIT DE L'AMONT.
+CONTRAT_DU_PLAN = {
     "analyse": ("image-iconographe", {"media": {"image": "$image"}}),
     "culture": ("image-iconologue", {"1.markers_json": "$analyse.recit.markers_json",
                                      "1.anchors_json": "$analyse.recit.anchors_json",
@@ -64,6 +81,11 @@ CONTRAT_INK = {
                                       "62.markers_json": "$analyse.recit.markers_json",
                                       "62.culture_json": "$culture.recit.culture_json",
                                       "62.anchors_json": "$culture.recit.anchors_json"}),
+    "appel": ("video-appel-final", {"7.texte": "$cta", "7.police": "$cta_police"}),
+}
+
+# CE QUE L'ENCRE MET DERRIÈRE CHAQUE RÔLE : le graphe, et ses entrées de nœud.
+CONTRAT_DE_L_ENCRE = {
     "deroulement": ("video-reveal-cinematic-dirige", {
         "61.markers_json": "$analyse.recit.markers_json",
         "61.direction_json": "$intention.recit.direction_json",
@@ -75,7 +97,6 @@ CONTRAT_INK = {
         "6.fond": "$fond", "6.ambiance": "$ambiance",
         "6.depart_s": "$deroulement.recit.duree_retenue_s",
         "6.appel_texte": "$cta", "6.fermeture_json": "$deroulement.recit.fermeture_json"}),
-    "appel": ("video-appel-final", {"7.texte": "$cta", "7.police": "$cta_police"}),
 }
 
 CONTROLES_PLAN_VALIDE = [
@@ -104,40 +125,61 @@ def ink():
     return _brut("video-revelation")
 
 
-def test_le_plan_est_agnostique_et_partage(ink):
-    """Les onze étapes, dans cet ordre, avec leurs genres — et la chaîne de la
-    brume, autre technique, porte exactement le même plan : le plan ne dépend
-    d'aucun style."""
-    for nom in ("video-revelation", "video-revelation-brume"):
-        chaine = noyau.lire(_brut(nom), nom)
-        assert [(e.id, e.genre) for e in chaine.etapes] == PLAN, nom
+@pytest.fixture(scope="module")
+def technique_encre():
+    return json.loads((TECHNIQUES / "encre.json").read_text(encoding="utf-8"))
+
+
+# -- le plan -------------------------------------------------------------------
+
+
+def test_le_plan_est_agnostique_et_ne_nomme_aucune_technique(ink):
+    """Les onze étapes, dans cet ordre, avec leurs genres — et les deux étapes
+    qui peignent nomment un RÔLE, jamais un graphe. C'est ce qui fait qu'une
+    technique de plus est un fichier de plus, et non une chaîne de plus."""
+    chaine = noyau.lire(ink, "video-revelation")
+    assert [(e.id, e.genre) for e in chaine.etapes] == PLAN
     assert ink["livrable"] == "$montage.livrable"
+    for ident, role in ROLES_DU_PLAN.items():
+        etape = [e for e in chaine.etapes if e.id == ident][0]
+        assert etape.role == role and etape.workflow is None, ident
+        assert etape.technique == "$technique", ident
+    # …et le contrôle de la peinture prend sa liste chez la technique.
+    plan_tenu = [e for e in chaine.etapes if e.id == "plan_tenu"][0]
+    assert plan_tenu.params == {"technique": "$technique", "controles": "plan_tenu"}
+    # Aucun nom de graphe de peinture ne reste dans le plan.
+    ecrit = json.dumps(ink, ensure_ascii=False)
+    for graphe in ("video-reveal-cinematic-dirige", "video-reveal-closing",
+                   "video-reveal-brume-dirige", "video-reveal-brume-closing"):
+        assert graphe not in ecrit, graphe
 
 
-def test_les_defauts_sont_ceux_du_style_ink(ink):
-    """Tous les réglages par défaut sont ceux du rendu ink livré le 2026-09-15 :
-    cette base ne change pas. Un style de plus est une OPTION de plus, jamais un
-    défaut de moins."""
+def test_les_defauts_communs_sont_ceux_du_plan(ink):
+    """Les réglages du PLAN — durée, contemplation, conclusion, appel, structure,
+    approche, conduite, bords, format, graine — et le choix de la technique, qui
+    s'ouvre sur l'encre."""
     expose = ink["expose"]
     assert expose["image"] == {"media": "image", "requis": True, "libelle": "L'image à révéler"}
     defauts = {k: v["defaut"] for k, v in expose.items() if k != "image"}
-    assert defauts == DEFAUTS_INK
-    for champ, (mini, maxi) in BORNES_INK.items():
+    assert defauts == DEFAUTS_DU_PLAN
+    for champ, (mini, maxi) in BORNES_DU_PLAN.items():
         assert (expose[champ]["min"], expose[champ]["max"]) == (mini, maxi), champ
-    for champ, options in OPTIONS_INK.items():
+    for champ, options in OPTIONS_DU_PLAN.items():
         assert expose[champ]["options"][0] == options[0], champ      # le défaut en tête
         assert set(expose[champ]["options"]) >= set(options), champ  # rien de retiré
     assert expose["style_narratif"]["options_depuis"] == {"menu": "style_narratif"}
     assert expose["style_approche"]["options_depuis"] == {"menu": "style_approche"}
+    # La liste des techniques n'est écrite nulle part : elle est celle des fichiers.
+    assert expose["technique"]["options_depuis"] == {"techniques": True}
+    assert "options" not in expose["technique"]
 
 
 def test_chaque_etape_ne_recoit_que_le_contrat_declare(ink):
     """Les étapes sont indépendantes : chacune n'apprend de l'amont que par ce
     que la chaîne déclare — un champ exposé, le récit ou le livrable d'une
-    étape PRÉCÉDENTE. La fermeture reçoit ainsi « fermeture_json » du récit du
-    déroulement au lieu de relire le disque."""
+    étape PRÉCÉDENTE."""
     etapes = {e["id"]: e for e in ink["etapes"]}
-    for ident, (workflow, attendu) in CONTRAT_INK.items():
+    for ident, (workflow, attendu) in CONTRAT_DU_PLAN.items():
         rendre = etapes[ident]["rendre"]
         assert rendre["workflow"] == workflow, ident
         recu = dict(rendre.get("inputs") or {})
@@ -146,32 +188,112 @@ def test_chaque_etape_ne_recoit_que_le_contrat_declare(ink):
             attendu = {k: v for k, v in attendu.items() if k != "media"}
         assert recu == attendu, ident
     assert etapes["raccord"]["extraire_queue"] == {"video": "$deroulement.livrable", "images": 50}
+    # Les étapes à rôle ne portent QUE ce que le plan sait : le média et le format.
+    assert etapes["deroulement"]["rendre"]["media"] == {"image": "$image"}
+    assert "inputs" not in etapes["deroulement"]["rendre"]
     assert etapes["conclusion"]["rendre"]["media"] == {"video": "$raccord.depot"}
+    assert "inputs" not in etapes["conclusion"]["rendre"]
     assert etapes["appel"]["rendre"]["media"] == {"video": "$conclusion.livrable"}
     assert etapes["appel"]["quand"] == "$cta"
-    assert etapes["montage"]["recoller"]["parts"] == ["$deroulement.livrable", "$appel.livrable"]
+    # DÉCISION ÉCRITE, 2026-09-16 (Antoine : « à la toute fin, tu éprouveras avec
+    # une vidéo 4K/60 fps de 20 s ») : L'APPEL NE CHARGE PLUS LA CONCLUSION
+    # ENTIÈRE. Le nœud la lit paresseusement et ne rend que les images qu'il
+    # écrit ; le montage joint donc la conclusion SANS celles que l'appel a
+    # reprises, puis l'appel — sinon on les verrait deux fois. Sans CTA, l'étape
+    # est sautée : son « sinon » rend un livrable nul (la part est ignorée) et
+    # zéro image reprise (rien n'est rogné), et le montage retombe à deux parts.
+    assert etapes["appel"]["sinon"] == {"livrable": None, "recit": {"images_reprises": 0}}
+    assert etapes["montage"]["recoller"]["parts"] == [
+        "$deroulement.livrable",
+        {"fichier": "$conclusion.livrable",
+         "sauf_les_dernieres": "$appel.recit.images_reprises"},
+        "$appel.livrable"]
     # et aucun renvoi ne vise l'aval : la lecture le prouve
     noyau.lire(ink, "video-revelation")
 
 
-def test_les_deux_controles_gardent_le_plan_et_la_peinture(ink):
+def test_les_controles_communs_gardent_le_plan_et_le_livrable(ink):
+    """Le plan se juge avant de peindre, et le livrable après le montage : ces
+    deux-là ne dépendent d'aucune technique et restent dans la chaîne."""
     etapes = {e["id"]: e for e in ink["etapes"]}
     assert [c["id"] for c in etapes["plan_valide"]["verifier"]] == CONTROLES_PLAN_VALIDE
-    assert [c["id"] for c in etapes["plan_tenu"]["verifier"]] == CONTROLES_PLAN_TENU
-    assert [c["id"] for c in etapes["controle"]["verifier"]] == ["les_deux_parts", "livrable_pese"]
+    assert [c["id"] for c in etapes["controle"]["verifier"]] == [
+        "le_montage_a_ses_parts", "livrable_pese"]
+    # Deux parts (sans appel) ou trois (avec) : le contrôle dit l'un ET l'autre
+    # depuis que l'appel est une part à lui, et non la conclusion réécrite.
+    parts = [c for c in etapes["controle"]["verifier"]
+             if c["id"] == "le_montage_a_ses_parts"][0]
+    assert (parts["op"], parts["attendu"]) == ("between", [2, 3])
+
+
+# -- la technique encre --------------------------------------------------------
+
+
+def test_l_encre_tient_les_roles_du_plan(technique_encre):
+    """Ce qui était écrit dans la chaîne est écrit ici, mot pour mot : quel graphe
+    tient chaque rôle, et ce qu'il reçoit. La fermeture reçoit ainsi
+    « fermeture_json » du récit du déroulement au lieu de relire le disque."""
+    lue = noyau.lire_technique(technique_encre, "encre")
+    assert lue.nom == "encre" and lue.libelle == "Encre"
+    assert sorted(lue.roles) == sorted(CONTRAT_DE_L_ENCRE)
+    for role, (workflow, inputs) in CONTRAT_DE_L_ENCRE.items():
+        assert lue.roles[role].workflow == workflow, role
+        assert lue.roles[role].inputs == inputs, role
+
+
+def test_les_defauts_de_l_encre_sont_ceux_du_style_livre(technique_encre):
+    """Tous les réglages par défaut de l'encre sont ceux du rendu livré le
+    2026-09-15 : cette base ne change pas. Un style de plus est une OPTION de
+    plus, jamais un défaut de moins."""
+    expose = technique_encre["expose"]
+    assert {k: v["defaut"] for k, v in expose.items()} == DEFAUTS_INK
+    for champ, options in OPTIONS_INK.items():
+        assert expose[champ]["options"][0] == options[0], champ      # le défaut en tête
+        assert set(expose[champ]["options"]) >= set(options), champ  # rien de retiré
+
+
+def test_l_encre_porte_les_controles_de_la_peinture(technique_encre):
+    """« plan_tenu » juge ce que la peinture a MESURÉ contre ce que le plan
+    promettait — et ces grandeurs-là sont celles de l'encre, pas du plan : une
+    autre technique en mesure d'autres."""
+    lue = noyau.lire_technique(technique_encre, "encre")
+    assert [c["id"] for c in lue.controles["plan_tenu"]] == CONTROLES_PLAN_TENU
+
+
+def test_la_chaine_et_ses_techniques_tiennent_ensemble(ink):
+    """Chaque technique tient les deux rôles que le plan nomme et porte la liste
+    de contrôles qu'il demande, et aucun de leurs renvois ne vise l'aval : c'est
+    ce que la lecture prouve avant de dépenser la moindre seconde de rendu."""
+    chaine = noyau.lire(ink, "video-revelation")
+    techniques = {}
+    for fichier in sorted(TECHNIQUES.glob("*.json")):
+        lue = noyau.lire_technique(json.loads(fichier.read_text(encoding="utf-8")), fichier.stem)
+        techniques[lue.nom] = lue
+    assert "encre" in techniques and len(techniques) >= 2
+    noyau.verifier_techniques(chaine, techniques)
+    # L'encre est celle qui s'ouvre.
+    assert noyau.technique_choisie(chaine, {}, techniques).nom == "encre"
+    # Et le socle de l'encre est bien ce que le mode propose par défaut.
+    assert {k: v for k, v in noyau.defauts(chaine, techniques["encre"]).items()
+            if k in DEFAUTS_INK} == DEFAUTS_INK
+
+
+# -- les graphes locaux --------------------------------------------------------
 
 
 def test_le_graphe_local_du_deroulement_porte_les_memes_defauts():
     """Les graphes vivent hors du dépôt (ce qui décrit une machine) ; quand ils
-    sont là, leurs littéraux disent la même base que la chaîne."""
+    sont là, leurs littéraux disent la même base que la technique."""
     graphes = RACINE / "_data" / "workflows"
     if not (graphes / "video-reveal-cinematic-dirige.json").is_file():
         pytest.skip("pas de _data/workflows sur ce poste")
     noeud = json.loads((graphes / "video-reveal-cinematic-dirige.json").read_text(encoding="utf-8"))["61"]
     assert noeud["class_type"] == "RevealCinematic"
-    for cle in ("fond", "ambiance", "encre", "rendu", "conduite", "negatif", "bords"):
+    for cle in ("fond", "ambiance", "encre", "rendu", "negatif"):
         assert noeud["inputs"][cle] == DEFAUTS_INK[cle], cle
-    assert noeud["inputs"]["contemplation_s"] == DEFAUTS_INK["contemplation_s"]
+    assert noeud["inputs"]["conduite"] == DEFAUTS_DU_PLAN["conduite"]
+    assert noeud["inputs"]["bords"] == DEFAUTS_DU_PLAN["bords"]
+    assert noeud["inputs"]["contemplation_s"] == DEFAUTS_DU_PLAN["contemplation_s"]
     fermeture = json.loads((graphes / "video-reveal-closing.json").read_text(encoding="utf-8"))["6"]
     assert fermeture["class_type"] == "InkClosing"
     assert fermeture["inputs"]["hold_s"] == 0.5 and not fermeture["inputs"].get("goutte", False)

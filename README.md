@@ -810,12 +810,37 @@ quand le plan ne tient pas la règle des quatre temps.
 | `verifier` | des contrôles `eq/ne/lte/gte/between/exists` sur ce qui a été mesuré | `controles` |
 
 Une part de `recoller` / `mesurer_raccords` s'écrit `"chemin"` ou
-`{"fichier": "…", "depuis_image": 17}` — le rognage de tête jette le
-chevauchement que l'amont a re-rendu.
+`{"fichier": "…", "depuis_image": 17, "sauf_les_dernieres": 13}` :
+`depuis_image` est le rognage de TÊTE (il jette le chevauchement que l'amont a
+re-rendu), `sauf_les_dernieres` le rognage de QUEUE, en images — il sert quand
+l'AVAL a déjà repris la fin de cette part. Une part dont le fichier est `null`
+ou vide est **ignorée**, et dite au journal : c'est ainsi qu'une étape sautée
+rend « rien » sans casser le montage qui la nomme (il en faut au moins une qui
+reste). `mesurer_raccords` compare alors la dernière image **gardée** d'une part
+à la première de la suivante — mesurer la dernière image du fichier aurait jugé
+une frontière que personne ne voit.
+
+Une étape facultative (`quand`) peut déclarer ce qu'elle rend quand elle N'A PAS
+LIEU : `"sinon": {"livrable": null, "recit": {"images_reprises": 0}}`, un objet
+libre fusionné **par-dessus** le passe-plat (le média repris, qui reste le
+défaut sans `sinon`). Sans lui, un aval qui lit `$appel.recit.images_reprises`
+gardait un renvoi non résolu, et le montage échouait à cause d'une étape qu'on
+avait justement choisi de ne pas jouer.
+
+**Un job de chaîne réussi livre son livrable, rien d'autre** : ses `artifacts`
+ne portent que la production finale montée — ni le déroulement recollé, ni la
+conclusion, ni l'appel, ni les clips ou les récits. Antoine, 2026-09-16 :
+« maestro ne doit pas, dans son outil de visualisation des productions,
+afficher les produits d'itérations, mais seulement la production finale montée ;
+il doit toujours livrer l'état terminé ». Ce que les étapes ont produit reste
+lisible dans `etapes[].resultat` (livrable, `job_ids`, `tranches`, récit résumé)
+et dans les sous-jobs (`/v1/jobs?enfants=1`) — c'est du travail, pas une
+livraison. Une chaîne qui ne déclare aucun `livrable` garde l'ancien
+comportement : tout ce qu'elle a produit est listé, faute de mieux.
 
 Un contrôle faux **arrête** la chaîne (`problem_kind: "controle-echoue"`, avec
-le mesuré ET l'attendu) ; les fichiers déjà produits restent dans les artefacts,
-puisque c'est en les regardant qu'on comprend. Les pièces intermédiaires vivent
+le mesuré ET l'attendu) ; **en échec**, les fichiers déjà produits restent dans
+les artefacts, puisque c'est en les regardant qu'on comprend. Les pièces intermédiaires vivent
 sous `<sortie>/cortex/_travail/<job>/` et ne sont jamais listées comme
 livrables. Annuler le parent arrête le sous-job en cours par les moyens du
 moteur et saute le reste.
@@ -841,16 +866,61 @@ entrée **liée** à un autre nœud (`["12", 0]`) ne compte pas : on ne peut pas
 écrire. Sans ces deux entrées, rien n'est tranché — trancher un graphe qui ne
 sait pas le faire rendrait N fois la vidéo entière.
 
-**Le budget.** `COMFY_TRANCHE_GO` (8 Gio par défaut, `0` = jamais de tranche) :
+**Le budget.** Il vient du MATÉRIEL déclaré du poste (voir « Le matériel du
+poste », plus bas) :
 
 ```
+budget = (memoire.totale_octets − memoire.reservee_octets) / memoire.facteur_de_crete
 images = ceil(max(duration_s, duree_max_s) × fps)
 N      = ceil(images × largeur × hauteur × 12 / budget)
 ```
 
 `N ≤ 1` : le run part entier, comme avant. `N > 64` (la borne de `segment_count`) :
 la demande est refusée **avant le premier run**, en le disant — c'est le poste
-qui est hors de portée, pas le découpage qui manque.
+qui est hors de portée, pas le découpage qui manque. Le journal du job dit le
+budget ET d'où il vient (« budget de 14,4 Gio par tranche, d'après
+materiel.local.json ») : un découpage qui change parce qu'un fichier a bougé
+doit se lire, jamais se deviner.
+
+### Le matériel du poste
+
+Antoine, 2026-09-16 : « les limitations matérielles du PC doivent être dans un
+fichier de réconciliation, qui permet de faire les calculs pour que le workflow
+sache ajuster son nombre d'itérations (au cas où la RAM du PC venait à
+changer) ». Le nombre de tranches n'est pas un réglage de flux : il se **déduit**
+de la mémoire de la machine. Écrit dans le code, il aurait fallu le rouvrir à
+chaque barrette ajoutée ; écrit dans une chaîne, il aurait suivi le flux sur une
+autre machine, où il aurait été faux.
+
+`_data/materiel.local.json` (non versionné : il décrit UNE machine ; copie
+d'exemple `resources/materiel.exemple.json`) :
+
+```jsonc
+{
+  "memoire": { "totale_octets": 68719476736,     // la RAM du poste
+               "reservee_octets": 30064771072,   // ce que le reste de la machine garde
+               "facteur_de_crete": 2.5 },        // le pic d'un run, en fois le poids des images
+  "memoire_graphique": { "totale_octets": 12884901888 },   // déclaré pour ce qui viendra
+  "coeurs": 28                                             // idem : rien ne le lit encore
+}
+```
+
+`facteur_de_crete` sort d'une mesure (2026-09-15) : 20 Gio d'images passaient
+avec 36 Go libres, 23,3 Gio échouaient — un pic à ≈ 1,6× ; 2,5 laisse de la
+marge. Avec les valeurs ci-dessus : (64 − 28) / 2,5 = **14,4 Gio par tranche**.
+
+L'ordre, écrit une seule fois : **surcharge** (`COMFY_TRANCHE_GO`, pour un
+essai — dite quand elle s'applique) > **fichier** > **repli de 8 Gio**, dit
+lui aussi au démarrage et dans la route. Un fichier qui ne tient pas (totale à
+zéro, réservée plus grande que la totale, facteur sous 1) est refusé **au
+démarrage**, nommé — pas au premier rendu long.
+
+`GET /v1/materiel` rend le déclaré, le **mesuré** (psutil s'il est installé,
+sinon `GlobalMemoryStatusEx` sous Windows, sinon rien — et c'est dit), le budget
+qui en découle, sa provenance, et les avertissements : « le fichier dit 512 Go,
+le poste en a 64 » est l'erreur qu'on ne découvrait qu'en panne sèche. Une marge
+de 5 % évite de crier sur les 0,13 % qu'un système garde toujours pour lui
+(mesuré ici : 68 631 527 424 octets rendus pour 68 719 476 736 déclarés).
 
 **Le recollage.** Les N parts viennent du même encodeur avec les mêmes réglages :
 elles sont jointes par **copie de flux** (démultiplexeur `concat`, `-c copy`) —
@@ -915,7 +985,74 @@ crf 18 — la perte ne venait pas du recollage mais de l'intermédiaire. Réglé
 `_data/workflows/*.json` (nœud `SaveVideo` : `codec` `h264`, `codec.encoding`
 `re-encode`, `codec.encoding.crf` `10`).
 
-Trois chaînes sont livrées.
+### Une chaîne ne nomme aucune technique
+
+Antoine, 2026-09-16 : « la mention de brume ne doit pas être tenue par le
+workflow de la passerelle : cela veut dire qu'il porte une dépendance à la brume
+et devra se faire doublon pour faire autrement ». `video-revelation` (encre) et
+`video-revelation-brume` étaient deux chaînes **jumelles** : même plan de onze
+étapes, seules la peinture, la conclusion et leurs contrôles `plan_tenu`
+différaient. Une technique de plus était une chaîne de plus, recopiée.
+
+Une **chaîne** est donc le PLAN, agnostique : ses étapes nomment des **rôles**
+(`deroulement`, `conclusion`), jamais un graphe de peinture, et elle expose un
+champ dont la liste est celle des techniques déclarées. Une **technique**
+(`_data/techniques/<nom>.json`, copie de référence `resources/techniques-exemples/`)
+dit quel graphe tient chaque rôle et avec quelles entrées de nœud, quels réglages
+elle ajoute, et quels contrôles elle porte :
+
+```jsonc
+// la chaîne : le plan
+"expose": { "…": "…", "technique": { "type": "COMBO", "defaut": "encre",
+                                     "options_depuis": { "techniques": true } } },
+"etapes": [
+  { "id": "deroulement", "rendre": { "role": "deroulement", "technique": "$technique",
+      "media": { "image": "$image" }, "duration_s": "$duration_s" } },
+  { "id": "plan_tenu",   "verifier": { "technique": "$technique", "controles": "plan_tenu" } }
+]
+
+// la technique : ce qui tient les rôles
+{ "version": 1, "technique": "encre", "libelle": "Encre", "resume": "…",
+  "expose": { "fond": { "type": "COMBO", "defaut": "washi", "options": ["washi", "…"] } },
+  "roles": { "deroulement": { "workflow": "video-reveal-cinematic-dirige",
+                              "inputs": { "61.fond": "$fond", "61.conduite": "$conduite" } } },
+  "controles": { "plan_tenu": [ { "id": "l_accroche_est_vue_a_2_5_s", "op": "gte" } ] } }
+```
+
+* `rendre` nomme **soit** un `workflow`, **soit** un `role` + `technique` (un
+  renvoi : la technique est choisie à l'appel, jamais écrite dans le plan) —
+  jamais les deux. Le runner résout : le graphe est celui du rôle, et les
+  `inputs` du rôle passent **sous** ceux de l'étape (le plan garde le dernier
+  mot sur ce qu'il a écrit lui-même). Le journal le dit : « étape deroulement :
+  technique encre → video-reveal-cinematic-dirige ».
+* `verifier` accepte `{"technique": "$…", "controles": "<nom>"}` : la liste est
+  celle de la technique — deux peintures ne se jugent pas sur les mêmes
+  grandeurs.
+* Les **renvois** d'une technique se résolvent avec les champs de la chaîne, les
+  siens et les résultats des étapes précédentes, comme dans une chaîne ; un rôle
+  absent, une liste de contrôles absente ou un renvoi qui ne désigne rien sont
+  refusés **à la lecture** (`verifier_techniques`), avant la première seconde de
+  rendu.
+* Les champs d'une chaîne = ses champs **communs** ∪ l'union des `expose` de
+  toutes les techniques. Dans `/io`, un champ qu'une technique apporte porte
+  `"selon": {"champ": "technique", "valeurs": ["encre"]}` — le lanceur ne le
+  montre que sous ces techniques-là. Deux techniques peuvent exposer le **même
+  nom** (`fond`) avec des options différentes : le champ porte alors
+  `selon_options` et `selon_defauts` par technique, et la passerelle valide
+  contre celle qui est choisie. Rien n'est écrit dans le lanceur : tout vient
+  de `/io`.
+* Un réglage d'une **autre** technique que celle choisie est **écarté et dit**
+  au journal (« non appliqué — n'est pas un réglage de la technique encre »),
+  jamais refusé : un raccourci enregistré sous une technique se rejoue sous une
+  autre sans être cassé.
+* `GET /v1/workflows` publie sur chaque chaîne
+  `techniques: [{valeur, libelle, resume}]`.
+
+**Ajouter une technique** : un fichier dans `_data/techniques/`, sa copie dans
+`resources/techniques-exemples/`. Rien dans la chaîne, rien dans le code — la
+règle `flux-hors-du-code` du socle prend aussi les noms de techniques.
+
+Deux chaînes sont livrées.
 
 `video-revelation` — « Révéler une image », le seul flux publié de sa
 catégorie, **onze étapes** qui portent les noms du travail :
@@ -930,42 +1067,40 @@ catégorie, **onze étapes** qui portent les noms du travail :
 | `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait : accroche vue, climax hors de l'ouverture et tenu, étapes qui se suivent, **ordre du plan suivi, chaque temps cadré (≥ 0,9) à son heure, aucun temps supprimé, caméra qui glisse (≤ 0,1 largeur/s) sans saccade (accélération ≤ 0,5 largeur/s²), page qui ne s'achève pas d'un coup (≤ 0,25 au dézoom), temps lisibles (halo encré ≥ 0,85), ordre d'ARRIVÉE de l'encre conforme au plan, cœur du climax en dernier, contemplation qui ne se fige pas (≤ 0,5 s immobile), jamais de page blanche sous la caméra (≥ 1 % du cadre encré après l'accroche)** |
 | `raccord` | les 50 dernières images, en clip sans perte |
 | `conclusion` | la page se referme (0 s = pas de conclusion) — sous la MÊME ambiance, et à la seconde où le déroulement s'arrête (`6.depart_s` = `$deroulement.recit.duree_retenue_s`) : la flamme y reprend sa phase, et la luminance ne bouge pas de plus de 1 % au raccord. Depuis le 2026-09-15 elle ne contemple plus (`hold_s` 0,5 s au lieu de 2,2 : la contemplation appartient au déroulement) : un souffle, puis l'encre reprend la page — et elle MÈNE AU CTA |
-| `appel` | l'appel final (`cta`) écrit à l'encre quand la fermeture a fini : il ne mord que sur sa dernière seconde, puis reste le temps de se lire, déduit du texte (la conclusion reçoit le même texte par `6.appel_texte` et prolonge sa page refermée, vivante, d'autant) ; la police s'injecte par `cta_police` (nom ou chemin). Sans texte, l'étape est **sautée** (`"quand": "$cta"`) et rend le livrable de la conclusion tel quel |
-| `montage` | déroulement + fin, recollés |
-| `controle` | deux parts, un livrable qui pèse |
+| `appel` | l'appel final (`cta`) écrit à l'encre quand la fermeture a fini : il ne mord que sur sa dernière seconde, puis reste le temps de se lire, déduit du texte (la conclusion reçoit le même texte par `6.appel_texte` et prolonge sa page refermée, vivante, d'autant) ; la police s'injecte par `cta_police` (nom ou chemin). **Depuis le 2026-09-16, il lit la conclusion PARESSEUSEMENT** (entrée `video` du nœud) et ne rend QUE les images qu'il écrit — en 4K, charger la conclusion entière pour quelques secondes d'encre était une vidéo de plus en mémoire ; son récit dit combien d'images il a reprises (`images_reprises`). Sans texte, l'étape est **sautée** (`"quand": "$cta"`) et son `sinon` rend un livrable nul et zéro image reprise |
+| `montage` | déroulement + conclusion **sans les images que l'appel a reprises** (`sauf_les_dernieres`) + appel : trois parts, ou deux quand l'appel est sauté (sa part est ignorée, et rien n'est rogné) |
+| `controle` | le montage a ses parts (2 ou 3), et un livrable qui pèse |
 
 Les graphes qu'elle enchaîne (`image-iconographe`, `image-iconologue`,
 `image-intention`, `video-reveal-cinematic-dirige`, `video-reveal-closing`,
 `video-appel-final`) et `video-still-motion` restent des **techniques**, sans
 catégorie : le lanceur ne les montre pas.
 
-`video-revelation-brume` — « Révéler une image par la brume », **l'essai d'une
-autre technique** dans la même catégorie (ordre 2), en **onze étapes**. Elle
-PARTAGE tout l'amont avec la précédente — mêmes `analyse`, `culture`,
-`intention`, `plan_valide`, mêmes appels, même plan remis tel quel — et ne change que la
-peinture : son `deroulement` appelle `video-reveal-brume-dirige` (nœud
-`RevealBrume`) au lieu du nœud d'encre. L'image est déjà là, **entière et en
-couleur**, sous une nappe de bruit fractal animé qui se dissipe selon le même
-champ d'heures narratif ; sous la brume elle est floue et désaturée d'autant
-qu'elle est couverte. **Elle a sa conclusion depuis le 2026-09-15**, et c'est
-la même queue que celle de l'encre, au même endroit : `raccord` (les 50
-dernières images) → `conclusion` → `appel` → `montage` en deux parts, avec son
-champ `conclusion_s` (0 = aucune). On avait écrit qu'une brume qui reviendrait
-ne refermerait rien ; le reproche d'Antoine a déplacé le jugement — « il manque
-la partie conclusion à toutes ces vidéos » : il ne s'agit pas de REFERMER un
-récit mais de le POSER, puis d'amener l'appel. Le nœud `BrumeClosing`
-(`video-reveal-brume-closing`) fait revenir la brume depuis les bords vers le
-climax, **repris en dernier** (son heure de retour n'est que sa distance au
-foyer : rien n'est découpé), avec la MÊME brume que le déroulement et une nappe
-qui reprend sa dérive à la seconde où celui-ci s'est arrêté (`6.depart_s`). La
-dernière image est une **page de brume claire** — luminance 0,82 pour un contrat
-à 0,80 —, celle sur laquelle l'appel final écrit son encre sombre. Le champ
-`fond` y choisit la teinte de la brume (blanche, grise, dorée) ; ni `encre`
-ni `rendu`. Son `plan_tenu` mesure les mêmes grandeurs que l'encre quand elles
-ont un sens, **sur la carte de densité que le nœud vient de rendre** : accroche
-vue, climax hors de l'ouverture et tenu, caméra qui glisse sans saccade, temps
-lisibles (boîte et halo sous 0,3 de densité à leur heure), ordre d'arrivée,
-cœur en dernier, aucun temps supprimé.
+La technique **brume** — « Révéler une image par la brume », l'ESSAI d'une autre
+peinture, était jusqu'au 2026-09-16 une chaîne jumelle (`video-revelation-brume`)
+qui recopiait les onze étapes pour n'en changer que deux. C'est maintenant une
+technique, `_data/techniques/brume.json`, choisie par le champ `technique` du
+même mode. Son rôle `deroulement` appelle `video-reveal-brume-dirige` (nœud
+`RevealBrume`) : l'image est déjà là, **entière et en couleur**, sous une nappe
+de bruit fractal animé qui se dissipe selon le même champ d'heures narratif ;
+sous la brume elle est floue et désaturée d'autant qu'elle est couverte. Son
+rôle `conclusion` appelle `video-reveal-brume-closing` (nœud `BrumeClosing`) :
+la brume revient depuis les bords vers le climax, **repris en dernier** (son
+heure de retour n'est que sa distance au foyer : rien n'est découpé), avec la
+MÊME brume que le déroulement et une nappe qui reprend sa dérive à la seconde où
+celui-ci s'est arrêté (`6.depart_s`). La dernière image est une **page de brume
+claire** — luminance 0,82 pour un contrat à 0,80 —, celle sur laquelle l'appel
+final écrit son encre sombre. Son champ `fond` choisit la teinte de la brume
+(blanche, grise, dorée) — le même NOM que sous l'encre, d'autres valeurs ; ni
+`encre`, ni `rendu`, ni `ambiance`, ni `negatif`. Ses contrôles `plan_tenu`
+mesurent les mêmes grandeurs que l'encre quand elles ont un sens, **sur la carte
+de densité que le nœud vient de rendre** : accroche vue, climax hors de
+l'ouverture et tenu, caméra qui glisse sans saccade, temps lisibles (boîte et
+halo sous 0,3 de densité à leur heure), ordre d'arrivée, cœur en dernier, aucun
+temps supprimé. Le champ commun `conduite` ne lui est pas passé : la brume ne
+sait se dissiper que le long d'un chemin narratif, et son nœud porte « le plan »
+en littéral — ce qu'un appelant choisit là n'est pas appliqué sous la brume, et
+la passerelle le DIT au journal.
 
 `video-prolongement` — 17 dernières images → prolongement → mesure du raccord
 → recollage sans le chevauchement.
@@ -978,7 +1113,7 @@ assure cette standardisation ». Trois couches, et un témoin exécutable
 
 | couche | ce que c'est | où |
 |---|---|---|
-| **le plan** | agnostique, hors de tout style : les onze étapes, dans cet ordre, avec leurs genres — `analyse` → `culture` → `intention` → `plan_valide` → `deroulement` → `plan_tenu` → `raccord` → `conclusion` → `appel` → `montage` → `controle` — et le contrat par lequel chacune parle à la suivante (`$etape.recit.*`, `$etape.livrable`, `$raccord.depot` ; la fermeture reçoit `fermeture_json` du récit du déroulement au lieu de relire le disque). La chaîne de la brume porte le même plan. | `_data/chaines/*.json` et leurs jumeaux |
+| **le plan** | agnostique, hors de tout style : les onze étapes, dans cet ordre, avec leurs genres — `analyse` → `culture` → `intention` → `plan_valide` → `deroulement` → `plan_tenu` → `raccord` → `conclusion` → `appel` → `montage` → `controle` — et le contrat par lequel chacune parle à la suivante (`$etape.recit.*`, `$etape.livrable`, `$raccord.depot` ; la fermeture reçoit `fermeture_json` du récit du déroulement au lieu de relire le disque). Les deux étapes qui PEIGNENT nomment un rôle, jamais un graphe : c'est la technique choisie qui les tient. | `_data/chaines/*.json` et leurs jumeaux |
 | **les paramètres** | tout ce qui se règle : structure du récit, approche, fond, ambiance, tracé, rendu, conduite, négatif, contemplation, conclusion, CTA et sa police, format. **Leurs défauts sont ceux du style ink livré ce jour-là et ne changent pas** : `reseau-social`, `peinture-calme`, `washi`, `lanterne`, `lavis`, `ink-bleed`, `le plan`, négatif `non`, contemplation 4 s, conclusion 8 s, 45 s, 720×1280, 30 i/s, graine 71 | `expose` de la chaîne ; littéraux du graphe local `video-reveal-cinematic-dirige` |
 | **les styles** | ce qu'on ajoute sans rien casser : un style narratif ou une approche dans les catalogues de `comfyui-direction-de-style` (`styles/narratifs.json`, `styles/approches.json`), un fond, une encre, une ambiance, un rendu, un négatif dans les tables du paquet de nœuds (`FONDS`, `ENCRES`, `AMBIANCES`, `RENDUS`, `NEGATIFS`), une brume dans `BRUMES`. Une **entrée de plus**, jamais un défaut de moins ; le défaut reste en tête de chaque liste | les catalogues et les tables |
 
@@ -1168,9 +1303,10 @@ modifier ça ? » a donc une réponse par nature de changement :
 | l'ORDRE des étapes, les durées, les contrôles d'un flux composé | `_data/chaines/<nom>.json` (et sa copie `resources/chaines-exemples/`) | le runner de chaînes |
 | un CONTRÔLE sur ce que le nœud a MESURÉ (hook vu, climax tenu, durée retenue) | l'étape `verifier` de la chaîne, sur `$etape.recit.<clé>` (le premier artefact `.json` d'un run est parsé sous `recit`) | le runner de chaînes |
 | une RÉPÉTITION (blocs de boucle, conditions) | le montage `_data/workflows/<montage>.json`, ses blocs `_data/blocs/` | le dépliage |
-| le BUDGET MÉMOIRE d'une tranche (combien d'images un run tient d'un coup) | la variable d'environnement `COMFY_TRANCHE_GO` — c'est une propriété du POSTE, jamais de la chaîne ni du flux | le rendu par tranches |
+| les LIMITES du poste (RAM, VRAM, cœurs) — donc le BUDGET MÉMOIRE d'une tranche | `_data/materiel.local.json` (copie d'exemple `resources/materiel.exemple.json`) ; `COMFY_TRANCHE_GO` ne reste qu'une surcharge d'essai. C'est une propriété du POSTE, jamais de la chaîne ni du flux | le rendu par tranches, `GET /v1/materiel` |
 | la QUALITÉ d'un INTERMÉDIAIRE (ce qu'un graphe écrit avant le montage final) | le nœud `SaveVideo` du graphe, dans `_data/workflows/<nom>.json` : `codec`, `codec.encoding`, `codec.encoding.crf` (10 sur les graphes de la révélation) | le moteur, à l'écriture du fichier |
 | ce que l'utilisateur VOIT (titre, catégorie, résumé, libellés, aides) | `_data/reconciliation.local.json` : `titre`, `categorie`, `menus`, `aides` | `/v1/workflows`, `/io` |
+| une TECHNIQUE (quel graphe tient chaque rôle, ses réglages, ses contrôles) | `_data/techniques/<nom>.json` (et sa copie `resources/techniques-exemples/`) — une technique de plus est un FICHIER de plus | le runner de chaînes, `/v1/workflows` (`techniques`), `/io` (`selon`) |
 | un RACCOURCI (un ensemble de réglages nommé, son aperçu) | `_data/raccourcis/<mode>/` — par l'API, jamais à la main | `/v1/workflows`, `…/raccourcis` |
 | le VOCABULAIRE des styles | `styles/*.json` du paquet de direction de style | `/io` (`options` + `choix`) |
 
@@ -1197,7 +1333,7 @@ référence d'une chaîne qui diverge de `_data/` est refusée par les tests.
 | `HERMES_MODE`       | `local`                   | `local` (registre) \| `off`             |
 | `HERMES_SCOPE`      | `comfyui`                 | Cloisonnement de la connaissance        |
 | `COMFYUI_TIMEOUT`   | `3600`                    | Budget d'un run (vidéo = long)          |
-| `COMFY_TRANCHE_GO`  | `8`                       | Gio d'images qu'un run tient d'un coup ; au-delà, rendu par TRANCHES (`0` = jamais) |
+| `COMFY_TRANCHE_GO`  | `0`                       | SURCHARGE d'essai du budget d'une tranche, en Gio. `0` = d'après `_data/materiel.local.json` (repli 8 Gio, dit) |
 
 ## Tests
 

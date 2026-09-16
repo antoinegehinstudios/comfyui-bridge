@@ -48,75 +48,86 @@
     "style_narratif": {
       "type": "COMBO",
       "defaut": "reseau-social",
-      "options_depuis": { "menu": "style_narratif" },
+      "options_depuis": {
+        "menu": "style_narratif"
+      },
       "libelle": "Structure du récit"
     },
     "style_approche": {
       "type": "COMBO",
       "defaut": "peinture-calme",
-      "options_depuis": { "menu": "style_approche" },
+      "options_depuis": {
+        "menu": "style_approche"
+      },
       "libelle": "Approche"
-    },
-    "fond": {
-      "type": "COMBO",
-      "defaut": "washi",
-      "options": ["washi", "washi-sans-lampe", "sepia", "gris-atelier"],
-      "libelle": "Fond de départ"
-    },
-    "ambiance": {
-      "type": "COMBO",
-      "defaut": "lanterne",
-      "options": ["lanterne", "chandelle", "atelier", "selon-le-fond"],
-      "libelle": "Ambiance"
-    },
-    "encre": {
-      "type": "COMBO",
-      "defaut": "lavis",
-      "options": ["lavis", "trait-sec", "encre-dense"],
-      "libelle": "Style de tracé"
-    },
-    "negatif": {
-      "type": "COMBO",
-      "defaut": "non",
-      "options": ["non", "oui", "selon-l-oeuvre"],
-      "libelle": "Négatif (l'encre inverse la lumière)"
     },
     "bords": {
       "type": "COMBO",
       "defaut": "fondus",
-      "options": ["fondus", "francs"],
+      "options": [
+        "fondus",
+        "francs"
+      ],
       "libelle": "Bords de l'œuvre"
-    },
-    "rendu": {
-      "type": "COMBO",
-      "defaut": "ink-bleed",
-      "options": ["ink-bleed", "classique", "front-organique"],
-      "libelle": "Rendu"
     },
     "conduite": {
       "type": "COMBO",
       "defaut": "le plan",
-      "options": ["le plan", "la camera"],
+      "options": [
+        "le plan",
+        "la camera"
+      ],
       "libelle": "Qui commande le déroulement"
     },
-    "width": { "type": "INT", "defaut": 720, "libelle": "Largeur", "unite": "px" },
-    "height": { "type": "INT", "defaut": 1280, "libelle": "Hauteur", "unite": "px" },
-    "fps": { "type": "INT", "defaut": 30, "min": 1, "libelle": "Images par seconde" },
-    "seed": { "type": "INT", "defaut": 71, "libelle": "Graine" }
+    "width": {
+      "type": "INT",
+      "defaut": 720,
+      "libelle": "Largeur",
+      "unite": "px"
+    },
+    "height": {
+      "type": "INT",
+      "defaut": 1280,
+      "libelle": "Hauteur",
+      "unite": "px"
+    },
+    "fps": {
+      "type": "INT",
+      "defaut": 30,
+      "min": 1,
+      "libelle": "Images par seconde"
+    },
+    "seed": {
+      "type": "INT",
+      "defaut": 71,
+      "libelle": "Graine"
+    },
+    "technique": {
+      "type": "COMBO",
+      "defaut": "encre",
+      "options_depuis": {
+        "techniques": true
+      },
+      "libelle": "Technique"
+    }
   },
   "etapes": [
     {
       "id": "analyse",
       "rendre": {
         "workflow": "image-iconographe",
-        "media": { "image": "$image" }
+        "media": {
+          "image": "$image"
+        }
       }
     },
     {
       "id": "culture",
       "rendre": {
         "workflow": "image-iconologue",
-        "media": { "image": "$image" },
+        "media": {
+          "image": "$image"
+        },
         "inputs": {
           "1.markers_json": "$analyse.recit.markers_json",
           "1.anchors_json": "$analyse.recit.anchors_json",
@@ -128,7 +139,9 @@
       "id": "intention",
       "rendre": {
         "workflow": "image-intention",
-        "media": { "image": "$image" },
+        "media": {
+          "image": "$image"
+        },
         "style_narratif": "$style_narratif",
         "inputs": {
           "70.style_approche": "$style_approche",
@@ -141,83 +154,105 @@
     {
       "id": "plan_valide",
       "verifier": [
-        { "id": "le_plan_nomme_son_accroche", "valeur": "$intention.recit.hook", "op": "exists" },
-        { "id": "le_plan_nomme_son_climax", "valeur": "$intention.recit.climax", "op": "exists" },
-        { "id": "l_accroche_ne_devoile_pas_le_climax", "valeur": "$intention.recit.hook_recouvre_climax", "op": "eq", "attendu": false },
-        { "id": "le_plan_a_de_quoi_croitre", "valeur": "$intention.recit.nb_temps", "op": "gte", "attendu": 3 },
-        { "id": "l_accroche_est_un_detail", "valeur": "$intention.recit.hook_aire", "op": "lte", "attendu": 0.15 },
-        { "id": "l_accroche_montre_de_la_matiere", "valeur": "$intention.recit.hook_est_vide", "op": "eq", "attendu": false },
-        { "id": "le_climax_est_la_figure_de_l_oeuvre", "valeur": "$intention.recit.climax_est_central", "op": "eq", "attendu": true },
-        { "id": "le_climax_garde_un_coeur_pour_la_fin", "valeur": "$intention.recit.climax_coeur", "op": "exists" },
-        { "id": "le_trajet_ne_revient_pas", "valeur": "$intention.recit.trajet_retours", "op": "lte", "attendu": 2 },
-        { "id": "le_plan_tient_dans_l_approche", "valeur": "$intention.recit.temps_dans_l_approche", "op": "eq", "attendu": true }
+        {
+          "id": "le_plan_nomme_son_accroche",
+          "valeur": "$intention.recit.hook",
+          "op": "exists"
+        },
+        {
+          "id": "le_plan_nomme_son_climax",
+          "valeur": "$intention.recit.climax",
+          "op": "exists"
+        },
+        {
+          "id": "l_accroche_ne_devoile_pas_le_climax",
+          "valeur": "$intention.recit.hook_recouvre_climax",
+          "op": "eq",
+          "attendu": false
+        },
+        {
+          "id": "le_plan_a_de_quoi_croitre",
+          "valeur": "$intention.recit.nb_temps",
+          "op": "gte",
+          "attendu": 3
+        },
+        {
+          "id": "l_accroche_est_un_detail",
+          "valeur": "$intention.recit.hook_aire",
+          "op": "lte",
+          "attendu": 0.15
+        },
+        {
+          "id": "l_accroche_montre_de_la_matiere",
+          "valeur": "$intention.recit.hook_est_vide",
+          "op": "eq",
+          "attendu": false
+        },
+        {
+          "id": "le_climax_est_la_figure_de_l_oeuvre",
+          "valeur": "$intention.recit.climax_est_central",
+          "op": "eq",
+          "attendu": true
+        },
+        {
+          "id": "le_climax_garde_un_coeur_pour_la_fin",
+          "valeur": "$intention.recit.climax_coeur",
+          "op": "exists"
+        },
+        {
+          "id": "le_trajet_ne_revient_pas",
+          "valeur": "$intention.recit.trajet_retours",
+          "op": "lte",
+          "attendu": 2
+        },
+        {
+          "id": "le_plan_tient_dans_l_approche",
+          "valeur": "$intention.recit.temps_dans_l_approche",
+          "op": "eq",
+          "attendu": true
+        }
       ]
     },
     {
       "id": "deroulement",
       "rendre": {
-        "workflow": "video-reveal-cinematic-dirige",
-        "media": { "image": "$image" },
+        "role": "deroulement",
+        "technique": "$technique",
+        "media": {
+          "image": "$image"
+        },
         "duration_s": "$duration_s",
         "fps": "$fps",
         "width": "$width",
         "height": "$height",
-        "seed": "$seed",
-        "inputs": {
-          "61.markers_json": "$analyse.recit.markers_json",
-          "61.direction_json": "$intention.recit.direction_json",
-          "61.fond": "$fond",
-          "61.ambiance": "$ambiance",
-          "61.encre": "$encre",
-          "61.rendu": "$rendu",
-          "61.conduite": "$conduite",
-          "61.contemplation_s": "$contemplation_s",
-          "61.negatif": "$negatif",
-          "61.bords": "$bords"
-        }
+        "seed": "$seed"
       }
     },
     {
       "id": "plan_tenu",
-      "verifier": [
-        { "id": "l_accroche_est_vue_a_2_5_s", "valeur": "$deroulement.recit.hook_vu.atteint", "op": "gte", "attendu": 0.10 },
-        { "id": "le_climax_est_hors_du_cadre_d_ouverture", "valeur": "$deroulement.recit.climax_a_l_ouverture", "op": "lte", "attendu": 0.12 },
-        { "id": "le_climax_est_tenu", "valeur": "$deroulement.recit.climax_tenue_s", "op": "gte", "attendu": 2 },
-        { "id": "les_temps_se_suivent", "valeur": "$deroulement.recit.chevauchement_max_mesure_s", "op": "lte", "attendu": 8 },
-        { "id": "l_ordre_du_plan_est_suivi", "valeur": "$deroulement.recit.ordre_du_plan_respecte", "op": "eq", "attendu": true },
-        { "id": "chaque_temps_est_cadre_a_son_heure", "valeur": "$deroulement.recit.visibilite_min", "op": "gte", "attendu": 0.9 },
-        { "id": "aucun_temps_supprime", "valeur": "$deroulement.recit.nb_hors_champ", "op": "eq", "attendu": 0 },
-        { "id": "la_camera_glisse", "valeur": "$deroulement.recit.vitesse_camera_max_mesuree", "op": "lte", "attendu": 0.1 },
-        { "id": "la_camera_ne_saccade_pas", "valeur": "$deroulement.recit.acceleration_camera_max", "op": "lte", "attendu": 0.5 },
-        { "id": "la_page_ne_s_acheve_pas_d_un_coup", "valeur": "$deroulement.recit.achevement_part", "op": "lte", "attendu": 0.25 },
-        { "id": "les_temps_sont_lisibles", "valeur": "$deroulement.recit.lisibilite_min", "op": "gte", "attendu": 0.85 },
-        { "id": "l_ordre_d_arrivee_est_celui_du_plan", "valeur": "$deroulement.recit.ordre_d_arrivee_respecte", "op": "eq", "attendu": true },
-        { "id": "le_coeur_vient_en_dernier", "valeur": "$deroulement.recit.coeur_en_dernier", "op": "eq", "attendu": true },
-        { "id": "aucun_temps_n_est_un_trou", "valeur": "$deroulement.recit.trou_max", "op": "lte", "attendu": 0.25 },
-        { "id": "des_traits_et_pas_que_des_blocs", "valeur": "$deroulement.recit.part_des_traces", "op": "gte", "attendu": 0.25 },
-        { "id": "la_contemplation_ne_fige_pas", "valeur": "$deroulement.recit.contemplation_immobile_s", "op": "lte", "attendu": 0.5 },
-        { "id": "la_camera_ne_voit_jamais_de_page_blanche", "valeur": "$deroulement.recit.encre_dans_le_cadre_min", "op": "gte", "attendu": 0.01 }
-      ]
+      "verifier": {
+        "technique": "$technique",
+        "controles": "plan_tenu"
+      }
     },
     {
       "id": "raccord",
-      "extraire_queue": { "video": "$deroulement.livrable", "images": 50 }
+      "extraire_queue": {
+        "video": "$deroulement.livrable",
+        "images": 50
+      }
     },
     {
       "id": "conclusion",
       "rendre": {
-        "workflow": "video-reveal-closing",
-        "media": { "video": "$raccord.depot" },
+        "role": "conclusion",
+        "technique": "$technique",
+        "media": {
+          "video": "$raccord.depot"
+        },
         "duration_s": "$conclusion_s",
         "fps": "$fps",
-        "seed": "$seed",
-        "inputs": {
-          "6.fond": "$fond",
-          "6.ambiance": "$ambiance",
-          "6.depart_s": "$deroulement.recit.duree_retenue_s",
-          "6.appel_texte": "$cta",
-          "6.fermeture_json": "$deroulement.recit.fermeture_json"
-        }
+        "seed": "$seed"
       }
     },
     {
@@ -225,19 +260,34 @@
       "quand": "$cta",
       "rendre": {
         "workflow": "video-appel-final",
-        "media": { "video": "$conclusion.livrable" },
+        "media": {
+          "video": "$conclusion.livrable"
+        },
         "fps": "$fps",
         "seed": "$seed",
         "inputs": {
           "7.texte": "$cta",
           "7.police": "$cta_police"
         }
+      },
+      "sinon": {
+        "livrable": null,
+        "recit": {
+          "images_reprises": 0
+        }
       }
     },
     {
       "id": "montage",
       "recoller": {
-        "parts": ["$deroulement.livrable", "$appel.livrable"],
+        "parts": [
+          "$deroulement.livrable",
+          {
+            "fichier": "$conclusion.livrable",
+            "sauf_les_dernieres": "$appel.recit.images_reprises"
+          },
+          "$appel.livrable"
+        ],
         "fps": "$fps",
         "largeur": "$width",
         "hauteur": "$height"
@@ -246,8 +296,21 @@
     {
       "id": "controle",
       "verifier": [
-        { "id": "les_deux_parts", "valeur": "$montage.parts", "op": "eq", "attendu": 2 },
-        { "id": "livrable_pese", "valeur": "$montage.mesure.bytes", "op": "gte", "attendu": 100000 }
+        {
+          "id": "le_montage_a_ses_parts",
+          "valeur": "$montage.parts",
+          "op": "between",
+          "attendu": [
+            2,
+            3
+          ]
+        },
+        {
+          "id": "livrable_pese",
+          "valeur": "$montage.mesure.bytes",
+          "op": "gte",
+          "attendu": 100000
+        }
       ]
     }
   ],
@@ -271,6 +334,8 @@
     "bords": "Antoine, 2026-09-15 (après les tests depuis l'UI sur trois œuvres nouvelles) : « on va trouver moyen, en identifiant la step ou l'entité qui est en mesure de changer la donne, pour que le cadre de l'œuvre ne soit plus visible pendant la construction, de façon élégante, pour tous les cas d'usage de ce workflow ; fais-en un paramètre mis par défaut ». L'entité est la POSE de l'œuvre sur la feuille (`_prolonger_l_oeuvre` de comfyui-ink-reveal, partagée par l'encre et la brume) : le rectangle se lisait parce que le prolongement de l'œuvre au-delà de son arête était flouté dès le premier pixel (les traits s'y arrêtaient net) et que le fondu vers la feuille commençait sur une droite parallèle au bord. Le champ « Bords de l'œuvre » (bords, passé au déroulement par 61.bords) vaut « fondus » par défaut : les traits continuent au-delà de l'arête (rabat continu, décalage nul au bord), rien n'est flouté au ras, et le fondu commence sur un front ondulé ; « francs » rejoue le prolongement d'avant, image pour image (le défaut du nœud, gardé pour l'identité du rendu classique). Sous « fondus », deux rognages de plus, avant la pose, parce que le cadre peut venir de l'image elle-même : le BORD DE SCAN (liseré anti-aliasé d'un rognage, ou bande plate de papier qui s'arrête sur une marche — 4 % du côté au plus, dit par le récit dans bord_de_scan_rogne), et l'ŒUVRE ENTIÈRE (sans marge rognée, la règle d'avant coupait un ciel lisse comme une bande de séparation : 825 lignes de ciel sur le Friedrich). Mesuré sur la feuille d'encre (cadre_lu_encre) : Van Gogh 0,36 → 0,03, Hiroshige 0,45 → 0,02, Friedrich 0,14 → 0,00.",
     "le_sillage": "Mesuré le 2026-09-15 sur Te-no-me : « il est arrivé que la caméra bifurque sans qu'aucune encre ne suive, donc on a une feuille blanche ». Le trajet de la lune aux herbes durait 14,8 s ; seule la lune était encrée, elle sortait du cadre à la quatrième seconde, et la caméra glissait sur du papier nu (0,56 % du cadre encré au pire). Règle d'Antoine : « il faut toujours au moins un trait ou du contenu qui suit la caméra ». Sous « ink-bleed » et une caméra qui glisse, le déroulement pose maintenant un SILLAGE : pendant chaque trajet, une goutte par seconde là où la caméra sera six dixièmes plus tard, et un trait — le plus long contour de l'œuvre dans le cadre qu'elle va montrer — qui s'y dessine ; ni l'un ni l'autre n'entre dans la boîte d'un temps à venir. Le récit mesure image par image la part du cadre encrée après l'accroche (encre_dans_le_cadre, encre_dans_le_cadre_min et l'instant), et plan_tenu refuse une peinture dont le cadre tombe sous 1 % d'encre (un trait d'un pixel sur 352 × 640 en vaut 0,3 ; les traits du sillage ne sont tronqués que hors du cœur, un contour n'étant pas un dévoilement) (la_camera_ne_voit_jamais_de_page_blanche).",
     "conclusion_facultative": "À 0 seconde, la fermeture ne dure qu'une image : la scène ne se pose pas, et l'appel final s'écrit directement sur la fin du déroulement. Le montage compte toujours deux parts — le déroulement, puis ce qui le clôt. Depuis le 2026-09-15 la contemplation de l'image révélée appartient au déroulement (voir la note contemplation) : la conclusion commence par un souffle de 0,5 s, puis l'encre reprend la page depuis la lisière vers le climax, et l'appel final — quand cta est renseigné — s'écrit à l'encre quand la fermeture a fini — il ne mord que sur sa dernière seconde (une seconde de chevauchement, pas plus), puis reste le temps de se lire, déduit du texte (écriture 0,06 s le caractère, lecture 0,9 s + 0,35 s le mot : « La suite, bientôt » = 3,5 s). Pour cela la conclusion reçoit le même texte (6.appel_texte) et prolonge sa page refermée, vivante sous la flamme, de cette durée moins la seconde de chevauchement : la conclusion mène au CTA. Sans texte, l'étape « appel » est SAUTÉE (« quand »: « $cta ») et rend le livrable de la conclusion tel quel — on ne met pas de CTA. La police s'injecte par « cta_police » (un nom résolu dans les polices du poste, ou un chemin de fichier ; vide = automatique).",
-    "ce_qui_est_appele": "La documentation de l'image (image-iconographe, tenue par le service Iconographe et sa bibliothèque), la CULTURE de l'œuvre (image-iconologue, tenue par le service Iconologue et son catalogue), la structure du récit (le catalogue des structures narratives) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : la chaîne les appelle, elle ne les porte pas. Un autre flux peut les appeler aussi, et la documentation déjà écrite n'est pas repayée."
+    "ce_qui_est_appele": "La documentation de l'image (image-iconographe, tenue par le service Iconographe et sa bibliothèque), la CULTURE de l'œuvre (image-iconologue, tenue par le service Iconologue et son catalogue), la structure du récit (le catalogue des structures narratives) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : la chaîne les appelle, elle ne les porte pas. Un autre flux peut les appeler aussi, et la documentation déjà écrite n'est pas repayée.",
+    "techniques": "LE PLAN NE NOMME AUCUNE TECHNIQUE. Antoine, 2026-09-16 : « la mention de brume ne doit pas être tenue par le workflow de la passerelle : cela veut dire qu'il porte une dépendance à la brume et devra se faire doublon pour faire autrement ». Jusque-là, « video-revelation » (encre) et « video-revelation-brume » étaient deux chaînes jumelles : même plan de onze étapes, seules la peinture, la conclusion et leurs contrôles « plan_tenu » différaient — une technique de plus était une chaîne de plus, recopiée. Désormais les étapes « deroulement » et « conclusion » nomment un RÔLE et la technique qui le tient (« $technique »), et « plan_tenu » prend la liste de contrôles de cette technique. Quel graphe tient chaque rôle, avec quelles entrées, quels réglages propres (fond, ambiance, tracé, négatif, rendu pour l'encre ; la teinte de la brume pour la brume) et quels contrôles : tout cela vit dans _data/techniques/<nom>.json, et une technique de plus est un FICHIER de plus. Les réglages COMMUNS restent ici — ce sont ceux du plan, pas de la peinture. « conduite » en fait partie, avec ses deux valeurs : une technique qui ne sait pas s'en servir ne la reçoit simplement pas (voir la note de la technique brume), et la passerelle dit au journal ce qui n'a pas été appliqué.",
+    "l_appel_ne_recharge_plus_la_conclusion": "2026-09-16, Antoine : « à la toute fin, tu éprouveras avec une vidéo 4K/60 fps de 20 s ». L'appel final chargeait la conclusion ENTIÈRE pour y écrire son texte, et la rendait entière : en 4K, c'est une vidéo de plus en mémoire pour quelques secondes d'encre. Le nœud InkCaption lit désormais la conclusion PARESSEUSEMENT (son entrée « video ») et ne rend QUE les images qu'il écrit ; son récit dit combien d'images de la conclusion il a reprises (images_reprises). Le montage joint donc trois parts : le déroulement, la conclusion SANS ces dernières images (« sauf_les_dernieres »), puis l'appel — sinon on les verrait deux fois. Sans appel (pas de CTA), l'étape est sautée et son « sinon » rend un livrable nul (la part est ignorée) et zéro image reprise (rien n'est rogné) : le montage retombe sur deux parts, et le contrôle final accepte 2 ou 3."
   }
 }

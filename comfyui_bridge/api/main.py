@@ -410,6 +410,15 @@ def _options_declarees(c, depuis: Any) -> tuple[list[str], dict[str, Any]]:
     un champ qui choisit dans un vocabulaire qu'un paquet tient (les structures
     de récit). Recopier l'une ou l'autre dans la chaîne la figerait.
     """
+    if isinstance(depuis, dict) and depuis.get("techniques"):
+        # LES TECHNIQUES DÉCLARÉES. Une de plus est un fichier de plus : ni la
+        # chaîne ni le code ne les listent, sans quoi la chaîne porterait la
+        # dépendance dont on vient de la débarrasser.
+        from ..adapter import techniques as _techniques
+        vues = _techniques.vues(c.catalog.techniques())
+        return ([v["valeur"] for v in vues],
+                {"libelles": {v["valeur"]: {"libelle": v["libelle"], "resume": v["resume"]}
+                              for v in vues}})
     if isinstance(depuis, dict) and depuis.get("menu"):
         from ..adapter import menus as _menus
         declare = _menu_declare(c, str(depuis["menu"]))
@@ -419,10 +428,12 @@ def _options_declarees(c, depuis: Any) -> tuple[list[str], dict[str, Any]]:
     return options, {"libelles": libelles}
 
 
-def _options_exposees(c, chaine) -> dict[str, tuple]:
-    """Les valeurs permises de chaque champ COMBO d'une chaîne."""
+def _options_exposees(c, chaine, technique=None) -> dict[str, tuple]:
+    """Les valeurs permises de chaque champ COMBO — celles de la technique
+    CHOISIE pour un champ que plusieurs techniques exposent (« fond »)."""
+    from ..core import chaine as _noyau
     sorties: dict[str, tuple] = {}
-    for nom, champ in chaine.champs.items():
+    for nom, champ in _noyau.champs_retenus(chaine, technique).items():
         if champ.options_depuis is not None:
             sorties[nom] = tuple(_options_declarees(c, champ.options_depuis)[0])
         elif champ.options is not None:
@@ -430,35 +441,75 @@ def _options_exposees(c, chaine) -> dict[str, tuple]:
     return sorties
 
 
+def _entree_de_champ(c, nom: str, champ, aides: dict | None = None) -> dict:
+    """UN champ exposé, tel qu'un formulaire le rend."""
+    menu = _menu_declare(c, nom)
+    options = champ.options
+    if champ.options_depuis is not None:
+        options, source = _options_declarees(c, champ.options_depuis)
+        # Le menu déclaré AU NOM DU CHAMP reste le plus proche : il peut
+        # retitrer ce que la source rend, jamais l'inverse.
+        menu = {**source, **menu}
+    entree: dict[str, Any] = {
+        "field": nom, "param": nom, "node": None, "input": None,
+        "type": champ.type, "value": champ.defaut, "derived": False,
+        "requis": champ.requis, "libelle": champ.libelle,
+    }
+    for cle, valeur in (("min", champ.minimum), ("max", champ.maximum),
+                        ("step", champ.pas), ("unite", champ.unite)):
+        if valeur is not None:
+            entree[cle] = valeur
+    if options is not None:
+        entree["options"] = list(options)
+    return _habiller(c, entree, menu, aides)
+
+
 def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
-    """Le formulaire d'une chaîne, lu dans sa rubrique « expose ».
+    """Le formulaire d'une chaîne : ses champs COMMUNS, puis ceux des techniques.
 
     Décrit sans le moteur : une chaîne n'a pas de graphe à interroger, et son
     contrat ne doit pas dépendre de ce que ComfyUI répondait ce jour-là.
+
+    Un champ qu'une technique apporte porte ``selon`` : le lanceur ne le montre
+    que si la technique courante est dans la liste. Deux techniques peuvent
+    exposer le MÊME nom avec des options différentes (« fond ») : le champ porte
+    alors les options et le défaut de CHACUNE (``selon_options``,
+    ``selon_defauts``), et le lanceur en fait une liste qui suit la technique
+    choisie. Rendre les seules options de la technique par défaut aurait figé la
+    liste sur elle.
     """
-    entrees: list[dict] = []
-    for nom, champ in chaine.champs.items():
-        if champ.media is not None:
-            continue                       # les pièces jointes ont leur propre rubrique
-        menu = _menu_declare(c, nom)
-        options = champ.options
-        if champ.options_depuis is not None:
-            options, source = _options_declarees(c, champ.options_depuis)
-            # Le menu déclaré AU NOM DU CHAMP reste le plus proche : il peut
-            # retitrer ce que la source rend, jamais l'inverse.
-            menu = {**source, **menu}
-        entree: dict[str, Any] = {
-            "field": nom, "param": nom, "node": None, "input": None,
-            "type": champ.type, "value": champ.defaut, "derived": False,
-            "requis": champ.requis, "libelle": champ.libelle,
-        }
-        for cle, valeur in (("min", champ.minimum), ("max", champ.maximum),
-                            ("step", champ.pas), ("unite", champ.unite)):
-            if valeur is not None:
-                entree[cle] = valeur
-        if options is not None:
-            entree["options"] = list(options)
-        entrees.append(_habiller(c, entree, menu, aides))
+    techniques = c.catalog.techniques() if chaine.champ_de_technique else {}
+    entrees = [_entree_de_champ(c, nom, champ, aides)
+               for nom, champ in chaine.champs.items() if champ.media is None]
+    # Les champs des techniques APRÈS les communs, dans l'ordre des techniques
+    # puis de leur déclaration : un formulaire les affiche à la suite du champ
+    # qui les commande.
+    porteuses: dict[str, list[str]] = {}
+    for nom_technique, technique in sorted(techniques.items()):
+        for nom in technique.champs:
+            porteuses.setdefault(nom, []).append(nom_technique)
+    defaut = _technique_par_defaut(c, chaine)
+    for nom, qui in porteuses.items():
+        if nom in chaine.champs:
+            continue                       # un commun ne devient pas conditionnel
+        # Le champ s'affiche tel que la technique PAR DÉFAUT le déclare : c'est
+        # elle que le formulaire ouvre. Pris chez la première venue (l'ordre
+        # alphabétique), « fond » s'ouvrait sur la valeur d'une technique sous
+        # la liste d'une autre.
+        porteuse = techniques[defaut.nom] if defaut is not None and nom in defaut.champs \
+            else techniques[qui[0]]
+        entree = _entree_de_champ(c, nom, porteuse.champs[nom], aides)
+        entree["selon"] = {"champ": chaine.champ_de_technique, "valeurs": qui}
+        if len(qui) > 1:
+            entree["selon_options"] = {}
+            entree["selon_defauts"] = {}
+            for nom_technique in qui:
+                champ = techniques[nom_technique].champs[nom]
+                habille = _entree_de_champ(c, nom, champ, aides)
+                entree["selon_options"][nom_technique] = habille.get("choix") \
+                    or habille.get("options") or []
+                entree["selon_defauts"][nom_technique] = champ.defaut
+        entrees.append(entree)
     return entrees
 
 
@@ -471,8 +522,28 @@ def _media_inputs_chaine(chaine) -> list[dict]:
             for nom, champ in chaine.champs.items() if champ.media is not None]
 
 
-def _etapes_annoncees(chaine) -> list[dict]:
-    return [{"id": e.id, "genre": e.genre, "workflow": e.workflow} for e in chaine.etapes]
+def _technique_par_defaut(c, chaine):
+    """La technique qu'un formulaire ouvre : celle que le champ déclare par défaut."""
+    from ..core import chaine as _noyau
+    return _noyau.technique_choisie(chaine, {}, c.catalog.techniques())
+
+
+def _techniques_vues(c, chaine) -> list[dict]:
+    """Les techniques entre lesquelles CETTE chaîne choisit — vide si elle n'en
+    emploie aucune (elle nomme alors ses graphes elle-même)."""
+    from ..adapter import techniques as _techniques
+    if chaine.champ_de_technique is None:
+        return []
+    return _techniques.vues(c.catalog.techniques())
+
+
+def _etapes_annoncees(chaine, technique=None) -> list[dict]:
+    """Ce qu'une chaîne VA faire, avant de la lancer. Une étape à rôle annonce le
+    graphe que la technique lui donne — sans technique nommée, celle par défaut,
+    puisque c'est elle qu'un formulaire ouvre."""
+    from ..adapter.chaines import workflow_annonce
+    return [{"id": e.id, "genre": e.genre, "workflow": workflow_annonce(e, technique),
+             **({"role": e.role} if e.role else {})} for e in chaine.etapes]
 
 
 def _demande_plate(corps: dict) -> dict:
@@ -488,9 +559,18 @@ def _demande_plate(corps: dict) -> dict:
     return plate
 
 
-def _valeurs_chaine(c, chaine, corps: dict) -> dict:
+def _valeurs_chaine(c, chaine, corps: dict) -> tuple[dict, list[str]]:
+    """Ce que la chaîne va employer, et ce qui n'était pas pour elle.
+
+    Rend ``(valeurs, non appliqués)`` : un réglage d'une AUTRE technique que
+    celle choisie n'est pas refusé, il est écarté — sans quoi un raccourci
+    enregistré sous une technique cassait au premier essai sous une autre.
+    """
     from ..core import chaine as _noyau
-    return _noyau.valeurs(chaine, _demande_plate(corps), _options_exposees(c, chaine))
+    demande = _demande_plate(corps)
+    techniques = c.catalog.techniques()
+    technique = _noyau.technique_choisie(chaine, demande, techniques)
+    return _noyau.valeurs(chaine, demande, _options_exposees(c, chaine, technique), techniques)
 
 
 def _intention_detape(params: dict, label: str = "") -> Any:
@@ -523,11 +603,17 @@ def _estimation_chaine(c, chaine, valeurs: dict) -> dict:
     lignes: list[dict] = []
     total = bas = haut = 0.0
     manque: str | None = None
+    technique = _noyau.technique_choisie(chaine, valeurs, c.catalog.techniques())
     for etape in chaine.rendus:
         params = _noyau.resoudre(etape.params, valeurs, {}, strict=False)
-        # Le workflow d'une étape peut être CHOISI à l'appel (« $mode ») : c'est
-        # le nom résolu qui a une mesure, pas le renvoi.
-        vise = str(params.get("workflow") or etape.workflow or "")
+        # Le workflow d'une étape peut être CHOISI à l'appel — par un renvoi
+        # (« $mode ») ou par la TECHNIQUE qui tient son rôle : c'est le nom
+        # résolu qui a une mesure, pas le rôle ni le renvoi.
+        from ..adapter.chaines import workflow_annonce
+        vise = str(params.get("workflow") or workflow_annonce(etape, technique) or "")
+        if etape.role is not None:
+            params = {k: v for k, v in params.items() if k not in ("role", "technique")}
+            params["workflow"] = vise
         estimation = None
         try:
             plan = c.orchestrator.build_plan(_intention_detape(params, label="estimation"))
@@ -555,11 +641,49 @@ def _estimation_chaine(c, chaine, valeurs: dict) -> dict:
 
 
 def _readiness_chaine(c, chaine) -> dict:
-    """Une chaîne est praticable quand toutes ses étapes le sont."""
+    """Une chaîne est praticable quand son PLAN et la technique PAR DÉFAUT le sont.
+
+    Les autres techniques sont jugées aussi, mais une technique qui boite
+    n'empêche pas le mode : c'est la technique qu'il faut éviter, pas le mode —
+    et le taire aurait laissé l'utilisateur la choisir pour rien. Elle est donc
+    NOMMÉE dans les avertissements.
+    """
+    from ..core import chaine as _noyau
     avertissements: list[dict] = []
     bloquante: dict | None = None
     non_juges: list[str] = []
+    defaut = _noyau.technique_choisie(chaine, {}, c.catalog.techniques())
+
+    def juger(nom: str, etape_id: str, technique: str | None, bloque: bool) -> None:
+        nonlocal bloquante
+        for w in c.registry.known_warnings(c.settings.host_id, nom):
+            avertissements.append({"problem": w.get("problem"), "etape": etape_id,
+                                   "detail": (w.get("detail") or "")[:300],
+                                   "config": w.get("config"), "last_seen": w.get("ts"),
+                                   **({"technique": technique} if technique else {})})
+        blocages = c.registry.blocking_problems(c.settings.host_id, nom)
+        if not blocages:
+            return
+        premier = blocages[0]
+        ligne = {"problem": premier.get("problem"), "etape": etape_id, "workflow": nom,
+                 "detail": (premier.get("detail") or "")[:300],
+                 "config": premier.get("config"), "last_seen": premier.get("ts"),
+                 **({"technique": technique} if technique else {})}
+        if bloque and bloquante is None:
+            bloquante = ligne
+        elif not bloque:
+            # Une autre technique que celle par défaut : un avertissement qui la
+            # NOMME, pas un refus du mode.
+            avertissements.append(ligne)
+
     for etape in chaine.rendus:
+        if etape.role is not None:
+            for nom_technique, technique in sorted(c.catalog.techniques().items()):
+                role = technique.roles.get(etape.role)
+                if role is not None:
+                    juger(role.workflow, etape.id, nom_technique,
+                          bloque=(defaut is not None and nom_technique == defaut.nom))
+            continue
         nom = etape.workflow or ""
         if nom.startswith("$"):
             # Le workflow de cette étape est choisi à l'appel : la mémoire ne
@@ -567,16 +691,7 @@ def _readiness_chaine(c, chaine) -> dict:
             # pour « rien à signaler ».
             non_juges.append(f"{etape.id} (le workflow est choisi par « {nom} »)")
             continue
-        for w in c.registry.known_warnings(c.settings.host_id, nom):
-            avertissements.append({"problem": w.get("problem"), "etape": etape.id,
-                                   "detail": (w.get("detail") or "")[:300],
-                                   "config": w.get("config"), "last_seen": w.get("ts")})
-        blocages = c.registry.blocking_problems(c.settings.host_id, nom)
-        if blocages and bloquante is None:
-            premier = blocages[0]
-            bloquante = {"problem": premier.get("problem"), "etape": etape.id,
-                         "workflow": nom, "detail": (premier.get("detail") or "")[:300],
-                         "config": premier.get("config"), "last_seen": premier.get("ts")}
+        juger(nom, etape.id, None, bloque=True)
     if bloquante is None:
         return {"workflow": chaine.nom, "chaine": True, "runnable": True,
                 "warnings": avertissements, "revisions": [], "non_juge": non_juges}
@@ -673,17 +788,25 @@ def _medias_du_mode(c, spec) -> list[str]:
                                                       spec.carried, graphe)]
 
 
-def _decrire_champ(c, spec, chaine=None):
+def _decrire_champ(c, spec, chaine=None, technique=None):
     """De quoi HABILLER un écart : le libellé du champ, son unité, les libellés
     de ses valeurs — la même lecture que le formulaire, pas une seconde.
 
     Un écart écrit « fond : sepia » ne dit rien de plus que le corps de la
     requête ; « Fond de départ : Sépia » se lit sur une carte.
+
+    Le champ est lu chez la technique EMPLOYÉE d'abord : deux techniques peuvent
+    exposer le même nom, et pris chez n'importe laquelle, « fond : sepia » se
+    lisait sous le libellé d'une autre technique (mesuré sur les quatre
+    raccourcis en place). Ce que la technique employée ne porte pas
+    est cherché chez les autres — un réglage non appliqué reste nommé.
     """
     from ..adapter import menus as _menus
+    from ..core import chaine as _noyau
 
     def d_une_chaine(nom: str) -> dict:
-        champ = chaine.champs.get(nom)
+        champ = (_noyau.champs_retenus(chaine, technique).get(nom)
+                 or _noyau.champs_admis(chaine, c.catalog.techniques()).get(nom))
         if champ is None:
             return {}
         menu = _menu_declare(c, nom)
@@ -720,10 +843,17 @@ def _vue_raccourci(c, spec, fiche: dict) -> dict:
     """
     from ..core import chaine as _noyau
     chaine = c.catalog.chaine(spec) if spec.est_chaine else None
-    defauts = _noyau.defauts(chaine) if chaine is not None else spec.defaults
+    # Les défauts contre lesquels l'écart se juge sont ceux de la technique que
+    # CE raccourci emploie : le défaut d'une technique n'est pas un écart sous
+    # elle, alors que jugé contre une autre il en aurait été un — et chacun de
+    # ses réglages aurait alors figuré sur la carte.
+    technique = (_noyau.technique_choisie(chaine, fiche.get("valeurs") or {},
+                                          c.catalog.techniques())
+                 if chaine is not None else None)
+    defauts = _noyau.defauts(chaine, technique) if chaine is not None else spec.defaults
     vue = dict(fiche)
     vue["ecarts"] = raccourcis.ecarts(fiche.get("valeurs") or {}, defauts,
-                                      _decrire_champ(c, spec, chaine),
+                                      _decrire_champ(c, spec, chaine, technique),
                                       getattr(c.catalog, "formats", None))
     ident = str(fiche.get("id") or "")
     if raccourcis.apercu_fichier(_raccourcis_base(c), spec.name, ident):
@@ -747,19 +877,27 @@ def _valeurs_de_raccourci(c, spec, valeurs: dict) -> dict:
     from ..core import chaine as _noyau
     if spec.est_chaine:
         chaine = c.catalog.chaine(spec)
-        inconnus = sorted(k for k in valeurs if k not in chaine.champs)
+        techniques = c.catalog.techniques()
+        champs = _noyau.champs_admis(chaine, techniques)
+        inconnus = sorted(k for k in valeurs if k not in champs)
         if inconnus:
             raise UnknownWorkflowInputError(
                 f"chaîne {spec.name!r} : champ(s) qu'elle n'expose pas : {', '.join(inconnus)}",
-                workflow=spec.name, fields=inconnus, accepts=sorted(chaine.champs))
-        pieces = sorted(k for k in valeurs if chaine.champs[k].media is not None)
+                workflow=spec.name, fields=inconnus, accepts=sorted(champs))
+        pieces = sorted(k for k in valeurs if champs[k].media is not None)
         if pieces:
             raise UnknownWorkflowInputError(
                 f"{spec.name!r} : une pièce jointe ne s'enregistre pas dans un raccourci "
                 f"({', '.join(pieces)}) — elle se redépose à chaque fois",
                 workflow=spec.name, fields=pieces)
-        options = _options_exposees(c, chaine)
-        return {nom: _noyau.valeur_de(chaine.champs[nom], brute, options.get(nom))
+        # Les options de la technique CHOISIE : « fond » n'accepte pas la même
+        # chose d'une technique à l'autre, et c'est ce que le raccourci
+        # enregistre qui décide.
+        technique = _noyau.technique_choisie(chaine, valeurs, techniques)
+        options = _options_exposees(c, chaine, technique)
+        retenus = _noyau.champs_retenus(chaine, technique)
+        return {nom: _noyau.valeur_de(retenus.get(nom) or champs[nom], brute,
+                                      options.get(nom))
                 for nom, brute in valeurs.items()}
     admis = (set(intent_fields(spec.profile.accepts))
              | set(derivable_params(spec.kind, spec.profile.accepts, spec.defaults))
@@ -891,6 +1029,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # hours for, and learned the ceiling from the failure.
             "job_max_duration_s": c.settings.comfyui_total_timeout_s,
         }
+
+    @app.get("/v1/materiel", tags=["meta"])
+    async def materiel_du_poste(request: Request) -> dict:
+        """Ce que ce poste DÉCLARE, ce qu'il a vraiment, et le budget qui en sort.
+
+        Un rendu découpé en vingt-trois tranches doit pouvoir s'expliquer sans
+        lire le code : d'où vient le budget, et si le fichier dit vrai. Un
+        fichier qui annonce plus de mémoire que la machine n'en a est le genre
+        d'erreur qu'on ne découvrait qu'au premier rendu long, en panne sèche.
+        """
+        from ..adapter import materiel as _materiel
+        c = request.app.state.container
+        return _materiel.etat(getattr(c, "materiel", None),
+                              int(getattr(c.settings, "tranche_octets", 0) or 0))
 
     @app.get("/v1/backend", tags=["backend"])
     async def backend_status(request: Request) -> dict:
@@ -1027,17 +1179,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from ..adapter.chaines import RunnerDeChaines, etapes_initiales
         from ..core.cost import config_fingerprint
         chaine = c.catalog.chaine(spec)
-        valeurs = _valeurs_chaine(c, chaine, corps)          # 422 sur l'inconnu, sur le hors-bornes
+        # 422 sur l'inconnu, sur le hors-bornes ; ce qui appartient à une AUTRE
+        # technique n'est pas refusé, il est écarté — et dit plus bas.
+        valeurs, non_appliques = _valeurs_chaine(c, chaine, corps)
+        runner = RunnerDeChaines(c)
+        technique = runner.technique_voulue(chaine, valeurs)
         etiquette = "".join(ch for ch in str(corps.get("label") or "")
                             if ch.isalnum() or ch in "-_")[:40] or spec.name
         job = c.store.create(kind=spec.kind, workflow=spec.name,
                              config=config_fingerprint(valeurs), params=valeurs,
                              demande=dict(corps or {}))
-        c.store.set_etapes(job.id, etapes_initiales(chaine))
+        c.store.set_etapes(job.id, etapes_initiales(chaine, technique))
         c.store.append_log(job.id, f"accepted: chaîne '{spec.name}' — "
                                    f"{len(chaine.etapes)} étapes, sortie « cortex/{etiquette} »")
-        background.add_task(RunnerDeChaines(c).executer, job.id, chaine, valeurs,
-                            etiquette, force)
+        if non_appliques:
+            # DIT, jamais tu : un réglage qui ne part nulle part ressemble trait
+            # pour trait à un réglage appliqué, et l'utilisateur cherchait
+            # ensuite pourquoi sa valeur n'avait rien changé.
+            quelle = technique.nom if technique is not None else "choisie"
+            c.store.append_log(
+                job.id, f"non appliqué — n'est pas un réglage de la technique {quelle} : "
+                        f"{', '.join(non_appliques)}")
+        background.add_task(runner.executer, job.id, chaine, valeurs, etiquette, force)
         return c.store.get(job.id)
 
     @app.post("/v1/render", status_code=202, response_model=JobOut, tags=["render"])
@@ -1091,13 +1254,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             from ..core import chaine as _noyau
             chaine = c.catalog.chaine(spec)
             corps = await request.json()
-            valeurs = _valeurs_chaine(c, chaine, corps if isinstance(corps, dict) else {})
+            valeurs, non_appliques = _valeurs_chaine(
+                c, chaine, corps if isinstance(corps, dict) else {})
+            technique = _noyau.technique_choisie(chaine, valeurs, c.catalog.techniques())
             # Pas de graphe : une chaîne n'en a pas. Ce qu'il y a à voir avant de
-            # dépenser, c'est la SUITE des étapes et les valeurs qu'elles recevront.
+            # dépenser, c'est la SUITE des étapes (avec le graphe que la technique
+            # donne à chaque rôle) et les valeurs qu'elles recevront.
             return {"workflow": spec.name, "chaine": True, "params": valeurs,
-                    "etapes": [{"id": e.id, "genre": e.genre, "workflow": e.workflow,
+                    "technique": technique.nom if technique is not None else None,
+                    "non_appliques": non_appliques,
+                    "etapes": [{**ligne,
                                 "params": _noyau.resoudre(e.params, valeurs, {}, strict=False)}
-                               for e in chaine.etapes],
+                               for e, ligne in zip(chaine.etapes,
+                                                   _etapes_annoncees(chaine, technique))],
                     "livrable": chaine.livrable}
         plan = c.orchestrator.build_plan(intent_in.to_domain())
         verdict = c.reconciler.reconcile(plan)
@@ -1138,8 +1307,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "presentation": _presentation(c, spec),
                     "resume": chaine.resume,
                     # Ce qu'elle enchaîne : un appelant doit pouvoir dire ce
-                    # qu'il lance avant de le lancer.
-                    "etapes": _etapes_annoncees(chaine),
+                    # qu'il lance avant de le lancer — avec le graphe que la
+                    # technique par DÉFAUT donne à chaque rôle, puisque c'est
+                    # elle qu'un formulaire ouvre.
+                    "etapes": _etapes_annoncees(chaine, _technique_par_defaut(c, chaine)),
+                    # Les TECHNIQUES entre lesquelles ce mode choisit. Une de
+                    # plus est un fichier de plus : un lanceur qui tiendrait sa
+                    # propre liste la verrait vieillir au premier ajout.
+                    "techniques": _techniques_vues(c, chaine),
                     "accepts": sorted(spec.exposes),
                     "intent_fields": sorted(spec.exposes),
                     # Praticable = toutes ses étapes le sont.
@@ -1542,7 +1717,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if spec.est_chaine:
             chaine = c.catalog.chaine(spec)
             corps = await request.json()
-            valeurs = _valeurs_chaine(c, chaine, corps if isinstance(corps, dict) else {})
+            valeurs, _ecartes = _valeurs_chaine(
+                c, chaine, corps if isinstance(corps, dict) else {})
             return _estimation_chaine(c, chaine, valeurs)
         plan = c.orchestrator.build_plan(intent_in.to_domain())
         values = _with_work(c, plan)
@@ -1575,7 +1751,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "media_inputs": _habiller_medias(c, _media_inputs_chaine(chaine),
                                                      spec.aides),
                     "media_inputs_unbound": [],
-                    "etapes": _etapes_annoncees(chaine),
+                    "etapes": _etapes_annoncees(chaine, _technique_par_defaut(c, chaine)),
+                    "techniques": _techniques_vues(c, chaine),
                     "inputs": [], "outputs": []}
         # Les liaisons d'un montage visent des rôles (« $commun.style ») : c'est
         # le dépliage qui leur donne un numéro de nœud, et donc des options.

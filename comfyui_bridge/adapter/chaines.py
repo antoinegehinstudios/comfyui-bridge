@@ -30,7 +30,7 @@ from ..core.errors import (BridgeError, ChainControlFailedError, MediaAssemblyEr
 from ..core.intention import MediaKind, RenderIntent
 from ..core.jobs import JobStatus
 from ..core.plan import Artifact
-from . import montage_video
+from . import materiel, montage_video
 from .measure import measure
 from .media import DOSSIER_DE_TRAVAIL, SIDECAR_SUFFIX, artifact_url, media_kind
 
@@ -39,14 +39,26 @@ from .media import DOSSIER_DE_TRAVAIL, SIDECAR_SUFFIX, artifact_url, media_kind
 CONTROLE_ECHOUE = "controle-echoue"
 
 
-def etapes_initiales(chaine: noyau.Chaine) -> list[dict[str, Any]]:
+def etapes_initiales(chaine: noyau.Chaine, technique=None) -> list[dict[str, Any]]:
     """Les étapes telles qu'on les annonce AVANT d'en faire une seule.
 
     Un job de chaîne accepté doit déjà dire ce qu'il va faire : sans cela, il
-    n'était qu'un identifiant muet jusqu'à la première étape finie.
+    n'était qu'un identifiant muet jusqu'à la première étape finie. Une étape à
+    RÔLE annonce le graphe que la technique choisie lui donne — à l'acceptation
+    elle est connue ; sans technique, le rôle seul, qui dit au moins ce que
+    l'étape tient.
     """
-    return [{"id": e.id, "genre": e.genre, "workflow": e.workflow, "statut": "todo",
-             "job_id": None, "resultat": None, "note": None} for e in chaine.etapes]
+    return [{"id": e.id, "genre": e.genre, "workflow": workflow_annonce(e, technique),
+             "statut": "todo", "job_id": None, "resultat": None, "note": None}
+            for e in chaine.etapes]
+
+
+def workflow_annonce(etape: noyau.Etape, technique=None) -> str | None:
+    """Le graphe qu'une étape va lancer, tel qu'on peut l'annoncer d'avance."""
+    if etape.workflow is not None or etape.role is None:
+        return etape.workflow
+    role = (getattr(technique, "roles", None) or {}).get(etape.role)
+    return role.workflow if role is not None else etape.role
 
 
 def dossier_de_travail(sortie: Path, job_id: str) -> Path:
@@ -91,7 +103,7 @@ class RunnerDeChaines:
         c = self._c
         self._force = force              # passe outre un souvenir, étape par étape
         store = c.store
-        etapes = etapes_initiales(chaine)
+        etapes = etapes_initiales(chaine, self.technique_voulue(chaine, valeurs))
         store.set_etapes(job_id, etapes)
         store.set_status(job_id, JobStatus.RUNNING)
         store.append_log(job_id, f"chaîne « {chaine.nom} » : {len(etapes)} étapes")
@@ -154,7 +166,23 @@ class RunnerDeChaines:
         final = noyau.resoudre(chaine.livrable, valeurs, resultats, strict=False) \
             if chaine.livrable else None
         store.set_progress(job_id, len(etapes), len(etapes), None)
-        store.mark_succeeded(job_id, self._artefacts(final, produits), duration_s=duree)
+        # UNE CHAÎNE RÉUSSIE NE LIVRE QUE SON LIVRABLE. Antoine, 2026-09-16 :
+        # « maestro ne doit pas, dans son outil de visualisation des
+        # productions, afficher les produits d'itérations, mais seulement la
+        # production finale montée ; il doit toujours livrer l'état terminé ».
+        # Ce que les étapes ont produit reste lisible dans `etapes[].resultat`
+        # et dans les sous-jobs — mais ce n'est pas une livraison, et le montrer
+        # à côté du montage faisait choisir au spectateur entre cinq fichiers
+        # dont un seul était la vidéo commandée. En ÉCHEC, rien ne change : les
+        # fichiers déjà écrits restent listés, c'est en les regardant qu'on
+        # comprend.
+        livre = isinstance(final, str) and final and Path(final).is_file()
+        if livre and produits:
+            store.append_log(
+                job_id, f"livré : {Path(final).name} — les {len(produits)} fichiers d'étapes "
+                        f"restent lisibles dans les étapes et leurs sous-jobs")
+        store.mark_succeeded(job_id, self._artefacts(final, [] if livre else produits),
+                             duration_s=duree)
         c.registry.record(c.settings.host_id, chaine.nom, valeurs, status="succeeded",
                           duration_s=duree)
 
@@ -267,16 +295,25 @@ class RunnerDeChaines:
                 resultat["livrable"] = chemin
                 resultat["mesure"] = {"bytes": Path(chemin).stat().st_size}
                 break
+        # « sinon » PAR-DESSUS le passe-plat : ce que la définition déclare
+        # l'emporte sur ce qu'on a deviné. C'est ainsi qu'un appel sauté rend
+        # « aucun livrable » et « 0 image reprise », que le montage lit sans
+        # savoir que l'étape n'a pas eu lieu.
+        resultat.update(etape.sinon or {})
         return resultat
 
     def _executer_etape(self, job_id: str, etape: noyau.Etape, valeurs: dict[str, Any],
                         resultats: dict[str, Any], travail: Path, label: str,
                         etapes: list[dict[str, Any]], rang: int,
                         chaine_nom: str = "") -> dict[str, Any]:
+        technique = self._technique_de(etape, valeurs, resultats)
         if etape.genre == "verifier":
-            return self._verifier(etape, valeurs, resultats)
+            return self._verifier(etape, valeurs, resultats, technique)
         params = noyau.resoudre(etape.params, valeurs, resultats)
         if etape.genre == "rendre":
+            if etape.role is not None:
+                params = self._params_du_role(job_id, etape, params, technique,
+                                              valeurs, resultats)
             return self._rendre(job_id, etape, params, label, etapes, rang,
                                 travail=travail, chaine_nom=chaine_nom)
         if etape.genre == "extraire_queue":
@@ -295,16 +332,73 @@ class RunnerDeChaines:
             return montage_video.recoller(parts, sortie, fps=int(params.get("fps") or 25),
                                           largeur=int(params.get("largeur") or 1280),
                                           hauteur=int(params.get("hauteur") or 720),
-                                          chevauchement=int(params.get("chevauchement") or 0))
+                                          chevauchement=int(params.get("chevauchement") or 0),
+                                          signaler=lambda dit: self._c.store.append_log(
+                                              job_id, f"étape {etape.id} : {dit}"))
         if etape.genre == "mesurer_raccords":
             parts = self._parts_locales(params["parts"], travail)
             return montage_video.mesurer_raccords(
-                parts, travail / etape.id, chevauchement=int(params.get("chevauchement") or 0))
+                parts, travail / etape.id, chevauchement=int(params.get("chevauchement") or 0),
+                signaler=lambda dit: self._c.store.append_log(
+                    job_id, f"étape {etape.id} : {dit}"))
         raise MediaAssemblyError(f"genre d'étape inconnu : {etape.genre!r}")
 
+    # -- techniques -------------------------------------------------------------
+    #
+    # Une étape peut nommer un RÔLE (« deroulement ») au lieu d'un graphe, et
+    # une étape « verifier » une LISTE de contrôles par son nom : c'est la
+    # technique choisie à l'appel qui dit quel graphe tient ce rôle et ce que
+    # cette liste contient. Le plan reste ainsi agnostique — sans quoi une
+    # technique de plus était une chaîne de plus, recopiée (Antoine, 2026-09-16).
+
+    def technique_voulue(self, chaine: noyau.Chaine, valeurs: dict[str, Any]):
+        """La technique que CES valeurs emploient — connue dès l'acceptation, ce
+        qui permet d'annoncer les graphes des rôles avant de rien lancer."""
+        return noyau.technique_choisie(chaine, valeurs or {}, self._c.catalog.techniques())
+
+    def _technique_de(self, etape: noyau.Etape, valeurs: dict[str, Any],
+                      resultats: dict[str, Any]):
+        """La technique qu'une étape emploie, résolue au moment de la jouer."""
+        renvoi = etape.technique
+        if renvoi is None:
+            return None
+        nom = noyau.resoudre(renvoi, valeurs, resultats)
+        technique = self._c.catalog.technique(nom)
+        if technique is None:
+            connues = ", ".join(sorted(self._c.catalog.techniques())) or "aucune"
+            raise MediaAssemblyError(
+                f"étape {etape.id!r} : la technique {str(nom)!r} n'est pas déclarée "
+                f"(déclarées : {connues})")
+        return technique
+
+    def _params_du_role(self, parent_id: str, etape: noyau.Etape, params: dict[str, Any],
+                        technique, valeurs: dict[str, Any],
+                        resultats: dict[str, Any]) -> dict[str, Any]:
+        """Ce qu'une étape à rôle lance vraiment : le graphe de la technique, et
+        ses entrées.
+
+        Les entrées du RÔLE sont résolues à part — elles sont écrites chez la
+        technique, personne ne les a encore vues — puis passent SOUS celles de
+        l'étape : le plan garde le dernier mot sur ce qu'il a lui-même écrit, et
+        une technique ne recouvre pas en silence ce que la chaîne demande.
+        """
+        role = technique.roles[etape.role]
+        sortis = {k: v for k, v in params.items() if k not in ("role", "technique")}
+        sortis["workflow"] = role.workflow
+        sortis["inputs"] = {**noyau.resoudre(role.inputs, valeurs, resultats),
+                            **(params.get("inputs") or {})}
+        self._c.store.append_log(
+            parent_id, f"étape {etape.id} : technique {technique.nom} → {role.workflow}")
+        return sortis
+
     def _verifier(self, etape: noyau.Etape, valeurs: dict[str, Any],
-                  resultats: dict[str, Any]) -> dict[str, Any]:
-        lignes = noyau.controler(etape.params, valeurs, resultats)
+                  resultats: dict[str, Any], technique=None) -> dict[str, Any]:
+        controles = etape.params
+        if etape.controles_nommes is not None:
+            # La liste appartient à la technique : deux peintures ne se jugent
+            # pas sur les mêmes grandeurs, et la chaîne n'a pas à porter les deux.
+            controles = technique.controles[etape.controles_nommes]
+        lignes = noyau.controler(list(controles), valeurs, resultats)
         faux = [l for l in lignes if not l["ok"]]
         if faux:
             dit = " ; ".join(f"{l['id']} : mesuré {l['mesure']!r}, attendu "
@@ -427,7 +521,7 @@ class RunnerDeChaines:
         ou None quand il tient d'un seul tenant, ou que le nœud ne sait pas
         trancher (et alors le run part entier, comme avant)."""
         c = self._c
-        budget = int(getattr(c.settings, "tranche_octets", 0) or 0)
+        budget, provenance = budget_de_tranche(c)
         if budget <= 0:
             return None
         try:
@@ -478,7 +572,8 @@ class RunnerDeChaines:
                 f"{budget / 2 ** 30:.1f} Gio, plus que les {TRANCHES_MAX} qu'un nœud "
                 f"accepte — baisser la résolution ou la durée", workflow=nom)
         return {"noeud": noeud, "nombre": n, "images": images, "largeur": int(largeur),
-                "hauteur": int(hauteur), "fps": int(fps), "poids": poids, "budget": budget}
+                "hauteur": int(hauteur), "fps": int(fps), "poids": poids, "budget": budget,
+                "provenance": provenance}
 
     def _rendre_par_tranches(self, parent_id: str, etape: noyau.Etape, nom: str,
                              media: dict[str, str], genre: Any, reglages: dict[str, Any],
@@ -493,7 +588,8 @@ class RunnerDeChaines:
             f"étape {etape.id} : rendu en {n} tranches — jusqu'à {tranches['images']} images "
             f"de {tranches['largeur']}×{tranches['hauteur']} "
             f"({tranches['images'] * tranches['poids'] / 2 ** 30:.1f} Gio en mémoire d'un seul "
-            f"tenant) pour un budget de {tranches['budget'] / 2 ** 30:.1f} Gio par tranche")
+            f"tenant) ; "
+            + materiel.dire(tranches["budget"], tranches.get("provenance", "")))
         parts: list[str] = []
         recits: list[dict[str, Any]] = []
         sous_ids: list[str] = []
@@ -659,9 +755,16 @@ class RunnerDeChaines:
         for part in parts:
             if isinstance(part, dict):
                 fichier = part.get("fichier") or part.get("path")
-                sorties.append({**part, "fichier": str(self._fichier_local(fichier, travail))})
+                # Une part VIDE traverse telle quelle : c'est ce qu'une étape
+                # sautée rend (« sinon: {livrable: null} »), et c'est le montage
+                # qui décide de l'ignorer — pas ce ramassage de fichiers, qui
+                # échouait ici sur un chemin « None ».
+                sorties.append({**part, "fichier": str(self._fichier_local(fichier, travail))
+                                if fichier else None})
             elif isinstance(part, list):
                 sorties.extend(self._parts_locales(part, travail))
+            elif not part:
+                sorties.append(part)
             else:
                 sorties.append(str(self._fichier_local(part, travail)))
         return sorties
@@ -689,6 +792,19 @@ class RunnerDeChaines:
 # Une image rendue en mémoire : RVB en float32, ce qu'un nœud d'image rend au
 # moteur. C'est ce poids, fois le nombre d'images, que le budget borne.
 OCTETS_PAR_IMAGE = 3 * 4
+
+def budget_de_tranche(container) -> tuple[int, str]:
+    """Le budget d'une tranche et D'OÙ IL VIENT, pour tout ce qui découpe.
+
+    L'ordre est écrit une seule fois (`materiel.budget_et_provenance`) : une
+    surcharge d'essai, sinon le matériel déclaré du poste, sinon le repli. Deux
+    lectures de cet ordre auraient fini par se contredire — l'une découpant, et
+    l'autre disant pourquoi.
+    """
+    return materiel.budget_et_provenance(
+        getattr(container, "materiel", None),
+        int(getattr(container.settings, "tranche_octets", 0) or 0))
+
 
 # Le plus grand nombre de tranches qu'un nœud accepte (la borne de son entrée
 # `segment_count`). Au-delà, c'est la demande qui est hors de portée du poste,
@@ -724,7 +840,7 @@ def fusionner_recits(recits: list[dict[str, Any]]) -> dict[str, Any]:
     prise sur les images de la tranche : un nombre dont le nom finit en `_min`
     prend le minimum (et son instant `_s`, celui de la tranche qui le porte),
     en `_max` le maximum, une liste se concatène dans l'ordre des tranches (la
-    série de l'encre dans le cadre), un objet se fusionne de même ; tout autre
+    série d'une grandeur suivie image par image), un objet de même ; tout autre
     scalaire qui diffère garde la valeur de la première tranche et se nomme
     dans `tranches_divergentes`, pour qu'un contrôle sache ce qu'il lit.
     """

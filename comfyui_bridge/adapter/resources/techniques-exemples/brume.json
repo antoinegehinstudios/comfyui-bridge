@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "technique": "brume",
+  "libelle": "Brume",
+  "resume": "L'image est déjà là, entière et en couleur, sous une nappe de bruit fractal animé qui se dissipe selon le chemin du récit ; sous la brume elle est floue et désaturée d'autant qu'elle est couverte.",
+  "expose": {
+    "fond": {
+      "type": "COMBO",
+      "defaut": "brume-blanche",
+      "options": [
+        "brume-blanche",
+        "brume-grise",
+        "brume-dorée"
+      ],
+      "libelle": "Teinte de la brume"
+    }
+  },
+  "roles": {
+    "deroulement": {
+      "workflow": "video-reveal-brume-dirige",
+      "inputs": {
+        "61.markers_json": "$analyse.recit.markers_json",
+        "61.direction_json": "$intention.recit.direction_json",
+        "61.fond": "$fond",
+        "61.contemplation_s": "$contemplation_s",
+        "61.bords": "$bords"
+      }
+    },
+    "conclusion": {
+      "workflow": "video-reveal-brume-closing",
+      "inputs": {
+        "6.fond": "$fond",
+        "6.depart_s": "$deroulement.recit.duree_retenue_s",
+        "6.appel_texte": "$cta",
+        "6.fermeture_json": "$deroulement.recit.fermeture_json"
+      }
+    }
+  },
+  "controles": {
+    "plan_tenu": [
+      {
+        "id": "l_accroche_est_vue_a_2_5_s",
+        "valeur": "$deroulement.recit.hook_vu.atteint",
+        "op": "gte",
+        "attendu": 0.1
+      },
+      {
+        "id": "le_climax_est_hors_du_cadre_d_ouverture",
+        "valeur": "$deroulement.recit.climax_a_l_ouverture",
+        "op": "lte",
+        "attendu": 0.12
+      },
+      {
+        "id": "le_climax_est_tenu",
+        "valeur": "$deroulement.recit.climax_tenue_s",
+        "op": "gte",
+        "attendu": 2
+      },
+      {
+        "id": "la_camera_glisse",
+        "valeur": "$deroulement.recit.vitesse_camera_max_mesuree",
+        "op": "lte",
+        "attendu": 0.1
+      },
+      {
+        "id": "la_camera_ne_saccade_pas",
+        "valeur": "$deroulement.recit.acceleration_camera_max",
+        "op": "lte",
+        "attendu": 1.0
+      },
+      {
+        "id": "les_temps_sont_lisibles",
+        "valeur": "$deroulement.recit.lisibilite_min",
+        "op": "gte",
+        "attendu": 0.85
+      },
+      {
+        "id": "l_ordre_d_arrivee_est_celui_du_plan",
+        "valeur": "$deroulement.recit.ordre_d_arrivee_respecte",
+        "op": "eq",
+        "attendu": true
+      },
+      {
+        "id": "le_coeur_vient_en_dernier",
+        "valeur": "$deroulement.recit.coeur_en_dernier",
+        "op": "eq",
+        "attendu": true
+      },
+      {
+        "id": "aucun_temps_supprime",
+        "valeur": "$deroulement.recit.nb_hors_champ",
+        "op": "eq",
+        "attendu": 0
+      },
+      {
+        "id": "la_contemplation_ne_fige_pas",
+        "valeur": "$deroulement.recit.contemplation_immobile_s",
+        "op": "lte",
+        "attendu": 0.5
+      }
+    ]
+  },
+  "notes": {
+    "ce_qui_change_et_ce_qui_ne_change_pas": "La brume ÉTAIT une chaîne jumelle (« video-revelation-brume »), recopiée à onze étapes près deux : même amont, même plan, même appel, seules la peinture, la conclusion et les contrôles différaient. Elle est devenue une TECHNIQUE le 2026-09-16 : le plan est partagé pour de bon, et une troisième façon de peindre ne recopiera plus rien.",
+    "ce_que_la_brume_fait": "La peinture est déjà là, entière et en couleur, sous une nappe de bruit fractal animé (deux à trois octaves, une dérive lente dans le sens que le plan déclare pour la caméra, une respiration de densité). Elle recouvre tout au départ — 0,97, il reste un soupçon de forme — et se dissipe pixel par pixel selon le MÊME champ d'heures que la saignée d'encre : une graine par temps, à la vitesse qui lui fait dégager sa boîte et son voisinage avant la fin de sa tenue, puis lentement jusqu'à rejoindre les autres. Sous la brume l'image est floue et désaturée d'autant qu'elle est couverte : la dissipation se lit comme une mise au point. Après le corps, la dernière nappe se lève partout pendant le dézoom ; la tenue finale montre la peinture nue, avec un voile résiduel au ras des bords — de l'air, pas un reste de récit, et le récit le déclare (brume.residuelle_au_bord). TROIS CHOSES SE JUGENT À L'ŒIL et sont donc mesurées sur les images COMPOSÉES, sous « brume.vu » : la LARGEUR de la pente (une brume n'a pas de bord — trois secondes de dissipation ne font que dix pixels quand le front rampe, d'où des médaillons découpés ; la pente est donc demandée en PIXELS et convertie en secondes par la pente locale du champ), le CONTRASTE de la nappe et sa vie (ses lambeaux, sa dérive, sa respiration d'une image à l'autre), et ce que la peinture laisse voir sous nappe pleine — les grandes masses, rien de plus. La brume se lève aussi DANS SON ENSEMBLE : sa densité de base descend jusqu'au climax (la lande se devine de plus en plus), puis jusqu'à rien pendant le dézoom ; les temps narratifs sont les endroits qu'elle quitte d'abord, et une éclaircie garde toujours un reste de voile — sans quoi ce n'est plus une éclaircie, c'est une découpe.",
+    "conclusion_par_la_brume": "CE QUI A ÉTÉ DEMANDÉ, le 2026-09-15, après avoir regardé les vidéos de révélation : « il manque la partie conclusion à toutes ces vidéos ; après un court temps de contemplation sur l'image révélée (3 à 5 s, pas d'arrêt net), la conclusion doit pouvoir mener à un message CTA s'il est spécifié ». Cette chaîne n'en avait pas, et on avait écrit pourquoi : « une brume qui reviendrait serait une autre histoire, pas une fermeture ». Le reproche a déplacé le jugement — il ne porte pas sur la technique, il porte sur la FIN : il ne s'agit pas de REFERMER un récit, il s'agit de le POSER, puis d'amener l'appel. Une brume qui revient ne recommence rien : elle reprend la page, et ce qu'elle laisse à la dernière image est une PAGE DE BRUME, c'est-à-dire exactement le support clair dont l'appel final a besoin pour y écrire son encre sombre. CE QUE LE NŒUD FAIT (BrumeClosing, graphe « video-reveal-brume-closing ») : pendant un souffle de 0,5 s, la page reste celle que le déroulement vient de tenir — le résidu d'air au ras des bords, rien d'autre, parce que la contemplation est DÉJÀ dans le déroulement (le climax tenu, la levée de la dernière nappe, puis la tenue de la peinture nue) et qu'un second arrêt ferait une fin qui s'étire. Puis la brume revient depuis les bords vers le climax, qui est repris EN DERNIER : l'heure de retour d'un pixel n'est que sa distance à l'ellipse qui circonscrit la boîte du climax — aucune forme n'est découpée, rien n'est réservé, et une ellipse n'a pas de côté droit là où un rectangle en a quatre — et le front est déchiré par une seconde nappe à grain court, jamais un rideau et jamais un bord droit. La brume est la MÊME (6.fond) : teinte, densité de départ, granularité, voile, flou et désaturation viennent tous du déroulement ; et la nappe reprend sa dérive à la seconde où celui-ci s'est arrêté (6.depart_s = la durée retenue), sans quoi la brume qui revient repartirait du coin où elle était née. À la dernière image, la densité a rejoint celle du départ et le souffle de la nappe s'est éteint : cette page-là est claire (luminance de la bande centrale mesurée à 0,819 sous brume-blanche, pour un contrat à 0,80) et ne clignote pas sous le texte. Le climax, lui, reste seul à se voir pendant un sixième de la conclusion (0,151 mesuré à 704 × 1280 sur 200 images, 0,152 sur le banc court) — c'est la promesse de l'étape, et elle se mesure au lieu de se déclarer. POURQUOI LA MÊME QUEUE QUE POUR L'ENCRE : l'étape RACCORD extrait les 50 dernières images du déroulement, exactement comme dans « Révéler une image », et la conclusion les parcourt à l'envers depuis la dernière, à une vitesse qui monte depuis zéro. La scène continue donc de vivre pendant que la page se reprend, et le raccord ne se voit pas (première image à 1,1 % de la dernière image reçue, mesuré). À 0 seconde, la conclusion ne dure qu'une image : la scène ne se pose pas, et l'appel final s'écrit directement sur la fin du déroulement. Le montage compte toujours DEUX parts — le déroulement, puis ce qui le clôt.",
+    "ce_que_le_plan_tenu_mesure": "Les mêmes grandeurs que sous l'encre quand elles ont un sens, mesurées sur la CARTE DE DENSITÉ que le nœud vient de rendre, jamais promises : l'accroche vue à 2,5 s (part de sa boîte dont la brume est descendue sous la moitié), le climax hors du cadre d'ouverture et tenu, la caméra qui glisse sans saccade, la LISIBILITÉ (part de la boîte et de son halo passée sous 0,3 de densité à la fin de sa tenue), l'ORDRE D'ARRIVÉE (l'heure médiane de dissipation croît-elle dans l'ordre du plan), le CŒUR EN DERNIER, et aucun temps supprimé. Le nœud, lui, ne supprime rien : un temps hors de l'image ou incadrable REFUSE le plan avec sa raison. DEUX GRANDEURS DE PLUS sont rendues et ne sont pas encore contrôlées ici, parce qu'elles séparent ce que la peinture a fait de ce que le plan lui a demandé d'impossible : « boite_dissipee_min » (la BOÎTE de chaque temps dégagée à son heure — le contrat irréductible, qu'aucune géométrie n'excuse) et « lisibilite_min_hors_dispute » (la lisibilité des seuls temps dont un temps plus tardif ne revendique pas déjà le voisinage ; « temps_au_voisinage_dispute » les nomme).",
+    "la_conduite_ne_lui_est_pas_passee": "« conduite » est un champ COMMUN de la chaîne, avec ses deux valeurs — mais le rôle « deroulement » de la brume ne le reçoit pas : la brume ne sait se dissiper que le long d'un chemin narratif, et son nœud porte « le plan » en littéral. Lui passer le champ aurait obligé la chaîne à rétrécir la liste d'un champ commun pour une technique, c'est-à-dire à reprendre la dépendance qu'on vient de lui retirer. Ce qu'un appelant choisit là n'est donc pas appliqué sous la brume, et la passerelle le DIT au journal.",
+    "ni_encre_ni_rendu": "Ni « encre », ni « rendu », ni « ambiance », ni « negatif » : la brume n'a pas de trait, pas de lumière de page, rien à inverser. Le champ « fond » y choisit la TEINTE de la brume (blanche, grise, dorée) — c'est le même nom que sous l'encre, avec d'autres valeurs, et c'est la technique choisie qui dit lesquelles (« selon_options » dans /io)."
+  }
+}

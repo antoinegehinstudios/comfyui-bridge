@@ -184,7 +184,8 @@ class WorkflowCatalog:
                  workflows_dir: Path | None = None,
                  categories: dict[str, Any] | None = None,
                  menus: dict[str, Any] | None = None,
-                 formats: dict[str, Any] | None = None) -> None:
+                 formats: dict[str, Any] | None = None,
+                 techniques: dict[str, Any] | None = None) -> None:
         self._default = default
         self._specs = specs
         self._workflows_dir = Path(workflows_dir) if workflows_dir else None
@@ -207,6 +208,10 @@ class WorkflowCatalog:
         # listes, et largeur/hauteur restent des champs ordinaires. Aucun défaut
         # ici — le défaut d'un mode est celui de SES champs.
         self.formats: dict[str, Any] = dict(formats or {"orientations": [], "resolutions": []})
+        # Les TECHNIQUES déclarées sur cette machine : ce qui tient les rôles
+        # d'une chaîne. Lues une fois avec le catalogue, comme les chaînes le
+        # sont à leur entrée — une technique de plus est un fichier de plus.
+        self._techniques: dict[str, Any] = dict(techniques or {})
 
     # -- maintained manifest (provenance + dependencies) ----------------------
 
@@ -342,6 +347,16 @@ class WorkflowCatalog:
                 ) from exc
             self._chaines[spec.name] = noyau.lire(brut, spec.name)
         return self._chaines[spec.name]
+
+    def techniques(self) -> dict[str, Any]:
+        """Les techniques déclarées, par leur nom."""
+        return dict(self._techniques)
+
+    def technique(self, nom: str | None):
+        """UNE technique par son nom, ou None. Un nom inconnu n'est pas une
+        panne : c'est une valeur que la validation d'un champ refusera en le
+        nommant, là où l'appelant comprendra."""
+        return self._techniques.get(str(nom)) if nom else None
 
     def load_template(self, spec: WorkflowSpec,
                       params: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -537,12 +552,15 @@ def _graph_of(path: Path) -> dict[str, Any]:
 
 
 def _spec_de_chaine(name: str, entry: dict[str, Any], catalogue: Path,
-                    vitrine: dict[str, Any]) -> WorkflowSpec:
+                    vitrine: dict[str, Any],
+                    techniques: dict[str, Any] | None = None) -> WorkflowSpec:
     """Une entrée qui déclare une CHAÎNE au lieu d'un graphe.
 
     Ce qu'elle reçoit vient de la rubrique « expose » de la chaîne, lue ici même
     : sans cela, le catalogue annoncerait une entrée sans aucun champ, et un
-    formulaire construit dessus serait vide.
+    formulaire construit dessus serait vide. Les réglages des TECHNIQUES en font
+    partie — un appelant les envoie à la racine du corps comme les autres, et
+    sans eux « fond » repartait en « champ inconnu ».
     """
     from ..core import chaine as noyau
     chemin = Path(entry["chaine"])
@@ -552,8 +570,11 @@ def _spec_de_chaine(name: str, entry: dict[str, Any], catalogue: Path,
     defauts: dict[str, Any] = {}
     try:
         lue = noyau.lire(json.loads(chemin.read_text(encoding="utf-8")), name)
-        expose = tuple(lue.champs)
-        defauts = noyau.defauts(lue)
+        noyau.verifier_techniques(lue, techniques or {})
+        expose = tuple(noyau.champs_admis(lue, techniques))
+        # Les défauts publiés sont ceux du plan ET de la technique par DÉFAUT :
+        # c'est ce qu'un formulaire ouvre, et ce contre quoi un écart se juge.
+        defauts = noyau.defauts(lue, noyau.technique_choisie(lue, {}, techniques))
     except (OSError, json.JSONDecodeError) as exc:
         raise WorkflowMappingError(
             f"chaîne {name!r} : impossible de lire {chemin} : {exc}") from exc
@@ -649,6 +670,11 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
                 and not {"workflow", "bindings", "chaine"} & set(entree)):
             workflows[nom] = {**livrees[nom], **entree}
 
+    # Les techniques d'abord : une chaîne expose AUSSI leurs réglages, et son
+    # entrée de catalogue ne peut pas se décrire sans elles.
+    from .techniques import lire_toutes as _lire_techniques
+    techniques = _lire_techniques(data_dir)
+
     specs: dict[str, WorkflowSpec] = {}
     vitrines: dict[str, dict[str, Any]] = {}
     for name, entry in workflows.items():
@@ -666,7 +692,7 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
             "aides": {str(k): str(v) for k, v in (entry.get("aides") or {}).items()},
         }
         if "chaine" in entry:
-            specs[name] = _spec_de_chaine(name, entry, path, vitrine)
+            specs[name] = _spec_de_chaine(name, entry, path, vitrine, techniques)
             continue
         if "workflow" not in entry and "bindings" not in entry:
             # Une entrée qui ne porte QUE la vitrine habille un graphe DÉPOSÉ
@@ -755,7 +781,8 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
                                 workflows_dir=Path(workflows_dir) if workflows_dir else None,
                                 categories=data.get("categories"),
                                 menus=data.get("menus"),
-                                formats=_formats(data.get("formats"), path))
+                                formats=_formats(data.get("formats"), path),
+                                techniques=techniques)
     catalogue.shadowed = tuple(masques)
     catalogue.vitrines_orphelines = tuple(sorted(orphelines))
     return catalogue

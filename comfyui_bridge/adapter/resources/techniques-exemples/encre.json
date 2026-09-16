@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "technique": "encre",
+  "libelle": "Encre",
+  "resume": "L'encre saigne sur une page vierge : une tache par temps du récit, qui fleurit à bords humides et rejoint les autres, sous une lumière posée hors champ.",
+  "expose": {
+    "fond": {
+      "type": "COMBO",
+      "defaut": "washi",
+      "options": [
+        "washi",
+        "washi-sans-lampe",
+        "sepia",
+        "gris-atelier"
+      ],
+      "libelle": "Fond de départ"
+    },
+    "ambiance": {
+      "type": "COMBO",
+      "defaut": "lanterne",
+      "options": [
+        "lanterne",
+        "chandelle",
+        "atelier",
+        "selon-le-fond"
+      ],
+      "libelle": "Ambiance"
+    },
+    "encre": {
+      "type": "COMBO",
+      "defaut": "lavis",
+      "options": [
+        "lavis",
+        "trait-sec",
+        "encre-dense"
+      ],
+      "libelle": "Style de tracé"
+    },
+    "negatif": {
+      "type": "COMBO",
+      "defaut": "non",
+      "options": [
+        "non",
+        "oui",
+        "selon-l-oeuvre"
+      ],
+      "libelle": "Négatif (l'encre inverse la lumière)"
+    },
+    "rendu": {
+      "type": "COMBO",
+      "defaut": "ink-bleed",
+      "options": [
+        "ink-bleed",
+        "classique",
+        "front-organique"
+      ],
+      "libelle": "Rendu"
+    }
+  },
+  "roles": {
+    "deroulement": {
+      "workflow": "video-reveal-cinematic-dirige",
+      "inputs": {
+        "61.markers_json": "$analyse.recit.markers_json",
+        "61.direction_json": "$intention.recit.direction_json",
+        "61.fond": "$fond",
+        "61.ambiance": "$ambiance",
+        "61.encre": "$encre",
+        "61.rendu": "$rendu",
+        "61.conduite": "$conduite",
+        "61.contemplation_s": "$contemplation_s",
+        "61.negatif": "$negatif",
+        "61.bords": "$bords"
+      }
+    },
+    "conclusion": {
+      "workflow": "video-reveal-closing",
+      "inputs": {
+        "6.fond": "$fond",
+        "6.ambiance": "$ambiance",
+        "6.depart_s": "$deroulement.recit.duree_retenue_s",
+        "6.appel_texte": "$cta",
+        "6.fermeture_json": "$deroulement.recit.fermeture_json"
+      }
+    }
+  },
+  "controles": {
+    "plan_tenu": [
+      {
+        "id": "l_accroche_est_vue_a_2_5_s",
+        "valeur": "$deroulement.recit.hook_vu.atteint",
+        "op": "gte",
+        "attendu": 0.1
+      },
+      {
+        "id": "le_climax_est_hors_du_cadre_d_ouverture",
+        "valeur": "$deroulement.recit.climax_a_l_ouverture",
+        "op": "lte",
+        "attendu": 0.12
+      },
+      {
+        "id": "le_climax_est_tenu",
+        "valeur": "$deroulement.recit.climax_tenue_s",
+        "op": "gte",
+        "attendu": 2
+      },
+      {
+        "id": "les_temps_se_suivent",
+        "valeur": "$deroulement.recit.chevauchement_max_mesure_s",
+        "op": "lte",
+        "attendu": 8
+      },
+      {
+        "id": "l_ordre_du_plan_est_suivi",
+        "valeur": "$deroulement.recit.ordre_du_plan_respecte",
+        "op": "eq",
+        "attendu": true
+      },
+      {
+        "id": "chaque_temps_est_cadre_a_son_heure",
+        "valeur": "$deroulement.recit.visibilite_min",
+        "op": "gte",
+        "attendu": 0.9
+      },
+      {
+        "id": "aucun_temps_supprime",
+        "valeur": "$deroulement.recit.nb_hors_champ",
+        "op": "eq",
+        "attendu": 0
+      },
+      {
+        "id": "la_camera_glisse",
+        "valeur": "$deroulement.recit.vitesse_camera_max_mesuree",
+        "op": "lte",
+        "attendu": 0.1
+      },
+      {
+        "id": "la_camera_ne_saccade_pas",
+        "valeur": "$deroulement.recit.acceleration_camera_max",
+        "op": "lte",
+        "attendu": 0.5
+      },
+      {
+        "id": "la_page_ne_s_acheve_pas_d_un_coup",
+        "valeur": "$deroulement.recit.achevement_part",
+        "op": "lte",
+        "attendu": 0.25
+      },
+      {
+        "id": "les_temps_sont_lisibles",
+        "valeur": "$deroulement.recit.lisibilite_min",
+        "op": "gte",
+        "attendu": 0.85
+      },
+      {
+        "id": "l_ordre_d_arrivee_est_celui_du_plan",
+        "valeur": "$deroulement.recit.ordre_d_arrivee_respecte",
+        "op": "eq",
+        "attendu": true
+      },
+      {
+        "id": "le_coeur_vient_en_dernier",
+        "valeur": "$deroulement.recit.coeur_en_dernier",
+        "op": "eq",
+        "attendu": true
+      },
+      {
+        "id": "aucun_temps_n_est_un_trou",
+        "valeur": "$deroulement.recit.trou_max",
+        "op": "lte",
+        "attendu": 0.25
+      },
+      {
+        "id": "des_traits_et_pas_que_des_blocs",
+        "valeur": "$deroulement.recit.part_des_traces",
+        "op": "gte",
+        "attendu": 0.25
+      },
+      {
+        "id": "la_contemplation_ne_fige_pas",
+        "valeur": "$deroulement.recit.contemplation_immobile_s",
+        "op": "lte",
+        "attendu": 0.5
+      },
+      {
+        "id": "la_camera_ne_voit_jamais_de_page_blanche",
+        "valeur": "$deroulement.recit.encre_dans_le_cadre_min",
+        "op": "gte",
+        "attendu": 0.01
+      }
+    ]
+  },
+  "notes": {
+    "ce_que_la_technique_tient": "Une TECHNIQUE dit quel graphe tient chaque rôle du plan, avec quelles entrées de nœud, quels réglages elle ajoute au formulaire et quels contrôles elle porte. Le plan (la chaîne) n'en sait rien : il nomme « deroulement » et « conclusion », et c'est le champ « technique » de l'appel qui dit laquelle les tient. Antoine, 2026-09-16 : « la mention de brume ne doit pas être tenue par le workflow de la passerelle : cela veut dire qu'il porte une dépendance à la brume et devra se faire doublon pour faire autrement ». Une technique de plus est un FICHIER de plus.",
+    "les_reglages_propres": "Fond, ambiance, style de tracé, négatif et rendu n'ont de sens que sous l'encre : ils vivent ici. Les réglages COMMUNS (durée, contemplation, conclusion, appel final et sa police, structure du récit, approche, bords, conduite, format, graine) restent dans la chaîne — ce sont ceux du PLAN, pas de la peinture.",
+    "les_defauts_sont_ceux_du_socle": "Les défauts de cette technique sont ceux des vidéos ink livrées le 2026-09-15 à midi (« c'est parfait — assure cette standardisation ») : washi, lanterne, lavis, non, ink-bleed. Le témoin `tests/test_socle_ink.py` les épingle : les changer est une décision à écrire, jamais un accident.",
+    "la_conduite_est_commune": "« conduite » est un champ de la CHAÎNE, avec ses deux valeurs (« le plan », « la camera ») : le rôle « deroulement » de l'encre la passe au nœud (61.conduite). Une autre technique qui ne saurait pas s'en servir ne la reçoit simplement pas — elle n'a pas à faire rétrécir la liste d'un champ commun."
+  }
+}

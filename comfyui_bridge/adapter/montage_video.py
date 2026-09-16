@@ -222,12 +222,23 @@ def extraire_image(video: str | Path, position: Any, sortie: str | Path) -> dict
     return {"fichier": str(cible.resolve()), "index": index, "bytes": cible.stat().st_size}
 
 
-def parts_normalisees(parts: Any, chevauchement: int = 0) -> list[dict[str, Any]]:
-    """Des parts en une forme unique : ``{fichier, depuis_image}``.
+def parts_normalisees(parts: Any, chevauchement: int = 0,
+                      signaler: Any = None) -> list[dict[str, Any]]:
+    """Des parts en une forme unique : ``{fichier, depuis_image, sauf_les_dernieres}``.
 
     ``depuis_image`` est un rognage de TÊTE : les images de chevauchement que
     l'amont a re-rendues et qu'il faut jeter. La première part n'a rien devant
     elle : le rognage par défaut ne s'y applique pas.
+
+    ``sauf_les_dernieres`` est le rognage de QUEUE, en images. Il sert quand
+    l'AVAL a déjà repris la fin de cette part : depuis le 2026-09-16, l'appel
+    final lit la conclusion paresseusement et ne rend QUE ses propres images —
+    la conclusion entre donc dans le montage sans les images que l'appel a
+    reprises, sinon on les verrait deux fois.
+
+    Une part dont le fichier est vide ou ``null`` est IGNORÉE, et dite : c'est
+    ainsi qu'une étape sautée rend « rien » sans casser le montage qui la nomme.
+    Il en faut au moins une qui reste.
     """
     if not isinstance(parts, (list, tuple)) or not parts:
         raise MediaAssemblyError("« parts » doit être une liste non vide")
@@ -236,26 +247,35 @@ def parts_normalisees(parts: Any, chevauchement: int = 0) -> list[dict[str, Any]
         plates.extend(p) if isinstance(p, list) else plates.append(p)
     sorties: list[dict[str, Any]] = []
     for rang, p in enumerate(plates):
-        defaut = 0 if rang == 0 else max(0, int(chevauchement or 0))
+        # Le défaut de chevauchement suit le rang des parts RETENUES : une part
+        # ignorée ne doit pas faire croire à la suivante qu'elle a un amont.
+        defaut = 0 if not sorties else max(0, int(chevauchement or 0))
         if isinstance(p, dict):
             fichier = p.get("fichier") or p.get("path")
             ecrit = p.get("depuis_image")
             depuis = defaut if ecrit is None else max(0, int(ecrit))
+            queue = max(0, int(p.get("sauf_les_dernieres") or 0))
         else:
-            fichier, depuis = p, defaut
+            fichier, depuis, queue = p, defaut, 0
         if not fichier:
-            raise MediaAssemblyError(f"part n°{rang + 1} sans fichier")
+            if callable(signaler):
+                signaler(f"part n°{rang + 1} sans fichier : ignorée")
+            continue
         chemin = Path(str(fichier))
         if not chemin.is_file():
             raise MediaAssemblyError(f"part n°{rang + 1} absente : {chemin}")
-        sorties.append({"fichier": str(chemin.resolve()), "depuis_image": depuis})
+        sorties.append({"fichier": str(chemin.resolve()), "depuis_image": depuis,
+                        "sauf_les_dernieres": queue})
+    if not sorties:
+        raise MediaAssemblyError("aucune part à joindre : toutes sont vides")
     return sorties
 
 
 def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
-             hauteur: int = 720, chevauchement: int = 0) -> dict[str, Any]:
+             hauteur: int = 720, chevauchement: int = 0,
+             signaler: Any = None) -> dict[str, Any]:
     """Joindre des parts en UN livrable, ré-encodé uniformément."""
-    pieces = parts_normalisees(parts, chevauchement)
+    pieces = parts_normalisees(parts, chevauchement, signaler)
     cible = Path(sortie)
     cible.parent.mkdir(parents=True, exist_ok=True)
     fps = int(fps or 25)
@@ -274,11 +294,15 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
         cadence = _cadence((video or {}).get("avg_frame_rate")) or \
             _cadence((video or {}).get("r_frame_rate")) or fps
         saute = piece["depuis_image"] / cadence if piece["depuis_image"] and cadence else 0.0
+        rogne = (piece["sauf_les_dernieres"] / cadence
+                 if piece["sauf_les_dernieres"] and cadence else 0.0)
         if not a_du_son and duree <= 0:
             raise MediaAssemblyError(
                 f"recollage : {Path(piece['fichier']).name} n'a ni piste audio ni durée "
                 f"mesurable — impossible de dimensionner la piste silencieuse")
-        sons.append({"present": a_du_son, "duree": duree, "saute": saute})
+        sons.append({"present": a_du_son, "duree": duree, "saute": saute, "rogne": rogne,
+                     "images": compter_images(Path(piece["fichier"]))
+                     if piece["sauf_les_dernieres"] else 0})
 
     args: list[str] = ["-y", "-v", "error"]
     for piece in pieces:
@@ -289,15 +313,33 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
         if sons[i]["present"]:
             rang_muet.append(None)
             continue
-        args += ["-f", "lavfi", "-t", f"{max(0.04, sons[i]['duree'] - sons[i]['saute']):.3f}",
+        args += ["-f", "lavfi",
+                 "-t", f"{max(0.04, sons[i]['duree'] - sons[i]['saute'] - sons[i]['rogne']):.3f}",
                  "-i", "anullsrc=r=48000:cl=stereo"]
         rang_muet.append(suivant)
         suivant += 1
 
     filtre: list[str] = []
     for i, piece in enumerate(pieces):
-        tete = (f"trim=start_frame={piece['depuis_image']},setpts=PTS-STARTPTS,"
-                if piece["depuis_image"] else "")
+        garde = ""
+        if piece["depuis_image"] or piece["sauf_les_dernieres"]:
+            bornes = []
+            if piece["depuis_image"]:
+                bornes.append(f"start_frame={piece['depuis_image']}")
+            if piece["sauf_les_dernieres"]:
+                # `trim` compte les images de l'ENTRÉE : la fin se dit en numéro
+                # absolu (total − N), jamais en longueur. Une part plus courte
+                # que ce qu'on lui retire ne garderait rien : on la refuse
+                # plutôt que de livrer un montage amputé en silence.
+                reste = int(sons[i]["images"]) - int(piece["sauf_les_dernieres"])
+                if reste <= int(piece["depuis_image"]):
+                    raise MediaAssemblyError(
+                        f"recollage : {Path(piece['fichier']).name} n'a que "
+                        f"{sons[i]['images']} images, on lui en retire "
+                        f"{piece['sauf_les_dernieres']} de queue — il n'en resterait rien")
+                bornes.append(f"end_frame={reste}")
+            garde = f"trim={':'.join(bornes)},setpts=PTS-STARTPTS,"
+        tete = garde
         filtre.append(
             f"[{i}:v]{tete}scale={largeur}:{hauteur}:force_original_aspect_ratio=decrease,"
             f"pad={largeur}:{hauteur}:(ow-iw)/2:(oh-ih)/2,fps={fps},setsar=1[v{i}]")
@@ -356,10 +398,15 @@ def concatener(parts: Any, sortie: str | Path) -> dict[str, Any]:
             "reencode": False}
 
 
-def mesurer_raccords(parts: Any, travail: str | Path,
-                     chevauchement: int = 0) -> dict[str, Any]:
-    """La ressemblance de part en part, aux frontières du montage RÉEL."""
-    pieces = parts_normalisees(parts, chevauchement)
+def mesurer_raccords(parts: Any, travail: str | Path, chevauchement: int = 0,
+                     signaler: Any = None) -> dict[str, Any]:
+    """La ressemblance de part en part, aux frontières du montage RÉEL.
+
+    « Réel » veut dire : la dernière image GARDÉE d'une part (sa queue rognée ne
+    sera pas dans le livrable) contre la première gardée de la suivante. Mesurer
+    la dernière image du FICHIER aurait jugé une frontière que personne ne voit.
+    """
+    pieces = parts_normalisees(parts, chevauchement, signaler)
     if len(pieces) < 2:
         raise MediaAssemblyError("mesure de raccords : il en faut au moins deux")
     dossier = Path(travail)
@@ -367,7 +414,11 @@ def mesurer_raccords(parts: Any, travail: str | Path,
     paires: list[dict[str, Any]] = []
     for i in range(len(pieces) - 1):
         avant, apres = pieces[i], pieces[i + 1]
-        fin = extraire_image(avant["fichier"], "last", dossier / f"raccord_{i}_a.png")
+        derniere = "last"
+        if avant["sauf_les_dernieres"]:
+            derniere = max(0, compter_images(Path(avant["fichier"]))
+                           - int(avant["sauf_les_dernieres"]) - 1)
+        fin = extraire_image(avant["fichier"], derniere, dossier / f"raccord_{i}_a.png")
         depart = apres["depuis_image"] if apres["depuis_image"] else "first"
         debut = extraire_image(apres["fichier"], depart, dossier / f"raccord_{i}_b.png")
         _, stderr = _lancer(outil(), ["-v", "info", "-i", fin["fichier"], "-i", debut["fichier"],
