@@ -594,10 +594,35 @@ class RunnerDeChaines:
             return None
         images = int(math.ceil(duree * fps))
         poids = int(largeur) * int(hauteur) * OCTETS_PAR_IMAGE
+        # LA MARGE DU MOMENT. Le budget est déclaré ; mais si le poste garde en
+        # ce moment plus que le fichier ne dit (un voisin a chargé un modèle de
+        # 26 Go — mesuré), des tranches au budget déclaré n'auraient pas leur
+        # place : on les taille sur ce qui est libre MAINTENANT, en le disant.
+        # Plus de tranches, jamais plus longues ; et si même ainsi ça ne tient
+        # pas, c'est dit avant le premier run.
+        mesure = materiel.mesure_du_poste()
+        marge = materiel.marge_du_moment(mesure)
+        facteur = self._facteur_de_crete()
+        budget_declare = budget
+        du_moment: str | None = None
+        if marge is not None and int(marge / facteur) < budget:
+            budget = max(1, int(marge / facteur))
+            du_moment = (f"ramené à {budget / 2 ** 30:.1f} Gio par la marge du moment "
+                         f"({materiel.dire_la_marge(mesure)}, facteur {facteur:g})")
+            if parent_id is not None:
+                c.store.append_log(parent_id, f"étape {etape.id} : budget {du_moment}")
         n = int(math.ceil(images * poids / budget))
         if n <= 1:
             return None
         if n > TRANCHES_MAX:
+            if du_moment and int(math.ceil(images * poids / budget_declare)) <= TRANCHES_MAX:
+                raise MediaAssemblyError(
+                    f"étape {etape.id!r} ({nom}) : il faudrait {n} tranches pour tenir "
+                    f"{images} images de {int(largeur)}×{int(hauteur)} dans la marge du "
+                    f"moment ({materiel.dire_la_marge(mesure)}), plus que les {TRANCHES_MAX} "
+                    f"qu'un nœud accepte — le poste garde en ce moment plus que ce que "
+                    f"{materiel.FICHIER} déclare : libérer la mémoire, puis relancer",
+                    workflow=nom)
             raise MediaAssemblyError(
                 f"étape {etape.id!r} ({nom}) : il faudrait {n} tranches pour tenir "
                 f"{images} images de {int(largeur)}×{int(hauteur)} dans "
@@ -605,10 +630,22 @@ class RunnerDeChaines:
                 f"accepte — baisser la résolution ou la durée", workflow=nom)
         return {"noeud": noeud, "nombre": n, "images": images, "largeur": int(largeur),
                 "hauteur": int(hauteur), "fps": int(fps), "poids": poids, "budget": budget,
-                "provenance": provenance}
+                "budget_declare": budget_declare, "du_moment": du_moment,
+                "facteur": facteur, "provenance": provenance}
+
+    def _facteur_de_crete(self) -> float:
+        """Le facteur de crête déclaré du poste — 1 quand rien n'est déclaré (une
+        surcharge d'essai, un poste sans fichier) : le pic attendu est alors le
+        poids nu des images, ce qu'on sait de plus honnête."""
+        memoire = (self._c.materiel or {}).get("memoire") or {}
+        try:
+            return max(1.0, float(memoire.get("facteur_de_crete") or 1.0))
+        except (TypeError, ValueError):
+            return 1.0
 
     def _attendre_la_place(self, parent_id: str, etape: noyau.Etape, nom: str,
-                           i: int, n: int, tranches: dict[str, Any]) -> None:
+                           i: int, n: int, tranches: dict[str, Any],
+                           par_tranche: int | None = None) -> None:
         """Avant une tranche, la MARGE DU MOMENT du poste doit tenir le pic
         attendu : le poids d'une tranche × le facteur de crête déclaré.
 
@@ -619,12 +656,17 @@ class RunnerDeChaines:
         limite de COMMIT de Windows qui était atteinte). Plutôt que d'échouer
         après deux heures de rendu, on attend que la place revienne, en le
         disant, jusqu'à la borne — puis on refuse, en disant pourquoi.
+
+        `par_tranche` : les images qu'une tranche rend VRAIMENT, sues dès que
+        la première est rendue — le compte d'avant le run est une borne (le
+        nœud peut retenir 48 s là où il en déclare 79), pas une mesure.
         """
         c = self._c
         store = c.store
         memoire = (c.materiel or {}).get("memoire") or {}
-        facteur = float(memoire.get("facteur_de_crete") or 1.0)
-        par_tranche = int(math.ceil(tranches["images"] / n))
+        facteur = float(tranches.get("facteur") or self._facteur_de_crete())
+        if par_tranche is None:
+            par_tranche = int(math.ceil(tranches["images"] / n))
         besoin = int(par_tranche * tranches["poids"] * facteur)
         limite_s = float(getattr(c.settings, "attente_place_s", 0) or 0)
         pas_s = float(getattr(c.settings, "attente_place_pas_s", 30) or 0)
@@ -681,19 +723,25 @@ class RunnerDeChaines:
             f"de {tranches['largeur']}×{tranches['hauteur']} "
             f"({tranches['images'] * tranches['poids'] / 2 ** 30:.1f} Gio en mémoire d'un seul "
             f"tenant) ; "
-            + materiel.dire(tranches["budget"], tranches.get("provenance", "")))
+            + materiel.dire(tranches.get("budget_declare", tranches["budget"]),
+                            tranches.get("provenance", ""))
+            + (f", {tranches['du_moment']}" if tranches.get("du_moment") else ""))
         parts: list[str] = []
         recits: list[dict[str, Any]] = []
         sous_ids: list[str] = []
         artefacts: list[str] = []
         duree = 0.0
+        # Les images qu'une tranche rend VRAIMENT, sues dès la première : c'est
+        # sur elles que les tranches suivantes attendent leur place, pas sur la
+        # borne d'avant le run.
+        reel: int | None = None
         for i in range(n):
             if store.get(parent_id).cancel_requested:
                 raise MediaAssemblyError(
                     f"étape {etape.id!r} : arrêt demandé avant la tranche {i + 1}/{n}")
             etapes[rang]["note"] = f"tranche {i + 1}/{n}"
             store.set_etapes(parent_id, etapes)
-            self._attendre_la_place(parent_id, etape, nom, i, n, tranches)
+            self._attendre_la_place(parent_id, etape, nom, i, n, tranches, par_tranche=reel)
             entrees = dict(reglages.get("inputs") or {})
             entrees[f"{noeud}.segment_index"] = i
             entrees[f"{noeud}.segment_count"] = n
@@ -707,6 +755,7 @@ class RunnerDeChaines:
                     job_id=fini.id, workflow=nom)
             parts.append(livrable.path)
             sous_ids.append(fini.id)
+            reel = max(reel or 0, _images_rendues(livrable)) or None
             # Posés à CHAQUE tranche, pas à la fin : une chaîne qui échoue à la
             # tranche 2/3 doit encore dire quelles tranches sont rendues, et où.
             etapes[rang]["job_ids"] = list(sous_ids)
@@ -926,6 +975,24 @@ def budget_de_tranche(container) -> tuple[int, str]:
 # `segment_count`). Au-delà, c'est la demande qui est hors de portée du poste,
 # et il vaut mieux le dire que de tenter soixante-cinq runs.
 TRANCHES_MAX = 64
+
+
+def _images_rendues(livrable: Artifact) -> int:
+    """Combien d'images une tranche a rendues — sa mesure si elle la porte,
+    sinon comptées sur le fichier ; 0 quand rien ne se lit (et alors la borne
+    d'avant le run reste la référence)."""
+    try:
+        images = int((livrable.measured or {}).get("frames") or 0)
+    except (TypeError, ValueError, AttributeError):
+        images = 0
+    if images > 0:
+        return images
+    try:
+        return int(montage_video.compter_images(livrable.path) or 0)
+    except Exception:                                    # noqa: BLE001
+        # repli: une tranche qu'on ne sait pas compter garde la borne d'avant
+        # le run — plus prudente, jamais moins.
+        return 0
 
 
 def noeud_de_tranches(graphe: dict[str, Any]) -> str | None:

@@ -904,6 +904,17 @@ pas de 30 s). Sans mesure possible, personne n'est retenu. `GET /v1/materiel`
 porte `marge_du_moment_octets` et avertit quand le poste garde plus que le
 déclaré.
 
+Deux raffinements, pour ne pas attendre ce qu'on pourrait rendre. Au
+découpage, le budget d'une tranche est **ramené à la marge du moment** quand
+elle est plus petite que le déclaré (« budget ramené à 6,9 Gio par la marge du
+moment (physique 34,6 Gio, commit 24,0 Gio), facteur 3,5 ») : plus de
+tranches, jamais plus longues — et si même ainsi il en faudrait plus de 64,
+c'est dit avant le premier run (« le poste garde en ce moment plus que ce que
+materiel.local.json déclare : libérer la mémoire, puis relancer »). Et dès que
+la première tranche est rendue, les suivantes attendent leur place sur les
+images qu'une tranche rend **vraiment** (comptées sur le fichier), pas sur la
+borne d'avant le run — un nœud qui déclare 79 s peut n'en retenir que 48.
+
 `N ≤ 1` : le run part entier, comme avant. `N > 64` (la borne de `segment_count`) :
 la demande est refusée **avant le premier run**, en le disant — c'est le poste
 qui est hors de portée, pas le découpage qui manque. Le journal du job dit le

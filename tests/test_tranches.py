@@ -163,7 +163,8 @@ class BackendQuiTranche(BackendQuiLivre):
                               f"duration={secondes}",
                         "-pix_fmt", "yuv420p", str(fichier)], check=True)
         recit = fichier.with_suffix(".json")
-        recit.write_text(json.dumps(RECITS_DE_TRANCHE[int(index or 0)], ensure_ascii=False),
+        recit.write_text(json.dumps(RECITS_DE_TRANCHE[int(index or 0) % len(RECITS_DE_TRANCHE)],
+                                    ensure_ascii=False),
                          encoding="utf-8")
         artefacts = [Artifact(kind=media_kind(f), path=str(f.resolve()),
                               url=artifact_url(self.sortie, f), bytes=f.stat().st_size,
@@ -608,7 +609,9 @@ def test_une_tranche_attend_sa_place_quand_le_poste_est_plein(banc, monkeypatch)
     commit). La tranche doit ATTENDRE que la place revienne, en le disant."""
     from comfyui_bridge.adapter import chaines as module
     atelier = banc(BUDGET_POUR_TROIS, attente_place_s=60, attente_place_pas_s=0)
-    reponses = [PLEIN, PLEIN, LARGE]
+    # Le découpage voit la place ; c'est la tranche 1 qui trouve le poste plein,
+    # deux fois, avant que la place revienne.
+    reponses = [LARGE, PLEIN, PLEIN, LARGE]
     monkeypatch.setattr(module.materiel, "mesure_du_poste",
                         lambda: reponses.pop(0) if len(reponses) > 1 else reponses[0])
     job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-tranchee",
@@ -625,7 +628,9 @@ def test_une_tranche_attend_sa_place_quand_le_poste_est_plein(banc, monkeypatch)
 def test_une_tranche_qui_ne_trouve_jamais_sa_place_est_refusee_en_le_disant(banc, monkeypatch):
     from comfyui_bridge.adapter import chaines as module
     atelier = banc(BUDGET_POUR_TROIS, attente_place_s=0, attente_place_pas_s=0)
-    monkeypatch.setattr(module.materiel, "mesure_du_poste", lambda: PLEIN)
+    reponses = [LARGE]
+    monkeypatch.setattr(module.materiel, "mesure_du_poste",
+                        lambda: reponses.pop(0) if reponses else PLEIN)
     job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-tranchee",
                                                          "secondes": 2, "label": "sans-place"}))
     assert job["status"] == "failed"
@@ -646,6 +651,66 @@ def test_sans_mesure_du_poste_une_tranche_part_sans_attendre(banc, monkeypatch):
                                                          "secondes": 2, "label": "aveugle"}))
     assert job["status"] == "succeeded", job.get("problem")
     assert not [l for l in job["logs"] if "attente" in str(l)]
+
+
+@SANS_FFMPEG
+def test_le_budget_est_ramene_a_la_marge_du_moment(banc, monkeypatch):
+    """Quand le poste garde en ce moment plus que le déclaré, les tranches sont
+    taillées sur ce qui est libre MAINTENANT : plus de tranches, jamais plus
+    longues — et le journal le dit."""
+    from comfyui_bridge.adapter import chaines as module
+    atelier = banc(BUDGET_POUR_TROIS, attente_place_s=0, attente_place_pas_s=0)
+    # 5 Mo de marge (facteur 1, rien n'est déclaré) : 23 040 000 / 5 000 000 → 5 tranches.
+    etroit = {"totale_octets": 64 * 2 ** 30, "libre_octets": 5_000_000,
+              "commit_libre_octets": 5_000_000, "par": "essai"}
+    monkeypatch.setattr(module.materiel, "mesure_du_poste", lambda: etroit)
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-tranchee",
+                                                         "secondes": 2, "label": "etroit"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    assert _etape(job, "rendu")["tranches"] == 5
+    journal = "\n".join(str(l) for l in job["logs"])
+    assert "budget ramené à 0.0 Gio par la marge du moment" in journal
+    assert "rendu en 5 tranches" in journal and "ramené" in journal
+    # Chaque tranche a trouvé sa place sans attendre : 20 images × 230 400 = 4,6 Mo < 5 Mo.
+    assert "attente" not in journal
+
+
+@SANS_FFMPEG
+def test_une_marge_trop_etroite_pour_64_tranches_est_refusee_avant_le_premier_run(banc, monkeypatch):
+    from comfyui_bridge.adapter import chaines as module
+    atelier = banc(BUDGET_POUR_TROIS, attente_place_s=0, attente_place_pas_s=0)
+    minuscule = {"totale_octets": 64 * 2 ** 30, "libre_octets": 100_000,
+                 "commit_libre_octets": 100_000, "par": "essai"}
+    monkeypatch.setattr(module.materiel, "mesure_du_poste", lambda: minuscule)
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-tranchee",
+                                                         "secondes": 2, "label": "minuscule"}))
+    assert job["status"] == "failed"
+    detail = job["problem"]["detail"]
+    assert "dans la marge du moment" in detail and "libérer la mémoire, puis relancer" in detail
+    assert atelier.faux.tranches_recues == []
+
+
+@SANS_FFMPEG
+def test_les_tranches_suivantes_attendent_sur_les_images_vraiment_rendues(banc, monkeypatch):
+    """Le compte d'avant le run est une borne (4 s déclarées, 100 images) ; le
+    backend d'essai rend 2 s en 3 tranches, soit 16 à 17 images chacune. Dès la
+    première rendue, une marge qui ne tiendrait pas la borne (34 images) mais
+    tient le réel (17) ne fait plus attendre."""
+    from comfyui_bridge.adapter import chaines as module
+    atelier = banc(BUDGET_POUR_TROIS, attente_place_s=0, attente_place_pas_s=0)
+    large = {"totale_octets": 64 * 2 ** 30, "libre_octets": 40 * 2 ** 30,
+             "commit_libre_octets": 40 * 2 ** 30, "par": "essai"}
+    # 5 Mo : au-dessus de 17 × 230 400 = 3,9 Mo, en dessous de 34 × 230 400 = 7,8 Mo.
+    moyen = {"totale_octets": 64 * 2 ** 30, "libre_octets": 5_000_000,
+             "commit_libre_octets": 5_000_000, "par": "essai"}
+    reponses = [large, large]            # le découpage, puis la garde de la tranche 1
+    monkeypatch.setattr(module.materiel, "mesure_du_poste",
+                        lambda: reponses.pop(0) if reponses else moyen)
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-tranchee",
+                                                         "secondes": 2, "label": "reel"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    assert _etape(job, "rendu")["tranches"] == 3
+    assert not [l for l in job["logs"] if "attente" in str(l) or "n'a pas trouvé sa place" in str(l)]
 
 
 # -- ce qu'un nœud déclare, et la fusion des récits ----------------------------
