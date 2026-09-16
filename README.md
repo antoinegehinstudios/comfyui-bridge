@@ -915,10 +915,18 @@ la première tranche est rendue, les suivantes attendent leur place sur les
 images qu'une tranche rend **vraiment** (comptées sur le fichier), pas sur la
 borne d'avant le run — un nœud qui déclare 79 s peut n'en retenir que 48.
 
+Et le poste peut changer ENTRE la garde et l'allocation (mesuré : un modèle de
+21 Go chargé pendant le rendu d'une tranche). Une tranche qui échoue alors que
+la marge du moment ne tient pas le pic attendu est **reprise après attente**,
+jusqu'à trois fois, en le disant (« la tranche 1/43 a échoué (…) alors que le
+poste n'avait que 13,5 Gio de marge pour un pic attendu de 23,3 Gio — reprise
+après attente (essai 1/3) ») ; une tranche qui échoue avec de la place a échoué
+d'autre chose, et cet échec-là se dit tel quel, sans reprise.
+
 `N ≤ 1` : le run part entier, comme avant. `N > 64` (la borne de `segment_count`) :
 la demande est refusée **avant le premier run**, en le disant — c'est le poste
 qui est hors de portée, pas le découpage qui manque. Le journal du job dit le
-budget ET d'où il vient (« budget de 10,3 Gio par tranche, d'après
+budget ET d'où il vient (« budget de 18 Gio par tranche, d'après
 materiel.local.json ») : un découpage qui change parce qu'un fichier a bougé
 doit se lire, jamais se deviner.
 
@@ -939,7 +947,7 @@ d'exemple `resources/materiel.exemple.json`) :
 {
   "memoire": { "totale_octets": 68719476736,     // la RAM du poste
                "reservee_octets": 30064771072,   // ce que le reste de la machine garde
-               "facteur_de_crete": 3.5 },        // le pic d'un run, en fois le poids des images
+               "facteur_de_crete": 2.0 },        // le pic d'un run, en fois le poids des images
   "memoire_graphique": { "totale_octets": 12884901888 },   // déclaré pour ce qui viendra
   "coeurs": 28                                             // idem : rien ne le lit encore
 }
@@ -950,10 +958,11 @@ d'exemple `resources/materiel.exemple.json`) :
 ≈ 1,6×. Le 2026-09-16, à 4K/60 rendu par tranches, la RAM libre échantillonnée
 toutes les 30 s : 9,3 Gio d'images par tranche, **30 Gio au pic** — 3,2× — parce
 que le moteur gardait en cache les images du run précédent pendant le suivant
-(≈ 9 Gio) et que l'encodage copie. D'où 3,5, et le moteur lancé en
+(≈ 9 Gio) et que l'encodage copie. Le moteur est depuis lancé en
 `--cache-none` par la commande déclarée dans `engines.local.json` (nos graphes
-n'ont rien à réutiliser d'un run à l'autre). Avec les valeurs ci-dessus :
-(64 − 28) / 3,5 = **10,3 Gio par tranche**.
+n'ont rien à réutiliser d'un run à l'autre), et la même mesure donne alors
+**10,4 Gio au pic pour 7,8 Gio d'images** — 1,35×. D'où 2,0 : la marge sur le
+mesuré. Avec les valeurs ci-dessus : (64 − 28) / 2 = **18 Gio par tranche**.
 
 L'ordre, écrit une seule fois : **surcharge** (`COMFY_TRANCHE_GO`, pour un
 essai — dite quand elle s'applique) > **fichier** > **repli de 8 Gio**, dit

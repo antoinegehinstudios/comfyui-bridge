@@ -633,6 +633,26 @@ class RunnerDeChaines:
                 "budget_declare": budget_declare, "du_moment": du_moment,
                 "facteur": facteur, "provenance": provenance}
 
+    def _pic_attendu(self, tranches: dict[str, Any], n: int,
+                     par_tranche: int | None) -> tuple[int, int, float]:
+        """Le pic de mémoire qu'une tranche demande : ses images (la borne
+        d'avant le run, ou ce qu'une tranche rend vraiment) × leur poids × le
+        facteur de crête. Rend (besoin, images, facteur)."""
+        facteur = float(tranches.get("facteur") or self._facteur_de_crete())
+        if par_tranche is None:
+            par_tranche = int(math.ceil(tranches["images"] / n))
+        return int(par_tranche * tranches["poids"] * facteur), par_tranche, facteur
+
+    def _manque_de_place(self, tranches: dict[str, Any], n: int,
+                         par_tranche: int | None) -> tuple[int, int] | None:
+        """(marge, besoin) quand la marge du moment ne tient pas le pic attendu ;
+        ``None`` quand elle le tient — ou qu'on ne sait pas la mesurer."""
+        marge = materiel.marge_du_moment(materiel.mesure_du_poste())
+        besoin, _images, _facteur = self._pic_attendu(tranches, n, par_tranche)
+        if marge is None or marge >= besoin:
+            return None
+        return marge, besoin
+
     def _facteur_de_crete(self) -> float:
         """Le facteur de crête déclaré du poste — 1 quand rien n'est déclaré (une
         surcharge d'essai, un poste sans fichier) : le pic attendu est alors le
@@ -664,10 +684,7 @@ class RunnerDeChaines:
         c = self._c
         store = c.store
         memoire = (c.materiel or {}).get("memoire") or {}
-        facteur = float(tranches.get("facteur") or self._facteur_de_crete())
-        if par_tranche is None:
-            par_tranche = int(math.ceil(tranches["images"] / n))
-        besoin = int(par_tranche * tranches["poids"] * facteur)
+        besoin, par_tranche, facteur = self._pic_attendu(tranches, n, par_tranche)
         limite_s = float(getattr(c.settings, "attente_place_s", 0) or 0)
         pas_s = float(getattr(c.settings, "attente_place_pas_s", 30) or 0)
         debut = time.monotonic()
@@ -745,9 +762,35 @@ class RunnerDeChaines:
             entrees = dict(reglages.get("inputs") or {})
             entrees[f"{noeud}.segment_index"] = i
             entrees[f"{noeud}.segment_count"] = n
-            fini = self._executer_run(parent_id, etape, nom, media, genre,
-                                      {**reglages, "inputs": entrees},
-                                      f"{label}-{etape.id}-{i + 1}sur{n}"[:40], etapes, rang)
+            essais = 0
+            while True:
+                try:
+                    fini = self._executer_run(parent_id, etape, nom, media, genre,
+                                              {**reglages, "inputs": entrees},
+                                              f"{label}-{etape.id}-{i + 1}sur{n}"[:40],
+                                              etapes, rang)
+                    break
+                except MediaAssemblyError as exc:
+                    # Une tranche qui échoue ALORS QUE la place manque a
+                    # probablement échoué de ça : le poste a changé entre la
+                    # garde et l'allocation (mesuré le 2026-09-16 : un modèle de
+                    # 21 Go chargé pendant le rendu). On attend la place et on
+                    # reprend, en le disant — jamais plus de REPRISES_MAX fois,
+                    # et jamais quand la place ne manquait pas : cet échec-là
+                    # est celui du nœud, et se dit tel quel.
+                    essais += 1
+                    manque = self._manque_de_place(tranches, n, reel)
+                    if essais > REPRISES_MAX or manque is None:
+                        raise
+                    marge, besoin = manque
+                    store.append_log(
+                        parent_id,
+                        f"étape {etape.id} : la tranche {i + 1}/{n} a échoué ({exc.detail}) "
+                        f"alors que le poste n'avait que {marge / 2 ** 30:.1f} Gio de marge "
+                        f"pour un pic attendu de {besoin / 2 ** 30:.1f} Gio — reprise après "
+                        f"attente (essai {essais}/{REPRISES_MAX})")
+                    self._attendre_la_place(parent_id, etape, nom, i, n, tranches,
+                                            par_tranche=reel)
             livrable = _principal(fini.artifacts)
             if livrable is None or livrable.kind != "video":
                 raise MediaAssemblyError(
@@ -975,6 +1018,11 @@ def budget_de_tranche(container) -> tuple[int, str]:
 # `segment_count`). Au-delà, c'est la demande qui est hors de portée du poste,
 # et il vaut mieux le dire que de tenter soixante-cinq runs.
 TRANCHES_MAX = 64
+
+# Combien de fois une tranche qui a échoué FAUTE DE PLACE est reprise, après
+# avoir attendu que la place revienne. Trois : au-delà, ce n'est plus le poste
+# qui change, c'est quelque chose qui ne passera pas.
+REPRISES_MAX = 3
 
 
 def _images_rendues(livrable: Artifact) -> int:

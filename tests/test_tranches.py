@@ -28,6 +28,7 @@ from comfyui_bridge.adapter.measure import measure  # noqa: E402
 from comfyui_bridge.adapter.media import artifact_url, media_kind  # noqa: E402
 from comfyui_bridge.api.main import create_app  # noqa: E402
 from comfyui_bridge.config import Settings  # noqa: E402
+from comfyui_bridge.core.errors import BackendExecutionError  # noqa: E402
 from comfyui_bridge.core.plan import Artifact, BackendResult  # noqa: E402
 from test_chaines_api import SANS_FFMPEG, BackendQuiLivre, _job  # noqa: E402
 
@@ -711,6 +712,59 @@ def test_les_tranches_suivantes_attendent_sur_les_images_vraiment_rendues(banc, 
     assert job["status"] == "succeeded", job.get("problem")
     assert _etape(job, "rendu")["tranches"] == 3
     assert not [l for l in job["logs"] if "attente" in str(l) or "n'a pas trouvé sa place" in str(l)]
+
+
+@SANS_FFMPEG
+def test_une_tranche_qui_echoue_faute_de_place_est_reprise_apres_attente(banc, monkeypatch):
+    """Le poste peut changer ENTRE la garde et l'allocation (mesuré : un modèle
+    de 21 Go chargé pendant le rendu). Une tranche qui échoue alors que la marge
+    ne tient pas le pic attendu est reprise après attente, en le disant."""
+    from comfyui_bridge.adapter import chaines as module
+    atelier = banc(BUDGET_POUR_TROIS, attente_place_s=60, attente_place_pas_s=0)
+    # Le découpage et la garde de la tranche 1 voient la place ; la tranche 2
+    # échoue ; à l'examen, le poste est plein ; la garde de reprise le voit
+    # plein une fois, puis la place revient.
+    reponses = [LARGE, LARGE, LARGE, PLEIN, PLEIN, LARGE]
+    monkeypatch.setattr(module.materiel, "mesure_du_poste",
+                        lambda: reponses.pop(0) if len(reponses) > 1 else reponses[0])
+    appels = []
+
+    def casse_la_deuxieme(plan):
+        appels.append(plan.overrides.get(f"{NOEUD}.segment_index"))
+        if len(appels) == 2:
+            raise BackendExecutionError("Unable to allocate 8.62 GiB")
+    atelier.faux.avant = casse_la_deuxieme
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-tranchee",
+                                                         "secondes": 2, "label": "reprise"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    assert _etape(job, "rendu")["tranches"] == 3
+    assert appels == [0, 1, 1, 2]                     # la tranche 2 a été reprise une fois
+    journal = " | ".join(str(l) for l in job["logs"])
+    assert "la tranche 2/3 a échoué (" in journal and "Unable to allocate" in journal
+    assert "reprise après attente (essai 1/3)" in journal
+    assert "la place est revenue pour la tranche 2/3" in journal
+
+
+@SANS_FFMPEG
+def test_une_tranche_qui_echoue_avec_de_la_place_n_est_pas_reprise(banc, monkeypatch):
+    """Un échec avec de la place est celui du nœud : il se dit tel quel, sans
+    reprise — reprendre aurait fait tourner trois fois une erreur sûre."""
+    from comfyui_bridge.adapter import chaines as module
+    atelier = banc(BUDGET_POUR_TROIS, attente_place_s=60, attente_place_pas_s=0)
+    monkeypatch.setattr(module.materiel, "mesure_du_poste", lambda: LARGE)
+    appels = []
+
+    def casse_la_deuxieme(plan):
+        appels.append(plan.overrides.get(f"{NOEUD}.segment_index"))
+        if len(appels) == 2:
+            raise BackendExecutionError("le nœud a refusé")
+    atelier.faux.avant = casse_la_deuxieme
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-tranchee",
+                                                         "secondes": 2, "label": "noeud"}))
+    assert job["status"] == "failed"
+    assert "le nœud a refusé" in job["problem"]["detail"]
+    assert appels == [0, 1]
+    assert not [l for l in job["logs"] if "reprise" in str(l)]
 
 
 # -- ce qu'un nœud déclare, et la fusion des récits ----------------------------
