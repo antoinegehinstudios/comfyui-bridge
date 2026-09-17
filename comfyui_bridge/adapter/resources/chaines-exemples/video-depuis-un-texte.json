@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "chaine": "video-depuis-un-texte",
+  "resume": "UNE VIDÉO ÉCRITE DE RIEN : une consigne, une durée, un format — et un seul plan continu. Le rendu part de la seule consigne, puis se prolonge de bloc en bloc, chacun repris sur la dernière image du précédent, jusqu'à couvrir la durée demandée ; les blocs sont recollés sans ré-encoder, puis la livraison porte le tout à la cadence et à la taille demandées (interpolation d'images FILM pour la cadence, lanczos pour la taille, en flux au-delà de 1080 de petit côté). La durée livrée est ARRONDIE AU BLOC SUPÉRIEUR (au plus ~5 s de plus, jamais moins) et une cadence hors de la grille 24/30/40/60 est ramenée à la cadence exacte suivante : ce sont les deux choses que ce flux ne peut pas promettre à l'unité près, et il les dit plutôt que de les maquiller. Le constat final écrit ce qui a été livré face à ce qui a été demandé — il ne refuse rien : l'utilisateur juge.",
+  "expose": {
+    "prompt": {
+      "type": "STRING",
+      "defaut": "",
+      "requis": true,
+      "libelle": "Ce que la vidéo montre",
+      "categorie": "plan",
+      "aide": "La scène, décrite comme à un chef opérateur : le sujet, le décor, la lumière, ce qui bouge et comment la caméra l'accompagne. Cette seule consigne tient tout le plan, du début à la fin."
+    },
+    "duration_s": {
+      "type": "FLOAT",
+      "defaut": 5,
+      "min": 5,
+      "max": 60,
+      "step": 1,
+      "unite": "s",
+      "libelle": "Durée (au moins)",
+      "categorie": "plan",
+      "aide": "La vidéo se fabrique par blocs de 5,2 s enchaînés : elle va jusqu'au bloc qui couvre la durée demandée, donc au plus 5 s de plus, jamais moins. Chaque bloc de plus est plusieurs minutes de calcul de plus (mesuré : 8 min pour deux blocs en 480p à 24 i/s, 17 min en 720p à 30 i/s) et de la mémoire (47 Go de mémoire de travail du moteur pour ces deux blocs à 30 i/s) — au-delà d'une dizaine de secondes à 30 i/s, la mémoire reste à mesurer."
+    },
+    "fps": {
+      "type": "INT",
+      "defaut": 30,
+      "min": 24,
+      "max": 60,
+      "step": 1,
+      "unite": "i/s",
+      "libelle": "Images par seconde",
+      "categorie": "format",
+      "aide": "Le modèle rend 24 images par seconde ; au-delà, chaque image de plus est interpolée entre deux images natives (FILM), exactement sur la grille 120 : 24, 30, 40 et 60 sont exacts et sont les valeurs à préférer. Une autre valeur (25, 50…) est rendue à la cadence exacte suivante puis ramenée au recollage en retirant des images : à éviter."
+    },
+    "width": {
+      "type": "INT",
+      "defaut": 720,
+      "min": 256,
+      "max": 3840,
+      "unite": "px",
+      "libelle": "Largeur",
+      "categorie": "format",
+      "aide": "Le petit côté d'un portrait, le grand d'un paysage. Orientation et résolution le règlent ; il reste réglable ici. Le modèle rend à 0,6 mégapixel dans la proportion demandée (576×1024 pour un 16:9), puis chaque image est portée à cette taille (lanczos) — jusqu'à 1080 de petit côté dans le rendu, au-delà au recollage, en flux."
+    },
+    "height": {
+      "type": "INT",
+      "defaut": 1280,
+      "min": 256,
+      "max": 3840,
+      "unite": "px",
+      "libelle": "Hauteur",
+      "categorie": "format",
+      "aide": "L'autre côté. Même règle : rendu natif à 0,6 mégapixel dans cette proportion, puis mise à l'échelle. Toutes les résolutions du vocabulaire des formats sont livrables ; le temps de calcul, lui, ne dépend que de la durée."
+    },
+    "seed": {
+      "type": "INT",
+      "defaut": 71,
+      "libelle": "Graine",
+      "categorie": "avance",
+      "aide": "Le hasard du rendu. La même graine et la même consigne redonnent la même vidéo ; la changer donne une autre version du même plan."
+    }
+  },
+  "etapes": [
+    {
+      "id": "rendu",
+      "rendre": {
+        "workflow": "video-h3-texte",
+        "prompt": "$prompt",
+        "duration_s": "$duration_s",
+        "fps": "$fps",
+        "width": "$width",
+        "height": "$height",
+        "seed": "$seed"
+      }
+    },
+    {
+      "id": "livraison",
+      "recoller": {
+        "parts": [
+          "$rendu.livrable"
+        ],
+        "fps": "$fps",
+        "largeur": "$width",
+        "hauteur": "$height"
+      }
+    },
+    {
+      "id": "constat",
+      "constater": [
+        {
+          "id": "la_duree_demandee_est_couverte",
+          "valeur": "$livraison.mesure.duration_s",
+          "op": "gte",
+          "attendu": "$duration_s"
+        },
+        {
+          "id": "la_cadence_demandee_est_tenue",
+          "valeur": "$livraison.mesure.fps",
+          "op": "eq",
+          "attendu": "$fps"
+        },
+        {
+          "id": "la_largeur_demandee_est_tenue",
+          "valeur": "$livraison.mesure.width",
+          "op": "eq",
+          "attendu": "$width"
+        },
+        {
+          "id": "la_hauteur_demandee_est_tenue",
+          "valeur": "$livraison.mesure.height",
+          "op": "eq",
+          "attendu": "$height"
+        },
+        {
+          "id": "la_video_pese",
+          "valeur": "$livraison.mesure.bytes",
+          "op": "gte",
+          "attendu": 100000
+        }
+      ]
+    }
+  ],
+  "livrable": "$livraison.livrable",
+  "notes": {
+    "pas_de_pas_sur_la_taille": "« width » et « height » ne déclarent AUCUN « step », et c'est voulu : un lanceur en fait l'attribut « step » d'un champ nombre, et le navigateur refuse alors toute valeur hors de la grille — 854, le petit côté du 480p portrait du vocabulaire des formats, n'est ni un multiple de 16 ni de 32. Mesuré le 2026-09-17 : avec « step: 16 », le formulaire refusait sa PROPRE valeur par défaut et le bouton ne partait pas. La grille du modèle (multiples de 32) est tenue là où elle est vraie — dans le graphe, par deux nœuds de calcul — et l'écart est mesuré sur le fichier livré.",
+    "livraison_au_recollage": "L'étape « livraison » ré-encode une seule fois (libx264 crf 18) le fichier recollé par la passerelle : c'est là que la taille demandée est atteinte quand elle dépasse le plafond tenu dans le rendu (1080 de petit côté), par un agrandissement exact (1080×1920 vers 2160×3840), sans image en mémoire. Sa cadence est la cadence demandée : pour 24, 30, 40 et 60 le fichier rendu la porte déjà et rien n'est retiré ; pour une autre valeur des images sont retirées (dit dans l'aide du champ). La mesure d'une étape « rendre » ne porte pas la cadence du fichier (« $rendu.mesure.fps » n'existe pas — mesuré le 2026-09-17 : l'étape échouait) ; l'exposer serait une ligne de code agnostique dans l'adaptateur, à faire."
+  }
+}

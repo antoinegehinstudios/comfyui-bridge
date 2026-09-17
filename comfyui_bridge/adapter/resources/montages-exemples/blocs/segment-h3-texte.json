@@ -1,0 +1,289 @@
+{
+ "bloc": "segment-h3-texte",
+ "fragment": "segment",
+ "_lisez_moi": [
+  "UN maillon de chaîne MiniMax H3 qui LIVRE à la cadence et à la taille demandées.",
+  "",
+  "Le raccord est celui de « segment-h3 » (même ancre : la dernière image du bloc",
+  "précédent ; même première image jetée ; même morceau nommé par son rang). Ce",
+  "maillon ajoute la LIVRAISON, parce que le modèle ne sait rendre qu'à 24 images",
+  "par seconde et à une taille bornée par la carte, alors que la demande dit une",
+  "cadence et une résolution du vocabulaire des formats :",
+  "  - FrameInterpolate (FILM) reçoit un lot de 124 images dont la PREMIÈRE est la",
+  "    vraie dernière image du bloc précédent (ImageBatch : $precedent.derniere_image",
+  "    puis les 123 images nouvelles), pas la re-génération de l'ancre par le modèle :",
+  "    la couture est ainsi interpolée comme n'importe quelle autre paire (mesuré le",
+  "    2026-09-17 : sans cela, la paire de couture à 30 i/s était le minimum de",
+  "    ressemblance de tout le plan, 0,890 pour une bande à 0,942). FILM multiplie le",
+  "    lot par « multiplicateur »",
+  "    (5 : une grille à 120 images par seconde), puis VHS_SelectEveryNthImage en",
+  "    garde une sur « selection » (4 → 30 i/s, 2 → 60 i/s). La phase de cette",
+  "    sélection se calcule sur la GRILLE GLOBALE de la vidéo, pas sur le bloc :",
+  "    un bloc apporte 123 images natives, soit 615 images fines, et 615 n'est pas",
+  "    un multiple de 4 — sans ce calcul, chaque couture sauterait une image.",
+  "    « skip_first_images » vaut donc, pour le bloc de rang k = tour + 1, le plus",
+  "    petit f ≥ 1 tel que (615·k + f) soit multiple de « selection » ; f ≥ 1 jette",
+  "    l'image 0, re-génération de l'ancre déjà livrée, mais garde les images fines",
+  "    entre l'ancre et la première image nouvelle : elles sont dans le temps de",
+  "    ce bloc.",
+  "  - ComfySwitchNode (paresseux) ne fait tourner l'interpolation que si « lisser »",
+  "    est vrai (cadence demandée autre que 24) ; à 24 i/s, les 123 images natives",
+  "    partent telles quelles et le lisseur n'est jamais exécuté.",
+  "  - ImageScale (lanczos, recadrage centré) porte chaque image à la taille de",
+  "    livraison que le fragment commun a calculée (la demande, plafonnée : au-delà",
+  "    du plafond, c'est la chaîne qui finit l'agrandissement au recollage, en",
+  "    flux, sans tenir les images en mémoire).",
+  "Le bloc suivant reçoit toujours la dernière image NATIVE (avant lissage et",
+  "mise à l'échelle) : le modèle reprend sur ce qu'il a lui-même produit.",
+  "",
+  "MÉMOIRE (mesuré le 2026-09-18 : deux blocs rendus à 576×1024, livrés en 720×1280",
+  "à 30 i/s) : le processus du moteur a atteint 47 Go de mémoire de travail et",
+  "61 Go engagés, rendus à la fin du run. Le moteur n'exécute pas un bloc après",
+  "l'autre : il a échantillonné le bloc 2 avant d'interpoler le bloc 1 et n'a",
+  "écrit les morceaux qu'à la fin — les images décodées, interpolées et mises à",
+  "l'échelle de plusieurs blocs coexistent. La mémoire n'est donc bornée par bloc",
+  "que si l'ordre d'exécution le permet ; au-delà de deux blocs à 30 i/s elle",
+  "reste à mesurer, et forcer l'ordre (chaque bloc dépendant de l'écriture du",
+  "précédent) est le chantier suivant."
+ ],
+ "besoin": {
+  "modele": "MODEL",
+  "texte": "CLIP",
+  "vae": "VAE",
+  "cadrage": "INT",
+  "bruit": "NOISE",
+  "echantillonneur": "SAMPLER",
+  "sigmas": "SIGMAS",
+  "prompt": "STRING",
+  "longueur": "INT",
+  "images_utiles": "INT",
+  "lisseur": "INTERP_MODEL",
+  "multiplicateur": "INT",
+  "lisser": "BOOLEAN",
+  "selection": "INT",
+  "cadence_sortie": "FLOAT",
+  "largeur_livraison": "INT",
+  "hauteur_livraison": "INT"
+ },
+ "attend": {
+  "derniere_image": "IMAGE"
+ },
+ "sorties": {
+  "images": "5",
+  "derniere_image": "6"
+ },
+ "contenu": {
+  "3": {
+   "class_type": "MiniMaxH3ImageToVideo",
+   "inputs": {
+    "clip": [
+     "$commun.texte",
+     0
+    ],
+    "vae": [
+     "$commun.vae",
+     0
+    ],
+    "prompt": [
+     "$commun.prompt",
+     0
+    ],
+    "width": [
+     "$commun.cadrage",
+     0
+    ],
+    "height": [
+     "$commun.cadrage",
+     1
+    ],
+    "length": [
+     "$commun.longueur",
+     0
+    ],
+    "first_frame": [
+     "$precedent.derniere_image",
+     0
+    ]
+   }
+  },
+  "4": {
+   "class_type": "BasicGuider",
+   "inputs": {
+    "model": [
+     "$commun.modele",
+     0
+    ],
+    "conditioning": [
+     "3",
+     0
+    ]
+   }
+  },
+  "7": {
+   "class_type": "SamplerCustomAdvanced",
+   "inputs": {
+    "noise": [
+     "$commun.bruit",
+     0
+    ],
+    "guider": [
+     "4",
+     0
+    ],
+    "sampler": [
+     "$commun.echantillonneur",
+     0
+    ],
+    "sigmas": [
+     "$commun.sigmas",
+     0
+    ],
+    "latent_image": [
+     "3",
+     1
+    ]
+   }
+  },
+  "5": {
+   "class_type": "VAEDecode",
+   "inputs": {
+    "samples": [
+     "7",
+     0
+    ],
+    "vae": [
+     "$commun.vae",
+     0
+    ]
+   }
+  },
+  "6": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": -1,
+    "num_frames": 1,
+    "images": [
+     "5",
+     0
+    ]
+   }
+  },
+  "9": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": 1,
+    "num_frames": [
+     "$commun.images_utiles",
+     0
+    ],
+    "images": [
+     "5",
+     0
+    ]
+   }
+  },
+  "20": {
+   "class_type": "FrameInterpolate",
+   "inputs": {
+    "interp_model": [
+     "$commun.lisseur",
+     0
+    ],
+    "images": [
+     "24",
+     0
+    ],
+    "multiplier": [
+     "$commun.multiplicateur",
+     0
+    ]
+   }
+  },
+  "21": {
+   "class_type": "VHS_SelectEveryNthImage",
+   "inputs": {
+    "images": [
+     "20",
+     0
+    ],
+    "select_every_nth": [
+     "$commun.selection",
+     0
+    ],
+    "skip_first_images": {
+     "$calc": "((cadence * multiplicateur // fps - 1 - (images_nouvelles_par_bloc * multiplicateur * (tour + 1)) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1"
+    }
+   }
+  },
+  "22": {
+   "class_type": "ComfySwitchNode",
+   "inputs": {
+    "switch": [
+     "$commun.lisser",
+     0
+    ],
+    "on_true": [
+     "21",
+     0
+    ],
+    "on_false": [
+     "9",
+     0
+    ]
+   }
+  },
+  "23": {
+   "class_type": "ImageScale",
+   "inputs": {
+    "image": [
+     "22",
+     0
+    ],
+    "upscale_method": "lanczos",
+    "width": [
+     "$commun.largeur_livraison",
+     0
+    ],
+    "height": [
+     "$commun.hauteur_livraison",
+     0
+    ],
+    "crop": "center"
+   }
+  },
+  "8": {
+   "class_type": "VHS_VideoCombine",
+   "inputs": {
+    "images": [
+     "23",
+     0
+    ],
+    "frame_rate": [
+     "$commun.cadence_sortie",
+     0
+    ],
+    "loop_count": 0,
+    "filename_prefix": {
+     "$texte": "$const.prefixe_morceaux",
+     "$rang": "tour + 1"
+    },
+    "format": "video/h264-mp4",
+    "pingpong": false,
+    "save_output": true
+   }
+  },
+  "24": {
+   "class_type": "ImageBatch",
+   "inputs": {
+    "image1": [
+     "$precedent.derniere_image",
+     0
+    ],
+    "image2": [
+     "9",
+     0
+    ]
+   }
+  }
+ }
+}

@@ -206,6 +206,55 @@
    "aides": {
     "prompt": "décor | temps un | temps deux … — la première part vaut pour toute la vidéo, les suivantes se répartissent sur les temps du récit"
    }
+  },
+  "video-h3-texte": {
+   "kind": "video",
+   "workflow": "E:\\Projets Cortex\\Banc socles\\comfyui-bridge\\_data\\workflows\\video-h3-texte.json",
+   "description": "MiniMax H3 SANS image de départ : le premier bloc naît de la seule consigne écrite, les suivants reprennent la dernière image du précédent, chaque bloc est porté à la cadence (FILM) et à la taille (lanczos) demandées avant d'être écrit, et la passerelle recolle les morceaux en copie de flux. Entrée TECHNIQUE, sans catégorie : c'est la chaîne « video-depuis-un-texte » qui la publie, avec ses bornes et ses rubriques.",
+   "defaults": {
+    "duration_s": 5,
+    "fps": 30,
+    "width": 720,
+    "height": 1280
+   },
+   "bindings": {
+    "prompt": {
+     "node": "$commun.prompt",
+     "input": "value"
+    },
+    "seed": {
+     "node": "$commun.bruit",
+     "input": "noise_seed"
+    },
+    "width": {
+     "node": "$commun.largeur",
+     "input": "value"
+    },
+    "height": {
+     "node": "$commun.hauteur",
+     "input": "value"
+    },
+    "fps": {
+     "node": "$commun.cadence_demandee",
+     "input": "value"
+    }
+   }
+  },
+  "video-depuis-un-texte": {
+   "kind": "video",
+   "chaine": "E:\\Projets Cortex\\Banc socles\\comfyui-bridge\\_data\\chaines\\video-depuis-un-texte.json",
+   "titre": "Écrire une vidéo",
+   "description": "Rien qu'une consigne écrite, une durée et un format : un seul plan continu se fabrique bloc après bloc, et n'est livré qu'une fois monté, à la cadence et à la résolution demandées. La durée est arrondie au bloc supérieur — au plus cinq secondes de plus que demandé.",
+   "categorie": "texte-vers-video",
+   "ordre": 1
   }
- }
+ },
+ "_lire_moi_categories_de_champs": "La RUBRIQUE que « video-depuis-un-texte » ajoute au vocabulaire déclaré sur l'hôte (clé « categories_de_champs » du fichier de réconciliation) : ses deux premiers champs s'y rangent, les autres emploient « format » et « avance », déjà là. Un formulaire range dans l'ordre de ce vocabulaire, et une rubrique sans champ ne s'affiche pas.",
+ "categories_de_champs": [
+  {
+   "valeur": "plan",
+   "titre": "Le plan",
+   "resume": "Ce que la vidéo montre, et combien de temps elle dure."
+  }
+ ]
 }
