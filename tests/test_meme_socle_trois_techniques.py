@@ -22,11 +22,13 @@ même plan) est tests/test_meme_socle_trois_techniques.py de comfyui-ink-reveal.
 """
 
 import contextlib
+import gc
 import json
 import pathlib
 import shutil
 import subprocess
 import tempfile
+import time
 
 import pytest
 
@@ -352,6 +354,21 @@ def _recits(techniques: dict) -> dict:
     return recits
 
 
+def _demonter(tmp: pathlib.Path) -> None:
+    """Le poste d'essai disparaît avec la session. Sous Windows, la mémoire
+    Hermes (sqlite) reste ouverte tant que sa connexion n'est pas ramassée :
+    on ramasse, puis on réessaie — un dossier d'essai qui survit à son test
+    est un socle d'essai de plus sur le poste."""
+    for _ in range(5):
+        gc.collect()
+        try:
+            shutil.rmtree(tmp)
+            return
+        except OSError:
+            time.sleep(0.5)
+    shutil.rmtree(tmp, ignore_errors=True)
+
+
 @pytest.fixture(scope="module")
 def atelier():
     """Une passerelle d'essai qui porte la chaîne de référence, les techniques
@@ -360,6 +377,10 @@ def atelier():
     patches = pytest.MonkeyPatch()
     pile.callback(patches.undo)
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="comfybridge_meme_socle_"))
+    # Un environnement d'essai se démonte tout seul : rien de ce poste d'essai
+    # (catalogue, techniques, vidéos de bruit, mémoire Hermes) ne reste après
+    # la session.
+    pile.callback(_demonter, tmp)
     shutil.copy(EXEMPLES / "video-revelation.json", tmp / "video-revelation.json")
     (tmp / "techniques").mkdir()
     for fichier in TECHNIQUES.glob("*.json"):
