@@ -1125,6 +1125,13 @@ seulement : sous elle, « qui commande » n'existe pas.
   accroche nichée dans le temps suivant vingt-cinq minutes avant
   `l_accroche_est_vue_a_2_5_s` (la saignée de l'encre s'arrête à la porte du
   temps suivant dès l'ouverture).
+* `constater` porte les mêmes contrôles que `verifier`, dans les trois formes,
+  et n'arrête rien : non tenus, ils sont ÉCRITS au récit de l'étape (`constat`,
+  `non_tenus`, les lignes) et au journal, et la chaîne livre. Antoine,
+  2026-09-17 : « il ne faut plus que maestro annonce des erreurs quand la
+  vidéo est très bien, c'est l'utilisateur qui juge ». Dans « Révéler une
+  image », `plan_tenu` (la peinture mesurée) est un constat ; `plan_valide`
+  (le plan, avant de peindre) et `controle` (le livrable) restent des refus.
 * Les **renvois** d'une technique se résolvent avec les champs de la chaîne, les
   siens et les résultats des étapes précédentes, comme dans une chaîne ; un rôle
   absent, une liste de contrôles absente ou un renvoi qui ne désigne rien sont

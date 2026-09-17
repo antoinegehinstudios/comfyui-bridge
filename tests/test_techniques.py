@@ -320,6 +320,59 @@ def test_le_plan_est_refuse_sur_ce_que_la_technique_exige_avant_la_suite():
             ("la_peinture_est_la", True), ("cinq_temps_au_moins", False)]
 
 
+def test_un_constat_ecrit_ses_mesures_et_n_arrete_rien():
+    """Antoine, 2026-09-17 au soir : « il ne faut plus que maestro annonce des
+    erreurs quand la vidéo est très bien, c'est l'utilisateur qui juge ». Une
+    étape « constater » porte les mêmes contrôles qu'une étape « verifier »,
+    dans les trois formes ; non tenus, ils sont ÉCRITS (récit et journal) et la
+    chaîne continue jusqu'au livrable. Ce qui se juge avant de peindre reste un
+    refus : c'est le genre qui le dit, pas le contrôle."""
+    chaine = noyau.lire({**CHAINE_A_TECHNIQUES, "etapes": [
+        CHAINE_A_TECHNIQUES["etapes"][0],
+        {"id": "tenue", "constater": {"technique": "$technique", "controles": "tenue"}},
+    ]})
+    assert chaine.etapes[1].genre == "constater"
+    assert chaine.etapes[1].controles_nommes == "tenue"
+    noyau.verifier_techniques(chaine, {"exigeante": noyau.lire_technique(TECHNIQUE_EXIGEANTE)})
+    with pytest.raises(WorkflowMappingError, match="constater"):
+        noyau.lire({**CHAINE_A_TECHNIQUES, "etapes": [CHAINE_A_TECHNIQUES["etapes"][0],
+                                                      {"id": "tenue", "constater": []}]})
+
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="comfybridge_techniques_constat_"))
+    _ecrire(tmp, techniques=(TECHNIQUE_TRAIT, TECHNIQUE_EXIGEANTE))
+    (tmp / "chaine-a-techniques.json").write_text(json.dumps({
+        **CHAINE_A_TECHNIQUES, "etapes": [
+            CHAINE_A_TECHNIQUES["etapes"][0],
+            {"id": "tenue", "constater": {
+                "controles": [{"id": "la_peinture_est_la", "valeur": "$peinture.livrable",
+                               "op": "exists"}],
+                "technique": "$technique", "controles_de_la_technique": "tenue"}},
+        ]}, ensure_ascii=False), encoding="utf-8")
+    settings = Settings(comfy_backend="cli", dry_run=True,
+                        comfyui_base_url="http://127.0.0.1:9", comfyui_request_timeout_s=1,
+                        hermes_db=tmp / "hermes.sqlite3", comfy_output_dir=tmp / "out",
+                        hermes_mode="local", workflows_dir=tmp / "workflows",
+                        tranche_octets=0)
+    app = create_app(settings)
+    app.state.container.orchestrator._backend = BackendQuiLivre(settings.comfy_output_dir)
+    with TestClient(app) as client:
+        job = _job(client, client.post("/v1/render", json={"workflow": "chaine-a-techniques",
+                                                           "technique": "exigeante"}))
+        assert job["status"] == "succeeded", job.get("problem")      # la chaîne a livré
+        tenue = [e for e in job["etapes"] if e["id"] == "tenue"][0]
+        assert tenue["statut"] == "done"
+        assert tenue["resultat"]["constat"] is True
+        assert tenue["resultat"]["non_tenus"] == ["cinq_temps_au_moins"]
+        assert [(c["id"], c["ok"]) for c in tenue["resultat"]["controles"]] == [
+            ("la_peinture_est_la", True), ("cinq_temps_au_moins", False)]
+        journal = "\n".join(job["logs"])
+        assert "étape tenue : constaté, non tenu — cinq_temps_au_moins" in journal
+        # …et le même contrôle, EXIGÉ, arrête toujours (le genre décide).
+        refus = _job(client, client.post("/v1/render", json={"workflow": "chaine-a-techniques",
+                                                             "technique": "trait"}))
+        assert refus["status"] == "succeeded"                         # le trait tient sa liste
+
+
 # -- les valeurs ---------------------------------------------------------------
 
 

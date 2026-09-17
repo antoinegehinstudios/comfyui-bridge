@@ -34,8 +34,15 @@ GENRES: tuple[str, ...] = (
     "extraire_image",    # une image d'une vidéo
     "recoller",          # joindre des parts en un livrable
     "mesurer_raccords",  # la ressemblance de part en part, aux frontières
-    "verifier",          # des contrôles sur ce qui a été mesuré
+    "verifier",          # des contrôles sur ce qui a été mesuré : non tenus, ils ARRÊTENT
+    "constater",         # les mêmes contrôles, CONSTATÉS : écrits au récit, jamais bloquants
+                         # (Antoine, 2026-09-17 : « il ne faut plus que maestro annonce des
+                         # erreurs quand la vidéo est très bien, c'est l'utilisateur qui juge »)
 )
+
+# Les deux genres qui portent des contrôles : la même écriture, deux suites —
+# « verifier » arrête, « constater » écrit et continue.
+CONTROLENT: tuple[str, ...] = ("verifier", "constater")
 
 # Les clés qu'un genre accepte. Un paramètre inconnu est une faute de la
 # définition, pas une option ignorée : le taire laissait une étape tourner sans
@@ -158,7 +165,7 @@ class Etape:
         """Le NOM de la liste de contrôles à prendre chez la technique : ce que
         « controles » porte quand l'étape n'écrit rien elle-même, ou
         « controles_de_la_technique » quand elle joint sa propre liste."""
-        if self.genre == "verifier" and isinstance(self.params, dict):
+        if self.genre in CONTROLENT and isinstance(self.params, dict):
             valeur = self.params.get("controles_de_la_technique")
             if valeur is None and not isinstance(self.params.get("controles"), list):
                 valeur = self.params.get("controles")
@@ -170,7 +177,7 @@ class Etape:
         """Les contrôles que l'étape écrit ELLE-MÊME : la liste nue, ou la
         liste sous « controles » de la forme mixte — vide quand tout est
         emprunté à la technique."""
-        if self.genre != "verifier":
+        if self.genre not in CONTROLENT:
             return ()
         if isinstance(self.params, list):
             return tuple(self.params)
@@ -357,7 +364,8 @@ def _controles(params: Any, contexte: str, ident: str, vide_permise: bool = Fals
     return tuple(params)
 
 
-def _controles_de_technique(params: dict[str, Any], ident: str, chaine: str) -> None:
+def _controles_de_technique(params: dict[str, Any], ident: str, chaine: str,
+                            genre: str = "verifier") -> None:
     """« verifier » qui emprunte sa liste à la technique choisie — seule
     (« controles » NOMME la liste), ou jointe à la sienne (« controles » est
     la liste de l'étape, « controles_de_la_technique » nomme celle de la
@@ -367,29 +375,29 @@ def _controles_de_technique(params: dict[str, Any], ident: str, chaine: str) -> 
     inconnues = sorted(set(params) - {"technique", "controles", "controles_de_la_technique"})
     if inconnues:
         raise WorkflowMappingError(
-            f"{contexte} : « verifier » de {ident!r} — clé(s) inconnue(s) : "
+            f"{contexte} : « {genre} » de {ident!r} — clé(s) inconnue(s) : "
             f"{', '.join(inconnues)} (attendu : « technique », « controles » et, "
             f"quand « controles » est une liste, « controles_de_la_technique »)")
     if not _renvoi(params.get("technique")):
         raise WorkflowMappingError(
-            f"{contexte} : « verifier » de {ident!r} — « technique » attend un renvoi "
+            f"{contexte} : « {genre} » de {ident!r} — « technique » attend un renvoi "
             f"(« $technique »), pas {params.get('technique')!r}")
     controles = params.get("controles")
     if isinstance(controles, list):
         _controles(controles, contexte, ident)
         if not str(params.get("controles_de_la_technique") or "").strip():
             raise WorkflowMappingError(
-                f"{contexte} : « verifier » de {ident!r} — avec sa propre liste sous "
+                f"{contexte} : « {genre} » de {ident!r} — avec sa propre liste sous "
                 f"« controles », « controles_de_la_technique » doit nommer celle à "
                 f"prendre chez la technique")
         return
     if "controles_de_la_technique" in params:
         raise WorkflowMappingError(
-            f"{contexte} : « verifier » de {ident!r} — « controles_de_la_technique » ne "
+            f"{contexte} : « {genre} » de {ident!r} — « controles_de_la_technique » ne "
             f"va qu'avec une liste de contrôles sous « controles »")
     if not str(controles or "").strip():
         raise WorkflowMappingError(
-            f"{contexte} : « verifier » de {ident!r} — « controles » doit nommer la "
+            f"{contexte} : « {genre} » de {ident!r} — « controles » doit nommer la "
             f"liste à prendre chez la technique")
 
 
@@ -457,7 +465,7 @@ def _etape(brut: Any, rang: int, chaine: str) -> Etape:
         raise WorkflowMappingError(
             f"chaîne {chaine!r} : étape {ident!r} — « sinon » décrit ce que l'étape rend "
             f"quand elle est sautée : un objet, pas {sinon!r}")
-    if genre == "verifier":
+    if genre in CONTROLENT:
         # TROIS FORMES : la liste écrite ici ; le NOM d'une liste que la
         # technique choisie porte (sans quoi une chaîne qui veut juger deux
         # peintures différentes devait se dédoubler pour porter les deux listes
@@ -465,12 +473,12 @@ def _etape(brut: Any, rang: int, chaine: str) -> Etape:
         # chez la technique (le plan se juge avant de peindre aussi sur ce que
         # la technique exige de lui — 2026-09-17).
         if isinstance(params, dict):
-            _controles_de_technique(params, ident, chaine)
+            _controles_de_technique(params, ident, chaine, genre)
             return Etape(id=ident, genre=genre, params=params, quand=quand,
                  sinon=dict(sinon))
         if not isinstance(params, list) or not params:
             raise WorkflowMappingError(
-                f"chaîne {chaine!r} : « verifier » de {ident!r} attend une liste de contrôles, "
+                f"chaîne {chaine!r} : « {genre} » de {ident!r} attend une liste de contrôles, "
                 f"{{\"technique\": \"$…\", \"controles\": \"<nom>\"}}, ou {{\"controles\": [...], "
                 f"\"technique\": \"$…\", \"controles_de_la_technique\": \"<nom>\"}}")
         _controles(params, f"chaîne {chaine!r}", ident)

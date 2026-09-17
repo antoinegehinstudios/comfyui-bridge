@@ -200,6 +200,10 @@
         "oui": {
           "libelle": "Oui",
           "resume": "l'encre inverse la lumière"
+        },
+        "selon-l-oeuvre": {
+          "libelle": "Selon l'œuvre",
+          "resume": "L'encre est inversée si l'œuvre est majoritairement sombre (médiane de luminance sous 0,35) : une scène de nuit garde une construction lisible avant la couleur."
         }
       }
     },
@@ -464,5 +468,8 @@
       "repliee": true
     }
   ],
-  "_lire_moi_categories_de_champs": "« categories_de_champs » : le vocabulaire, déclaré UNE fois, des catégories qui rangent les champs exposés — une liste ordonnée de {valeur, titre, resume}. Chaque champ d'une chaîne ou d'une technique nomme la sienne (« categorie ») et porte son « aide » ; /io les publie tels quels et GET /v1/workflows publie le vocabulaire : un lanceur regroupe dans cet ordre sans rien connaître des champs. Antoine, 2026-09-17 : « chacun porte une réconciliation concrète, standardisée par catégorie »."
+  "_lire_moi_categories_de_champs": "« categories_de_champs » : le vocabulaire, déclaré UNE fois, des catégories qui rangent les champs exposés — une liste ordonnée de {valeur, titre, resume}. Chaque champ d'une chaîne ou d'une technique nomme la sienne (« categorie ») et porte son « aide » ; /io les publie tels quels et GET /v1/workflows publie le vocabulaire : un lanceur regroupe dans cet ordre sans rien connaître des champs. Antoine, 2026-09-17 : « chacun porte une réconciliation concrète, standardisée par catégorie ».",
+  "notes": {
+    "negatif_selon_l_oeuvre": "2026-09-17, soir : « selon-l-oeuvre » revient au menu. Retiré le matin comme option inemployée, il est le mode du nœud pour une œuvre sombre (médiane de luminance sous 0,35 : l'encre est inversée) — un plan de jeu vidéo nocturne peint en positif (négatif « non », le défaut du 15, juste pour la Nuit étoilée) donne une construction sans lecture jusqu'à la couleur (Antoine, Bloodborne-chasseur). Le défaut reste « non »."
+  }
 }

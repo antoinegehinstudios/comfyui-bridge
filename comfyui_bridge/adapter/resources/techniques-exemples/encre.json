@@ -34,11 +34,12 @@
       "defaut": "non",
       "options": [
         "non",
-        "oui"
+        "oui",
+        "selon-l-oeuvre"
       ],
       "libelle": "Négatif",
       "categorie": "matiere",
-      "aide": "« Non » (le défaut) : l'encre est ce qui est sombre dans l'œuvre — une nuit se peint en lavis noir autour d'une lune laissée en réserve. « Oui » : l'encre inverse la lumière, ce qui est clair s'encre."
+      "aide": "« Non » (le défaut) : l'encre est ce qui est sombre dans l'œuvre — une nuit se peint en lavis noir autour d'une lune laissée en réserve. « Oui » : l'encre inverse la lumière, ce qui est clair s'encre. « Selon l'œuvre » : inversée si l'œuvre est majoritairement sombre (médiane de luminance sous 0,35) — pour une scène de nuit, sans quoi la construction ne se lit qu'à la couleur."
     },
     "ambiance": {
       "type": "COMBO",
@@ -212,6 +213,7 @@
     "les_bords_la_conduite_et_l_appel": "2026-09-16 au soir : « bords » et « conduite » sont des réglages de la peinture, pas du plan — ils vivent ici. L'appel final est un rôle que l'encre tient avec son graphe d'écriture (le texte s'écrit à l'encre sur les dernières images de la conclusion). Et l'encre se dit « par_defaut » : c'est la technique qui s'ouvre quand l'appelant n'en nomme aucune, le plan ne la nomme pas.",
     "champs_standardises": "2026-09-17 : ses champs portent leur catégorie et leur aide ; « rendu », « bords » et « conduite » ne sont plus exposés (leurs options « d'avant » et « essai » faisaient des fantômes : le graphe porte en littéral ink-bleed, fondus, le plan, et le nœud garde ses défauts d'identité), « washi-sans-lampe » et l'ambiance « selon-le-fond » de même ; « negatif » n'offre plus que oui et non.",
     "le_plan_porte_des_traits": "2026-09-17 : l'encre exige du PLAN un quart de temps tracés au moins — « des traits et pas que des blocs » se décide sur les gestes que l'intention écrit, avant de peindre ; le contrôle du même nom sur la peinture reste, il juge ce que l'encre en a fait.",
-    "l_accroche_n_est_pas_dans_le_temps_suivant": "2026-09-17 (job 9b554fd9, Bloodborne) : une accroche « main de fer » nichée dans le temps suivant (« guerrier en armure », couverte à 1,0) a été peinte vingt-cinq minutes avant que « l_accroche_est_vue_a_2_5_s » (0,047 pour 0,1) et « l_ordre_d_arrivee_est_celui_du_plan » la refusent : la saignée de l'encre s'arrête à la porte du temps suivant dès l'ouverture (cinematic.py, « une tache n'engloutit pas celles qui doivent venir après elle »). L'encre exige donc du PLAN que le temps suivant ne recouvre pas plus de la moitié de l'accroche (« accroche_couverte_par_le_suivant », écrite par l'intention) — les neuf autres plans du jour valaient 0, celui-là 1 ; la moitié est un seuil posé entre ces deux valeurs, pas une mesure."
+    "l_accroche_n_est_pas_dans_le_temps_suivant": "2026-09-17 (job 9b554fd9, Bloodborne) : une accroche « main de fer » nichée dans le temps suivant (« guerrier en armure », couverte à 1,0) a été peinte vingt-cinq minutes avant que « l_accroche_est_vue_a_2_5_s » (0,047 pour 0,1) et « l_ordre_d_arrivee_est_celui_du_plan » la refusent : la saignée de l'encre s'arrête à la porte du temps suivant dès l'ouverture (cinematic.py, « une tache n'engloutit pas celles qui doivent venir après elle »). L'encre exige donc du PLAN que le temps suivant ne recouvre pas plus de la moitié de l'accroche (« accroche_couverte_par_le_suivant », écrite par l'intention) — les neuf autres plans du jour valaient 0, celui-là 1 ; la moitié est un seuil posé entre ces deux valeurs, pas une mesure.",
+    "negatif_selon_l_oeuvre": "2026-09-17, soir : « selon-l-oeuvre » revient au menu. Retiré le matin comme option inemployée, il est le mode du nœud pour une œuvre sombre (médiane de luminance sous 0,35 : l'encre est inversée) — un plan de jeu vidéo nocturne peint en positif (négatif « non », le défaut du 15, juste pour la Nuit étoilée) donne une construction sans lecture jusqu'à la couleur (Antoine, Bloodborne-chasseur). Le défaut reste « non »."
   }
 }

@@ -426,8 +426,9 @@ class RunnerDeChaines:
                         etapes: list[dict[str, Any]], rang: int,
                         chaine_nom: str = "") -> dict[str, Any]:
         technique = self._technique_de(etape, valeurs, resultats)
-        if etape.genre == "verifier":
-            return self._verifier(etape, valeurs, resultats, technique)
+        if etape.genre in noyau.CONTROLENT:
+            return self._verifier(etape, valeurs, resultats, technique,
+                                  exiger=(etape.genre == "verifier"), job_id=job_id)
         params = noyau.resoudre(etape.params, valeurs, resultats)
         if etape.genre == "rendre":
             if etape.role is not None:
@@ -511,7 +512,8 @@ class RunnerDeChaines:
         return sortis
 
     def _verifier(self, etape: noyau.Etape, valeurs: dict[str, Any],
-                  resultats: dict[str, Any], technique=None) -> dict[str, Any]:
+                  resultats: dict[str, Any], technique=None, exiger: bool = True,
+                  job_id: str = "") -> dict[str, Any]:
         # Les contrôles de la CHAÎNE, puis ceux que la TECHNIQUE choisie porte
         # sous le nom demandé : deux peintures ne se jugent pas sur les mêmes
         # grandeurs, et la chaîne n'a pas à porter les deux — mais le plan se
@@ -526,8 +528,16 @@ class RunnerDeChaines:
         if faux:
             dit = " ; ".join(f"{l['id']} : mesuré {l['mesure']!r}, attendu "
                              f"{l['op']} {l['attendu']!r}" for l in faux)
-            raise ChainControlFailedError(f"contrôle non tenu — {dit}", controles=lignes)
-        return {"controles": lignes}
+            if exiger:
+                raise ChainControlFailedError(f"contrôle non tenu — {dit}", controles=lignes)
+            # UN CONSTAT N'ARRÊTE RIEN. Antoine, 2026-09-17 : « il ne faut plus que
+            # maestro annonce des erreurs quand la vidéo est très bien, c'est
+            # l'utilisateur qui juge ». Les mesures restent écrites, au récit et
+            # au journal ; la chaîne livre, et le regard tranche.
+            if job_id:
+                self._c.store.append_log(job_id, f"étape {etape.id} : constaté, non tenu — {dit}")
+        return {"controles": lignes, "constat": not exiger,
+                "non_tenus": [l["id"] for l in faux]}
 
     def _rendre(self, parent_id: str, etape: noyau.Etape, params: dict[str, Any],
                 label: str, etapes: list[dict[str, Any]], rang: int,
@@ -1325,6 +1335,12 @@ def _resume(resultat: dict[str, Any]) -> dict[str, Any]:
     if "controles" in resultat:
         garde["controles"] = [{"id": l["id"], "ok": l["ok"], "mesure": l["mesure"],
                                "attendu": l["attendu"]} for l in resultat["controles"]]
+        # un CONSTAT dit qu'il en est un, et ce qu'il n'a pas tenu : c'est ce
+        # qu'un lanceur montre sans en faire une erreur (« c'est l'utilisateur
+        # qui juge », 2026-09-17)
+        for cle in ("constat", "non_tenus"):
+            if cle in resultat:
+                garde[cle] = resultat[cle]
     if isinstance(resultat.get("recit"), dict):
         # Du récit, la fiche ne garde que ce qui se lit d'un coup d'œil : les
         # valeurs simples de son premier niveau (un nom, une seconde, un
@@ -1345,5 +1361,8 @@ def _dire(resultat: dict[str, Any]) -> str:
     if "pire" in resultat:
         return f"pire raccord {resultat['pire']:.4f} sur {resultat['nombre']} frontière(s)"
     if "controles" in resultat:
+        if resultat.get("non_tenus"):
+            return (f"constaté : {len(resultat['non_tenus'])} non tenu(s) sur "
+                    f"{len(resultat['controles'])} — {', '.join(resultat['non_tenus'])}")
         return f"{len(resultat['controles'])} contrôle(s) tenus"
     return "fait"

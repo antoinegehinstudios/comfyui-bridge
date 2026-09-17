@@ -92,7 +92,9 @@ mention de brume ne doit pas être tenue par le workflow de la passerelle : cela
 veut dire qu'il porte une dépendance à la brume et devra se faire doublon pour
 faire autrement ») : ses étapes `deroulement`, `conclusion` et `appel` nomment
 un RÔLE et la technique qui le tient (`"role"` + `"technique": "$technique"`), et
-`plan_tenu` prend la liste de contrôles de cette technique ; `plan_valide` joint
+`plan_tenu` prend la liste de contrôles de cette technique — en CONSTAT depuis le
+17 au soir (genre `constater` : écrit, jamais bloquant ; « c'est l'utilisateur qui
+juge ») ; `plan_valide` joint
 aux dix contrôles du plan la liste `plan` de la technique (ce qu'elle exige du
 plan se juge AVANT de peindre — 2026-09-17, trente-deux minutes perdues sur un
 plan à un tracé sur six, vingt-cinq sur une accroche nichée dans le temps

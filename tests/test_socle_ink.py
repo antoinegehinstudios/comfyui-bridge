@@ -34,7 +34,12 @@ TECHNIQUES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "techniques-e
 
 # LE PLAN AGNOSTIQUE : les étapes et leurs genres, dans cet ordre.
 PLAN = [("analyse", "rendre"), ("culture", "rendre"), ("intention", "rendre"),
-        ("plan_valide", "verifier"), ("deroulement", "rendre"), ("plan_tenu", "verifier"),
+        ("plan_valide", "verifier"), ("deroulement", "rendre"),
+        # DÉCISION ÉCRITE, 2026-09-17 au soir (Antoine : « il ne faut plus que
+        # maestro annonce des erreurs quand la vidéo est très bien, c'est
+        # l'utilisateur qui juge ») : la peinture se CONSTATE, elle ne se refuse
+        # plus ; le plan, lui, se juge toujours avant de peindre.
+        ("plan_tenu", "constater"),
         ("raccord", "extraire_queue"), ("conclusion", "rendre"), ("appel", "rendre"),
         ("montage", "recoller"), ("controle", "verifier")]
 
@@ -80,7 +85,10 @@ OPTIONS_INK = {
     "fond": ["washi", "sepia", "gris-atelier"],
     "ambiance": ["lanterne", "chandelle", "atelier"],
     "encre": ["lavis", "trait-sec", "encre-dense"],
-    "negatif": ["non", "oui"],
+    # « selon-l-oeuvre » revenu le 17 au soir : retiré le matin comme inemployé,
+    # c'est le mode du nœud pour une œuvre sombre (une scène de nuit peinte en
+    # positif ne se lit qu'à la couleur — Antoine, Bloodborne). Le défaut reste « non ».
+    "negatif": ["non", "oui", "selon-l-oeuvre"],
 }
 # LE VOCABULAIRE DES CATÉGORIES DE CHAMPS, déclaré une fois (réconciliation),
 # dans cet ordre ; chaque champ exposé en nomme une et porte son aide.
