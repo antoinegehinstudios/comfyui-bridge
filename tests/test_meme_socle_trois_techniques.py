@@ -387,8 +387,14 @@ def atelier():
         shutil.copy(fichier, tmp / "techniques" / fichier.name)
     for nom, graphe in GRAPHES.items():
         (tmp / f"{nom}.json").write_text(json.dumps(graphe), encoding="utf-8")
+    # La structure porte ses temps : le plan ne liste que celles qui ont une
+    # accroche (« requiert » du champ), et une structure sans accroche, à côté,
+    # ne doit pas apparaître.
     (tmp / "narratifs.json").write_text(json.dumps({"styles": {
-        "reseau-social": {"libelle": "Réseau social"}}}, ensure_ascii=False), encoding="utf-8")
+        "reseau-social": {"libelle": "Réseau social",
+                          "temps": [{"nom": "hook"}, {"nom": "setup"}, {"nom": "corps"}]},
+        "continu": {"libelle": "Continu", "temps": [{"nom": "continu"}]}}},
+        ensure_ascii=False), encoding="utf-8")
     (tmp / "approches.json").write_text(json.dumps({"styles": {
         "peinture-calme": {"libelle": "Peinture calme"}}}, ensure_ascii=False), encoding="utf-8")
     (tmp / "reconciliation.local.json").write_text(
@@ -536,14 +542,15 @@ def test_le_plan_atteint_chaque_noeud_de_role_tel_quel_et_le_reste_est_a_la_tech
         propres_par_technique[nom] = propres
     assert len({json.dumps(r, sort_keys=True) for r in reglages_par_technique.values()}) == 1
     # Chez les trois, ces réglages ne sont jamais les mêmes : le livre n'a pas
-    # une clé en commun avec les deux autres ; l'encre et la brume partagent un
-    # NOM (« fond ») pour d'autres valeurs — le cas qui coûte cher, et que
-    # « selon_options » tient — et l'encre en porte cinq de plus.
+    # une clé en commun avec les deux autres ; l'encre et la brume visent la
+    # même ENTRÉE de nœud (« 61.fond ») depuis deux champs de noms différents
+    # (« fond », le papier ; « brume », la teinte de la nappe) et avec d'autres
+    # valeurs — et l'encre en porte trois de plus.
     propres = propres_par_technique
     assert set(propres["livre"]).isdisjoint(set(propres["encre"]) | set(propres["brume"]))
     assert propres["encre"]["61.fond"] != propres["brume"]["61.fond"]
     assert set(propres["brume"]) < set(propres["encre"])
-    assert len(propres["encre"]) - len(propres["brume"]) == 5
+    assert len(propres["encre"]) - len(propres["brume"]) == 3
     # Les conclusions, de même : le contrat du plan (l'instant de reprise, le
     # texte de l'appel, la fermeture reçue du déroulement) est le même chez
     # toutes ; le reste est à la technique.

@@ -62,3 +62,28 @@ def test_l_unite_vient_du_nom_du_champ_ou_de_la_declaration():
     assert menus.unite("width") == "px"
     assert menus.unite("mode") is None
     assert menus.unite("duration_s", "ms") == "ms"        # ce qui est déclaré l'emporte
+
+
+def test_un_menu_se_filtre_sur_ce_que_la_ligne_porte(tmp_path):
+    """« requiert » : ne garder du menu que les lignes qui portent ce que le
+    champ exige. Mesuré le 2026-09-17 : le mode de révélation offrait les vingt
+    et une structures du catalogue, dix-neuf sans accroche faisaient échouer
+    son plan — des fantômes. Le filtre lit les lignes du fournisseur : une
+    liste d'objets nommés (les temps), une liste de valeurs, une valeur."""
+    from comfyui_bridge.adapter import menus
+    fichier = tmp_path / "structures.json"
+    fichier.write_text(json.dumps({"styles": {
+        "avec-accroche": {"libelle": "Avec accroche",
+                          "temps": [{"nom": "hook"}, {"nom": "corps"}], "familles": ["sociale"]},
+        "sans-accroche": {"libelle": "Sans accroche", "temps": [{"nom": "continu"}],
+                          "familles": ["longue"]},
+        "muette": {"libelle": "Muette"},
+    }}, ensure_ascii=False), encoding="utf-8")
+    menu = {"source_fichier": {"chemin": str(fichier), "table": "styles", "libelle": "libelle"}}
+    assert menus.valeurs(menu)[0] == ["avec-accroche", "sans-accroche", "muette"]
+    assert menus.valeurs(menu, {"temps": "hook"})[0] == ["avec-accroche"]
+    assert menus.valeurs(menu, {"familles": "longue"})[0] == ["sans-accroche"]
+    assert menus.valeurs(menu, {"temps": "hook", "familles": "longue"})[0] == []
+    # Une table écrite à la main se filtre de même, sur ses propres clés.
+    ecrit = {"libelles": {"a": {"libelle": "A", "genre": "x"}, "b": {"libelle": "B", "genre": "y"}}}
+    assert menus.valeurs(ecrit, {"genre": "y"})[0] == ["b"]

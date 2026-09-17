@@ -212,12 +212,12 @@ class RunnerDeChaines:
         # dont un seul était la vidéo commandée. En ÉCHEC, rien ne change : les
         # fichiers déjà écrits restent listés, c'est en les regardant qu'on
         # comprend.
-        livre = isinstance(final, str) and final and Path(final).is_file()
-        if livre and produits:
+        final_present = isinstance(final, str) and final and Path(final).is_file()
+        if final_present and produits:
             store.append_log(
                 job_id, f"livré : {Path(final).name} — les {len(produits)} fichiers d'étapes "
                         f"restent lisibles dans les étapes et leurs sous-jobs")
-        store.mark_succeeded(job_id, self._artefacts(final, [] if livre else produits),
+        store.mark_succeeded(job_id, self._artefacts(final, [] if final_present else produits),
                              duration_s=duree)
         c.registry.record(c.settings.host_id, chaine.nom, valeurs, status="succeeded",
                           duration_s=duree)

@@ -90,7 +90,35 @@ def _libelles(menu: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
             for valeur, ligne in table.items()}, None
 
 
-def valeurs(menu: dict[str, Any] | None) -> tuple[list[str], str | None]:
+def _lignes_brutes(menu: dict[str, Any]) -> dict[str, Any]:
+    """Les lignes du fournisseur telles quelles (pas la projection) : c'est sur
+    elles qu'un filtre lit ce qu'une ligne porte."""
+    if isinstance(menu.get("libelles"), dict):
+        return {str(k): v for k, v in menu["libelles"].items() if isinstance(v, dict)}
+    source = menu.get("source_fichier")
+    if not isinstance(source, dict):
+        return {}
+    try:
+        return _table_du_fichier(source)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {}
+
+
+def _porte(ligne: Any, cle: str, exige: Any) -> bool:
+    """Une ligne PORTE ce qu'on exige : la valeur elle-même, ou — dans une liste
+    — un élément égal ou un objet dont le « nom » l'est (les temps d'une
+    structure de récit sont des objets nommés)."""
+    tenu = (ligne or {}).get(cle) if isinstance(ligne, dict) else None
+    if isinstance(tenu, list):
+        return any(item == exige or (isinstance(item, dict) and item.get("nom") == exige)
+                   for item in tenu)
+    if isinstance(tenu, dict):
+        return exige in tenu
+    return tenu == exige
+
+
+def valeurs(menu: dict[str, Any] | None,
+            requiert: dict[str, Any] | None = None) -> tuple[list[str], str | None]:
     """Les VALEURS qu'un menu déclaré permet — ses clés, dans l'ordre du fournisseur.
 
     Un menu sert d'ordinaire à HABILLER une liste que le fournisseur donne. Il
@@ -99,11 +127,21 @@ def valeurs(menu: dict[str, Any] | None) -> tuple[list[str], str | None]:
     l'a écrite. Elle nomme le menu ; la liste reste celle du fichier que le
     fournisseur tient.
 
+    ``requiert`` : ne garder que les lignes qui portent ce que le champ exige
+    ({champ de la ligne: valeur}) — un plan de révélation veut une structure
+    qui a une accroche (``{"temps": "hook"}``), et vingt et une structures
+    offertes dont dix-huit font échouer le plan sont des fantômes (mesuré le
+    2026-09-17). Le filtre lit les lignes du fournisseur, pas la projection.
+
     Rend ``(valeurs, manque)`` : une source illisible rend une liste vide ET la
     raison, jamais une liste vide seule — un menu silencieusement dégarni
     ressemble trait pour trait à un menu normal.
     """
     table, manque = _libelles(menu or {})
+    if requiert:
+        lignes = _lignes_brutes(menu or {})
+        return [v for v in table
+                if all(_porte(lignes.get(v), cle, exige) for cle, exige in requiert.items())], manque
     return list(table), manque
 
 

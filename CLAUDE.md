@@ -17,7 +17,10 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   `cote_court`, `cote_long` ; deux listes vides quand rien n'est déclaré. Le
   lanceur les rend et TRADUIT le choix en `width`/`height` : portrait ⇒ la
   largeur est le petit côté ; ni `format` ni `orientation` ne partent dans une
-  demande), et par entrée `presentation` (`titre`,
+  demande), `categories_de_champs[]` (premier niveau : le vocabulaire des
+  RUBRIQUES d'un formulaire — `valeur`, `titre`, `resume`, `repliee` —, dans
+  l'ordre où le lanceur les rend ; liste vide quand rien n'est déclaré, et le
+  formulaire reste une seule liste), et par entrée `presentation` (`titre`,
   `resume`, `categorie` — sans catégorie l'entrée est technique, invisible —,
   `ordre`, `apercu_url`), `runnable`, `warned`, `chaine`, `etapes[].workflow`,
   et `raccourcis[]` (les ensembles de réglages enregistrés sous ce mode :
@@ -28,11 +31,14 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   de tenir ses rôles, liste vide si elle n'en emploie aucune) ;
 - `GET /v1/workflows/{nom}/io` : `intent_inputs[]` (`field`, `type`, `value`,
   `min`, `max`, `step`, `options`, `choix`, `libelle`, `unite`, `aide`,
-  `derived`, `requis`, et pour un champ qu'une TECHNIQUE apporte : `selon`
-  (`{champ, valeurs}` — le lanceur ne le montre que sous ces techniques-là),
-  plus `selon_options` / `selon_defauts` par technique quand deux techniques
-  exposent le même nom avec des valeurs différentes) et `media_inputs[]`
-  (`param`, `category`, `label`, `accept`, `carried`) — le formulaire est bâti
+  `categorie` (une valeur de `categories_de_champs` : la rubrique où le
+  lanceur range ce champ ; absente, le champ va dans une dernière rubrique
+  sans titre), `derived`, `requis`, et pour un champ qu'une TECHNIQUE
+  apporte : `selon` (`{champ, valeurs}` — le lanceur ne le montre que sous ces
+  techniques-là), plus `selon_options` / `selon_defauts` par technique quand
+  deux techniques exposent le même nom avec des valeurs différentes) et
+  `media_inputs[]` (`param`, `category`, `label`, `accept`, `carried`, et
+  `categorie`, `aide` quand la chaîne les déclare) — le formulaire est bâti
   uniquement dessus ;
 - `POST /v1/render` (corps plat, `label` = nom de la production),
   `POST /v1/estimate`, `GET /v1/jobs`, `GET /v1/jobs/{id}` + `/events`,

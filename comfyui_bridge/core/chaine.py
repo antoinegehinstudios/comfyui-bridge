@@ -93,6 +93,15 @@ class Champ:
     libelle: str = ""
     unite: str | None = None
     requis: bool = False
+    # LA RÉCONCILIATION CONCRÈTE D'UN CHAMP, portée par son propriétaire (la
+    # chaîne pour les réglages du plan, la technique pour les siens) : la
+    # CATÉGORIE qui le range, dans le vocabulaire déclaré une fois à la
+    # passerelle (`categories_de_champs`), et l'AIDE qui dit ce qu'il fait.
+    # Antoine, 2026-09-17 : « chacun porte une réconciliation concrète, en
+    # standardisant par catégorie ». Un lanceur regroupe par catégorie sans
+    # rien connaître des champs.
+    categorie: str | None = None
+    aide: str | None = None
 
 
 @dataclass(frozen=True)
@@ -244,7 +253,29 @@ def _options_depuis(nom: str, brut: Any, contexte: str) -> Any:
     if "menu" in brut and not str(brut["menu"]).strip():
         raise WorkflowMappingError(
             f"{contexte} : {nom!r} tire ses options d'un « menu » sans le nommer")
+    # « requiert » : ne garder du menu que les lignes qui portent ce que la
+    # chaîne exige — un plan de révélation veut une structure qui a une
+    # accroche, pas les vingt structures du catalogue. Un objet, et rien d'autre.
+    if "requiert" in brut:
+        if "menu" not in brut:
+            raise WorkflowMappingError(
+                f"{contexte} : {nom!r} pose « requiert » sans « menu » — seule la "
+                f"liste d'un menu se filtre")
+        if not isinstance(brut["requiert"], dict) or not brut["requiert"]:
+            raise WorkflowMappingError(
+                f"{contexte} : « requiert » de {nom!r} doit être un objet "
+                f"{{champ de la ligne: valeur exigée}}")
     return brut
+
+
+def _texte_ou_rien(nom: str, brut: Any, cle: str, contexte: str) -> str | None:
+    valeur = brut.get(cle)
+    if valeur is None:
+        return None
+    if not isinstance(valeur, str) or not valeur.strip():
+        raise WorkflowMappingError(
+            f"{contexte} : « {cle} » de {nom!r} doit être un texte non vide")
+    return valeur.strip()
 
 
 def _champ(nom: str, brut: Any, contexte: str) -> Champ:
@@ -258,7 +289,9 @@ def _champ(nom: str, brut: Any, contexte: str) -> Champ:
                 f"({categorie!r})")
         return Champ(nom=nom, media=str(categorie), type="STRING",
                      libelle=str(brut.get("libelle") or nom),
-                     requis=bool(brut.get("requis", False)))
+                     requis=bool(brut.get("requis", False)),
+                     categorie=_texte_ou_rien(nom, brut, "categorie", contexte),
+                     aide=_texte_ou_rien(nom, brut, "aide", contexte))
     genre = str(brut.get("type", "STRING")).upper()
     if genre not in _TYPES:
         raise WorkflowMappingError(
@@ -275,6 +308,8 @@ def _champ(nom: str, brut: Any, contexte: str) -> Champ:
         libelle=str(brut.get("libelle") or nom),
         unite=brut.get("unite"),
         requis=bool(brut.get("requis", False)),
+        categorie=_texte_ou_rien(nom, brut, "categorie", contexte),
+        aide=_texte_ou_rien(nom, brut, "aide", contexte),
     )
 
 

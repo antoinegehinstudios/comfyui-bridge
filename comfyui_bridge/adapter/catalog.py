@@ -208,6 +208,11 @@ class WorkflowCatalog:
         # listes, et largeur/hauteur restent des champs ordinaires. Aucun défaut
         # ici — le défaut d'un mode est celui de SES champs.
         self.formats: dict[str, Any] = dict(formats or {"orientations": [], "resolutions": []})
+        # Le vocabulaire des CATÉGORIES DE CHAMPS : dans quel ordre et sous quel
+        # titre un lanceur regroupe les réglages qu'un mode expose. Déclaré une
+        # fois ; chaque champ nomme la sienne (`categorie`). Vide quand rien
+        # n'est déclaré : les champs restent une liste.
+        self.categories_de_champs: list[dict[str, Any]] = []
         # Les TECHNIQUES déclarées sur cette machine : ce qui tient les rôles
         # d'une chaîne. Lues une fois avec le catalogue, comme les chaînes le
         # sont à leur entrée — une technique de plus est un fichier de plus.
@@ -785,4 +790,32 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
                                 techniques=techniques)
     catalogue.shadowed = tuple(masques)
     catalogue.vitrines_orphelines = tuple(sorted(orphelines))
+    catalogue.categories_de_champs = _categories_de_champs(data.get("categories_de_champs"), path)
     return catalogue
+
+
+def _categories_de_champs(brut: Any, path: Path) -> list[dict[str, Any]]:
+    """Le vocabulaire des catégories de champs, lu et VÉRIFIÉ : une liste
+    ordonnée d'objets {valeur, titre}, sans doublon — un titre qui manque ou
+    une valeur en double se dirait au premier formulaire, mieux vaut ici."""
+    if brut is None:
+        return []
+    if not isinstance(brut, list):
+        raise WorkflowMappingError(f"{path}: categories_de_champs doit être une liste")
+    sorties: list[dict[str, Any]] = []
+    vues: set[str] = set()
+    for rang, entree in enumerate(brut, start=1):
+        if not isinstance(entree, dict) or not str(entree.get("valeur") or "").strip():
+            raise WorkflowMappingError(
+                f"{path}: categories_de_champs n°{rang} doit être un objet avec une « valeur »")
+        valeur = str(entree["valeur"]).strip()
+        if valeur in vues:
+            raise WorkflowMappingError(f"{path}: categories_de_champs : {valeur!r} en double")
+        vues.add(valeur)
+        sorties.append({"valeur": valeur, "titre": str(entree.get("titre") or valeur),
+                        "resume": str(entree.get("resume") or ""),
+                        # « repliee » : une catégorie qu'un lanceur replie sous un
+                        # volet — utile, jamais le sujet. Déclaré ici, jamais
+                        # deviné par le lanceur d'après un nom.
+                        "repliee": bool(entree.get("repliee", False))})
+    return sorties

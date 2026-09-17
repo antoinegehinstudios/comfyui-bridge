@@ -368,7 +368,9 @@ def _habiller_medias(c, pieces: list[dict], aides: dict | None = None) -> list[d
         declare = _menu_declare(c, champ)
         if not piece.get("label") and declare.get("libelle"):
             piece["label"] = declare["libelle"]
-        aide = (aides or {}).get(champ) or declare.get("aide")
+        # L'aide que la pièce porte elle-même l'emporte ; puis celle de
+        # l'entrée du mode ; puis celle du menu de ce nom de champ.
+        aide = piece.get("aide") or (aides or {}).get(champ) or declare.get("aide")
         if aide:
             piece["aide"] = aide
     return pieces
@@ -422,7 +424,7 @@ def _options_declarees(c, depuis: Any) -> tuple[list[str], dict[str, Any]]:
     if isinstance(depuis, dict) and depuis.get("menu"):
         from ..adapter import menus as _menus
         declare = _menu_declare(c, str(depuis["menu"]))
-        return _menus.valeurs(declare)[0], declare
+        return _menus.valeurs(declare, depuis.get("requiert"))[0], declare
     filtre = depuis.get("catalogue", depuis) if isinstance(depuis, dict) else depuis
     options, libelles = _options_du_catalogue(c, filtre)
     return options, {"libelles": libelles}
@@ -461,7 +463,15 @@ def _entree_de_champ(c, nom: str, champ, aides: dict | None = None) -> dict:
             entree[cle] = valeur
     if options is not None:
         entree["options"] = list(options)
-    return _habiller(c, entree, menu, aides)
+    entree = _habiller(c, entree, menu, aides)
+    # LA RÉCONCILIATION QUE LE CHAMP PORTE LUI-MÊME l'emporte sur tout habillage
+    # extérieur : sa catégorie, et son aide — écrite par son propriétaire (la
+    # chaîne, la technique), la seule qui sache ce que ce champ fait ICI.
+    if champ.categorie:
+        entree["categorie"] = champ.categorie
+    if champ.aide:
+        entree["aide"] = champ.aide
+    return entree
 
 
 def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
@@ -522,11 +532,22 @@ def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
 
 def _media_inputs_chaine(chaine) -> list[dict]:
     from ..adapter.media_inputs import ACCEPT
-    return [{"param": nom, "category": champ.media, "label": champ.libelle,
-             "accept": ACCEPT.get(champ.media, "*/*"), "neutral": False,
-             "carried": None, "node": None, "input": None, "class_type": None,
-             "requis": champ.requis}
-            for nom, champ in chaine.champs.items() if champ.media is not None]
+    pieces = []
+    for nom, champ in chaine.champs.items():
+        if champ.media is None:
+            continue
+        piece = {"param": nom, "category": champ.media, "label": champ.libelle,
+                 "accept": ACCEPT.get(champ.media, "*/*"), "neutral": False,
+                 "carried": None, "node": None, "input": None, "class_type": None,
+                 "requis": champ.requis}
+        # La réconciliation que la pièce jointe porte elle-même : sa catégorie,
+        # son aide — celles de la chaîne, qui seule sait ce que cette image est ici.
+        if champ.categorie:
+            piece["categorie"] = champ.categorie
+        if champ.aide:
+            piece["aide"] = champ.aide
+        pieces.append(piece)
+    return pieces
 
 
 def _technique_par_defaut(c, chaine):
@@ -1444,6 +1465,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # la largeur est le petit côté. Deux listes vides quand rien n'est
             # déclaré : largeur et hauteur restent alors des champs ordinaires.
             "formats": cat.formats,
+            # Le vocabulaire des CATÉGORIES DE CHAMPS, déclaré une fois : chaque
+            # champ exposé en nomme une, un lanceur regroupe dans cet ordre.
+            "categories_de_champs": cat.categories_de_champs,
             "workflows": items,
             # Des graphes enregistrés qu'une entrée déclarée du fichier de
             # réconciliation recouvre : ce qui est masqué doit se voir.

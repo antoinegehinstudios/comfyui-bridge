@@ -1,12 +1,14 @@
 {
   "version": 1,
   "chaine": "video-revelation",
-  "resume": "L'image est d'abord DOCUMENTÉE par Iconographe — une fois pour toutes, dans sa bibliothèque — puis sa CULTURE est documentée par Iconologue : ce que l'œuvre EST, sourcé, et la figure que les bases déclarent sujet reprend sa place. Une INTENTION est ensuite écrite dans la structure d'un média qu'on regarde en défilant, et c'est ELLE qui commande : le DÉROULEMENT peint l'accroche (2,5 s), la mise en place, puis le corps qui croît vers le climax et le tient sans arrêter l'animation ; l'image révélée se CONTEMPLE ensuite (3 à 5 s, la caméra glisse encore). Une CONCLUSION pose la scène (on peut s'en passer), un APPEL FINAL s'écrit par-dessus ses dernières images, et le MONTAGE réunit le tout. Deux contrôles jugent : le plan avant de le peindre, la peinture avant de la clore.",
+  "resume": "LE SOCLE D'UNE VIDÉO DE RÉVÉLATION : il attend une œuvre et des paramètres, et ne change pas. L'image est d'abord DOCUMENTÉE par Iconographe — une fois pour toutes, dans sa bibliothèque — puis sa CULTURE est documentée par Iconologue : ce que l'œuvre EST, sourcé. Une INTENTION est ensuite écrite dans la structure d'un média qu'on regarde en défilant, et c'est ELLE qui commande : le DÉROULEMENT révèle l'accroche (2,5 s), la mise en place, puis le corps qui croît vers le climax et le tient sans arrêter l'animation ; l'image révélée se CONTEMPLE ensuite (3 à 5 s, la caméra glisse encore). Une CONCLUSION pose la scène (on peut s'en passer), un APPEL FINAL s'écrit par-dessus ses dernières images, et le MONTAGE réunit le tout. Deux contrôles jugent : le plan avant de le révéler, la révélation avant de la clore. COMMENT l'image se révèle est un paramètre — la technique — et chaque technique expose ses propres réglages.",
   "expose": {
     "image": {
       "media": "image",
       "requis": true,
-      "libelle": "L'image à révéler"
+      "libelle": "L'image à révéler",
+      "categorie": "oeuvre",
+      "aide": "Iconographe documente cette image UNE fois et la garde en bibliothèque : la même œuvre, ou la même réencodée, revient en quelques secondes au lieu d'une vingtaine de minutes."
     },
     "duration_s": {
       "type": "FLOAT",
@@ -15,7 +17,9 @@
       "max": 79,
       "step": 1,
       "libelle": "Durée du déroulement (au moins)",
-      "unite": "s"
+      "unite": "s",
+      "categorie": "recit",
+      "aide": "La durée du DÉROULEMENT, au moins : le plan peut l'allonger pour ne précipiter aucun temps. La conclusion et l'appel final s'ajoutent après — un média qui se regarde en défilant tient sous 1 min 30."
     },
     "contemplation_s": {
       "type": "FLOAT",
@@ -24,7 +28,9 @@
       "max": 5,
       "step": 0.5,
       "libelle": "Contemplation de l'image révélée",
-      "unite": "s"
+      "unite": "s",
+      "categorie": "recit",
+      "aide": "Après la révélation, l'image entière se contemple, sans arrêt net : la caméra glisse encore. Entre 3 et 5 s."
     },
     "conclusion_s": {
       "type": "FLOAT",
@@ -33,25 +39,36 @@
       "max": 30,
       "step": 1,
       "libelle": "Durée de la conclusion (0 = aucune)",
-      "unite": "s"
+      "unite": "s",
+      "categorie": "recit",
+      "aide": "La scène se pose et la page se referme sur la zone du climax, à la façon de la technique choisie. À 0, il n'y a pas de conclusion : l'appel final suit le déroulement."
     },
     "cta": {
       "type": "STRING",
       "defaut": "",
-      "libelle": "Appel final (facultatif)"
+      "libelle": "Appel final (facultatif)",
+      "categorie": "recit",
+      "aide": "Une phrase courte, écrite sur les dernières secondes (3,5 s), qui boucle sur le début. Vide : aucun appel."
     },
     "cta_police": {
       "type": "STRING",
       "defaut": "",
-      "libelle": "Police de l'appel (nom ou chemin ; vide = automatique)"
+      "libelle": "Police de l'appel (nom ou chemin ; vide = automatique)",
+      "categorie": "recit",
+      "aide": "Le nom d'une police du poste, ou le chemin d'un fichier de police. Vide : celle de la technique."
     },
     "style_narratif": {
       "type": "COMBO",
       "defaut": "reseau-social",
       "options_depuis": {
-        "menu": "style_narratif"
+        "menu": "style_narratif",
+        "requiert": {
+          "temps": "hook"
+        }
       },
-      "libelle": "Structure du récit"
+      "libelle": "Structure du récit",
+      "categorie": "recit",
+      "aide": "La structure du récit : quels temps, dans quel ordre, et ce que chacun doit faire. Seules les structures qui portent une accroche (« hook ») conviennent à une révélation ; la liste est celle du catalogue des structures, filtrée sur ce point."
     },
     "style_approche": {
       "type": "COMBO",
@@ -59,37 +76,49 @@
       "options_depuis": {
         "menu": "style_approche"
       },
-      "libelle": "Approche"
+      "libelle": "Approche",
+      "categorie": "recit",
+      "aide": "COMMENT la révélation se conduit — c'est l'intention qui la reçoit, pas la peinture. « Peinture calme » (le défaut) : peu de temps, longs, un chemin continu dans l'image sans retour, et une caméra qui glisse sans jamais s'arrêter. « Visite guidée » : plus de temps, plus courts, une caméra qui va d'élément en élément."
     },
     "width": {
       "type": "INT",
       "defaut": 720,
       "libelle": "Largeur",
-      "unite": "px"
+      "unite": "px",
+      "categorie": "format",
+      "aide": "Le petit côté d'un portrait, le grand d'un paysage. Orientation et résolution le règlent ; il reste réglable ici."
     },
     "height": {
       "type": "INT",
       "defaut": 1280,
       "libelle": "Hauteur",
-      "unite": "px"
+      "unite": "px",
+      "categorie": "format",
+      "aide": "L'autre côté. Orientation et résolution le règlent ; il reste réglable ici."
     },
     "fps": {
       "type": "INT",
       "defaut": 30,
       "min": 1,
-      "libelle": "Images par seconde"
+      "libelle": "Images par seconde",
+      "categorie": "format",
+      "aide": "La cadence de la vidéo livrée. 30 images par seconde est celle des réseaux."
     },
     "seed": {
       "type": "INT",
       "defaut": 71,
-      "libelle": "Graine"
+      "libelle": "Graine",
+      "categorie": "avance",
+      "aide": "La graine du hasard de la peinture : la même graine, la même vidéo. À changer pour obtenir une autre variante du même plan."
     },
     "technique": {
       "type": "COMBO",
       "options_depuis": {
         "techniques": true
       },
-      "libelle": "Technique"
+      "libelle": "Technique",
+      "categorie": "technique",
+      "aide": "La façon dont l'image se révèle. Le plan (analyse, intention, contrôles, montage) ne change pas ; la technique tient le déroulement, la conclusion et l'appel, et expose ses propres réglages."
     }
   },
   "etapes": [
@@ -315,6 +344,7 @@
     "ce_qui_est_appele": "La documentation de l'image (image-iconographe, tenue par le service Iconographe et sa bibliothèque), la CULTURE de l'œuvre (image-iconologue, tenue par le service Iconologue et son catalogue), la structure du récit (le catalogue des structures narratives) et l'appel final (video-appel-final) sont des mécanismes AGNOSTIQUES : la chaîne les appelle, elle ne les porte pas. Un autre flux peut les appeler aussi, et la documentation déjà écrite n'est pas repayée.",
     "techniques": "LE PLAN NE NOMME AUCUNE TECHNIQUE. Antoine, 2026-09-16 : « la mention de brume ne doit pas être tenue par le workflow de la passerelle : cela veut dire qu'il porte une dépendance à la brume et devra se faire doublon pour faire autrement ». Jusque-là, « video-revelation » (encre) et « video-revelation-brume » étaient deux chaînes jumelles : même plan de onze étapes, seules la peinture, la conclusion et leurs contrôles « plan_tenu » différaient — une technique de plus était une chaîne de plus, recopiée. Désormais les étapes « deroulement » et « conclusion » nomment un RÔLE et la technique qui le tient (« $technique »), et « plan_tenu » prend la liste de contrôles de cette technique. Quel graphe tient chaque rôle, avec quelles entrées, quels réglages propres (fond, ambiance, tracé, négatif, rendu pour l'encre ; la teinte de la brume pour la brume) et quels contrôles : tout cela vit dans _data/techniques/<nom>.json, et une technique de plus est un FICHIER de plus. Les réglages COMMUNS restent ici — ce sont ceux du plan, pas de la peinture. « conduite » en fait partie, avec ses deux valeurs : une technique qui ne sait pas s'en servir ne la reçoit simplement pas (voir la note de la technique brume), et la passerelle dit au journal ce qui n'a pas été appliqué.",
     "l_appel_ne_recharge_plus_la_conclusion": "2026-09-16, Antoine : « à la toute fin, tu éprouveras avec une vidéo 4K/60 fps de 20 s ». L'appel final chargeait la conclusion ENTIÈRE pour y écrire son texte, et la rendait entière : en 4K, c'est une vidéo de plus en mémoire pour quelques secondes d'encre. Le nœud InkCaption lit désormais la conclusion PARESSEUSEMENT (son entrée « video ») et ne rend QUE les images qu'il écrit ; son récit dit combien d'images de la conclusion il a reprises (images_reprises). Le montage joint donc trois parts : le déroulement, la conclusion SANS ces dernières images (« sauf_les_dernieres »), puis l'appel — sinon on les verrait deux fois. Sans appel (pas de CTA), l'étape est sautée et son « sinon » rend un livrable nul (la part est ignorée) et zéro image reprise (rien n'est rogné) : le montage retombe sur deux parts, et le contrôle final accepte 2 ou 3.",
-    "parametres_chez_les_techniques": "Antoine, 2026-09-16 au soir : « les paramètres — le style de tracé, le fond, l'ambiance, la technique de style… — ne vivent pas dans le workflow mais se réconcilient avec le workflow quand le paramètre l'appelle ; ce qui permet de les interchanger, d'en créer de nouvelles, avec un rendu drastiquement différent si le style l'est. » Depuis : « bords » et « conduite », que seule la peinture lit, sont exposés par les techniques qui les tiennent (l'encre les deux, la brume les bords) et plus par le plan ; l'appel final est un RÔLE de plus (« appel »), tenu par chaque technique comme le déroulement et la conclusion ; et le champ « technique » ne porte plus de défaut — c'est la technique qui se dit « par_defaut » dans son fichier. Le plan ne nomme ainsi aucune technique, ni par un graphe, ni par un défaut : une technique de plus est un fichier de plus, qui tient les trois rôles et expose ses propres réglages."
+    "parametres_chez_les_techniques": "Antoine, 2026-09-16 au soir : « les paramètres — le style de tracé, le fond, l'ambiance, la technique de style… — ne vivent pas dans le workflow mais se réconcilient avec le workflow quand le paramètre l'appelle ; ce qui permet de les interchanger, d'en créer de nouvelles, avec un rendu drastiquement différent si le style l'est. » Depuis : « bords » et « conduite », que seule la peinture lit, sont exposés par les techniques qui les tiennent (l'encre les deux, la brume les bords) et plus par le plan ; l'appel final est un RÔLE de plus (« appel »), tenu par chaque technique comme le déroulement et la conclusion ; et le champ « technique » ne porte plus de défaut — c'est la technique qui se dit « par_defaut » dans son fichier. Le plan ne nomme ainsi aucune technique, ni par un graphe, ni par un défaut : une technique de plus est un fichier de plus, qui tient les trois rôles et expose ses propres réglages.",
+    "champs_standardises": "Antoine, 2026-09-17 : « les champs doivent être nettoyés pour enlever ceux en doublon ou fantômes ; chacun porte une réconciliation concrète, standardisée par catégorie ; le socle du type de vidéo est stable, il attend des paramètres, il est une base, identifiée, claire ». Depuis : chaque champ exposé — ici pour les réglages du PLAN, chez chaque technique pour les siens — porte sa « categorie » (vocabulaire déclaré une fois dans la réconciliation, « categories_de_champs » : oeuvre, recit, format, technique, matiere, lumiere, avance) et son « aide » ; les aides ne vivent plus sur l'entrée de réconciliation du mode. « style_narratif » ne liste que les structures qui portent une accroche (« requiert »: {« temps »: « hook »}) : le plan l'exige (plan_valide), et dix-neuf structures sur vingt et une faisaient échouer le mode. Les options « d'avant » et « essai » des techniques (bords francs, ambiance selon-le-fond, rendu classique et front-organique, négatif selon-l-oeuvre, conduite la caméra, papier washi-sans-lampe) ne sont plus exposées : les nœuds les gardent comme défauts pour l'identité du rendu classique, les graphes portent en littéral ce que le mode emploie."
   }
 }

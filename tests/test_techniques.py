@@ -15,6 +15,7 @@ qui est le cas qui coûte cher.
 import contextlib
 import json
 import pathlib
+import shutil
 import tempfile
 
 import pytest
@@ -550,3 +551,87 @@ def test_les_copies_de_reference_des_techniques_suivent_les_donnees():
                 json.loads(jumeau.read_text(encoding="utf-8")):
             ecarts.append(f"{fichier.name} : la copie de référence diverge des données")
     assert not ecarts, " ; ".join(ecarts)
+
+
+# -- la réconciliation concrète d'un champ : catégorie, aide, filtre ----------
+
+
+def test_chaque_champ_publie_sa_categorie_et_son_aide_et_un_menu_se_filtre():
+    """Antoine, 2026-09-17 : « chacun porte une réconciliation concrète, en
+    standardisant par catégorie ». Le champ la porte chez son propriétaire (la
+    chaîne, la technique) ; /io la publie telle quelle, GET /v1/workflows publie
+    le vocabulaire déclaré une fois ; et un champ qui tire sa liste d'un menu
+    peut exiger ce que la ligne doit porter — la liste ne montre plus de
+    fantômes. L'aide du champ l'emporte sur celle de l'entrée du mode."""
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="comfybridge_categories_"))
+    chaine = json.loads(json.dumps(CHAINE_A_TECHNIQUES))
+    chaine["expose"]["largeur"].update({"categorie": "format", "aide": "Le petit côté."})
+    chaine["expose"]["technique"].update({"categorie": "technique"})
+    chaine["expose"]["structure"] = {
+        "type": "COMBO", "defaut": "avec-accroche", "categorie": "recit",
+        "options_depuis": {"menu": "structure", "requiert": {"temps": "hook"}},
+        "libelle": "Structure du récit", "aide": "Seules celles qui ont une accroche."}
+    trait = json.loads(json.dumps(TECHNIQUE_TRAIT))
+    trait["expose"]["grain"].update({"categorie": "matiere", "aide": "Le grain du trait."})
+    _ecrire(tmp, techniques=(trait, TECHNIQUE_VOILE))
+    (tmp / "chaine-a-techniques.json").write_text(json.dumps(chaine, ensure_ascii=False),
+                                                  encoding="utf-8")
+    (tmp / "structures.json").write_text(json.dumps({"styles": {
+        "avec-accroche": {"libelle": "Avec accroche", "temps": [{"nom": "hook"}, {"nom": "corps"}]},
+        "sans-accroche": {"libelle": "Sans accroche", "temps": [{"nom": "continu"}]}}},
+        ensure_ascii=False), encoding="utf-8")
+    reconciliation = json.loads((tmp / "reconciliation.local.json").read_text(encoding="utf-8"))
+    reconciliation["categories_de_champs"] = [
+        {"valeur": "recit", "titre": "Récit"}, {"valeur": "format", "titre": "Format"},
+        {"valeur": "technique", "titre": "Technique"}, {"valeur": "matiere", "titre": "Matière"}]
+    reconciliation["menus"]["structure"] = {"libelle": "Structure", "source_fichier": {
+        "chemin": str(tmp / "structures.json"), "table": "styles", "libelle": "libelle"}}
+    reconciliation["workflows"]["chaine-a-techniques"]["aides"] = {"largeur": "L'aide de l'entrée, moins proche."}
+    (tmp / "reconciliation.local.json").write_text(json.dumps(reconciliation, ensure_ascii=False),
+                                                   encoding="utf-8")
+    settings = Settings(comfy_backend="cli", dry_run=True,
+                        comfyui_base_url="http://127.0.0.1:9", comfyui_request_timeout_s=1,
+                        hermes_db=tmp / "hermes.sqlite3", comfy_output_dir=tmp / "out",
+                        hermes_mode="local", workflows_dir=tmp / "workflows",
+                        tranche_octets=0)
+    with TestClient(create_app(settings)) as client:
+        vitrine = client.get("/v1/workflows").json()
+        assert [c["valeur"] for c in vitrine["categories_de_champs"]] == [
+            "recit", "format", "technique", "matiere"]
+        assert vitrine["categories_de_champs"][3]["titre"] == "Matière"
+        champs = {e["field"]: e for e in client.get("/v1/workflows/chaine-a-techniques/io").json()
+                  ["intent_inputs"]}
+        assert champs["largeur"]["categorie"] == "format"
+        assert champs["largeur"]["aide"] == "Le petit côté."          # la sienne, pas celle de l'entrée
+        assert champs["technique"]["categorie"] == "technique"
+        assert champs["grain"]["categorie"] == "matiere" and champs["grain"]["aide"] == "Le grain du trait."
+        assert "categorie" not in champs["fond"]                       # rien d'inventé
+        assert champs["structure"]["options"] == ["avec-accroche"]      # le fantôme est parti
+        assert champs["structure"]["categorie"] == "recit"
+        # Une valeur filtrée hors de la liste est refusée comme toute valeur hors menu.
+        refus = client.post("/v1/render", json={"workflow": "chaine-a-techniques",
+                                                "structure": "sans-accroche"})
+        assert refus.status_code == 422 and refus.json()["field"] == "structure"
+    shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_le_vocabulaire_des_categories_se_verifie_a_la_lecture(tmp_path):
+    """Une valeur en double, une entrée sans valeur, une liste qui n'en est pas
+    une : refusées en le disant, avant le premier formulaire."""
+    from comfyui_bridge.adapter.catalog import _categories_de_champs
+    assert _categories_de_champs(None, tmp_path) == []
+    assert _categories_de_champs([{"valeur": "recit"}], tmp_path) == [
+        {"valeur": "recit", "titre": "recit", "resume": "", "repliee": False}]
+    assert _categories_de_champs([{"valeur": "fin", "titre": "Fin", "repliee": True}], tmp_path)[0]["repliee"] is True
+    with pytest.raises(WorkflowMappingError, match="en double"):
+        _categories_de_champs([{"valeur": "recit"}, {"valeur": "recit"}], tmp_path)
+    with pytest.raises(WorkflowMappingError, match="valeur"):
+        _categories_de_champs([{"titre": "Sans valeur"}], tmp_path)
+    with pytest.raises(WorkflowMappingError, match="liste"):
+        _categories_de_champs({"recit": "Récit"}, tmp_path)
+    # Et un champ qui pose « requiert » sans menu, ou pas en objet, est refusé.
+    with pytest.raises(WorkflowMappingError, match="requiert"):
+        noyau.lire({"version": 1, "chaine": "c", "expose": {
+            "s": {"type": "COMBO", "defaut": "a", "options": ["a"], "requiert": 1,
+                  "options_depuis": {"menu": "m", "requiert": "hook"}}},
+            "etapes": [{"id": "u", "rendre": {"workflow": "w"}}], "livrable": "$u.livrable"})

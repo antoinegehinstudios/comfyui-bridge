@@ -120,15 +120,11 @@
       "libelle": "Nombre d'images"
     },
     "fond": {
-      "libelle": "Fond de départ",
+      "libelle": "Papier",
       "libelles": {
         "washi": {
           "libelle": "Washi",
-          "resume": "papier crème ; sa lampe à huile ne s'allume que sous l'ambiance « Selon le fond »"
-        },
-        "washi-sans-lampe": {
-          "libelle": "Washi, sans lampe",
-          "resume": "le même papier, dont la lampe reste éteinte même sous « Selon le fond »"
+          "resume": "papier crème, le défaut"
         },
         "sepia": {
           "libelle": "Sépia",
@@ -136,19 +132,7 @@
         },
         "gris-atelier": {
           "libelle": "Gris d'atelier",
-          "resume": "papier froid, sans lampe"
-        },
-        "brume-blanche": {
-          "libelle": "Brume blanche",
-          "resume": "un jour pâle ; la nappe est claire et calme"
-        },
-        "brume-grise": {
-          "libelle": "Brume grise",
-          "resume": "un temps couvert ; la nappe est plus dense et plus courte de lobes"
-        },
-        "brume-dorée": {
-          "libelle": "Brume dorée",
-          "resume": "une lanterne dans la brume ; nappe chaude, éclairée par le haut du cadre"
+          "resume": "papier froid"
         }
       }
     },
@@ -169,48 +153,6 @@
         }
       }
     },
-    "rendu": {
-      "libelle": "Rendu",
-      "libelles": {
-        "ink-bleed": {
-          "libelle": "Encre qui saigne (le défaut)",
-          "resume": "une tache par temps, qui fleurit, s'étend à bords humides et rejoint les autres : l'image apparaît dedans"
-        },
-        "classique": {
-          "libelle": "Classique (le rendu éprouvé du 13 septembre)",
-          "resume": "des touches d'encre par temps, et une réserve blanche qui garde le climax"
-        },
-        "front-organique": {
-          "libelle": "Front organique (essai : le lavis ne suit plus le rectangle de la caméra)"
-        }
-      }
-    },
-    "bords": {
-      "libelle": "Bords de l'œuvre",
-      "libelles": {
-        "fondus": {
-          "libelle": "Fondus dans la feuille (le défaut)",
-          "resume": "les traits continuent au-delà de l'arête et se fondent sur un front ondulé : aucun rectangle à lire pendant la construction"
-        },
-        "francs": {
-          "libelle": "Francs (le prolongement d'avant)",
-          "resume": "flouté dès l'arête : le rectangle de l'œuvre se lit"
-        }
-      }
-    },
-    "conduite": {
-      "libelle": "Qui commande le déroulement",
-      "libelles": {
-        "le plan": {
-          "libelle": "Le plan",
-          "resume": "l'ordre, le rythme et le cadrage viennent du plan ; la caméra les suit"
-        },
-        "la camera": {
-          "libelle": "La caméra",
-          "resume": "le déroulement d'avant : la géométrie réordonne les temps"
-        }
-      }
-    },
     "ambiance": {
       "libelle": "Ambiance",
       "libelles": {
@@ -225,15 +167,58 @@
         "atelier": {
           "libelle": "Lumière du jour",
           "resume": "la page nue : uniforme, immobile, sans lampe ni relief"
-        },
-        "selon-le-fond": {
-          "libelle": "Selon le fond",
-          "resume": "la lampe fixe que le fond porte, et rien de plus — le rendu d'avant"
         }
       }
     },
     "cta": {
       "libelle": "Appel final"
+    },
+    "brume": {
+      "libelle": "Teinte de la brume",
+      "libelles": {
+        "brume-blanche": {
+          "libelle": "Brume blanche",
+          "resume": "un jour pâle ; la nappe est claire et calme"
+        },
+        "brume-grise": {
+          "libelle": "Brume grise",
+          "resume": "un temps couvert ; la nappe est plus dense et plus courte de lobes"
+        },
+        "brume-dorée": {
+          "libelle": "Brume dorée",
+          "resume": "une lanterne dans la brume ; nappe chaude, éclairée par le haut du cadre"
+        }
+      }
+    },
+    "negatif": {
+      "libelle": "Négatif",
+      "libelles": {
+        "non": {
+          "libelle": "Non (le défaut)",
+          "resume": "l'encre est ce qui est sombre dans l'œuvre"
+        },
+        "oui": {
+          "libelle": "Oui",
+          "resume": "l'encre inverse la lumière"
+        }
+      }
+    },
+    "papier": {
+      "libelle": "Papier du livre",
+      "libelles": {
+        "ivoire": {
+          "libelle": "Ivoire (le défaut)"
+        },
+        "creme": {
+          "libelle": "Crème"
+        },
+        "blanc-casse": {
+          "libelle": "Blanc cassé"
+        },
+        "gris-perle": {
+          "libelle": "Gris perle"
+        }
+      }
     }
   },
   "formats": {
@@ -285,24 +270,10 @@
     "video-revelation": {
       "kind": "video",
       "chaine": "<dossier de données>/chaines/video-revelation.json",
-      "description": "L'image est lue et documentée, une intention est écrite, puis l'encre la déroule : une accroche de 2,5 s, une mise en place, un corps qui croît vers le climax et le tient — puis, si on le veut, une conclusion et un appel final écrit à l'encre.",
+      "description": "L'image est lue et documentée, une intention est écrite, puis la technique choisie la révèle : une accroche de 2,5 s, une mise en place, un corps qui croît vers le climax et le tient — puis, si on le veut, une conclusion et un appel final. Le plan ne change pas ; la façon de révéler est un paramètre, et chaque technique apporte ses propres réglages.",
       "titre": "Révéler une image",
       "categorie": "reveler-une-image",
-      "ordre": 1,
-      "aides": {
-        "image": "Iconographe documente cette image UNE fois et la garde en bibliothèque : la même œuvre, ou la même réencodée, revient en quelques secondes au lieu d'une vingtaine de minutes.",
-        "duration_s": "La durée du DÉROULEMENT, au moins : le plan peut l'allonger pour ne précipiter aucun temps. La conclusion et l'appel final s'ajoutent après — un média qui se regarde en défilant tient sous 1 min 30.",
-        "conclusion_s": "La scène se pose et la page se referme sur la zone du climax. À 0, il n'y a pas de conclusion : l'appel final suit le déroulement.",
-        "cta": "Une phrase courte, écrite à l'encre sur les dernières secondes (3,5 s), qui boucle sur le début. Vide : aucun appel.",
-        "style_narratif": "La structure du récit : quels temps, dans quel ordre, et ce que chacun doit faire. La liste est celle du catalogue des structures.",
-        "fond": "Le papier sur lequel l'encre se pose : sa teinte, son grain, sa vignette. Sa lampe, elle, ne s'allume plus que sous l'ambiance « Selon le fond » — partout ailleurs, c'est l'ambiance qui tient la lumière.",
-        "ambiance": "Sous quelle lumière la page se dessine. « Lanterne » (le défaut) : une lanterne posée hors champ — sa flaque chaude dérive lentement, sa flamme respire, et les fibres du papier accrochent ses rayons rasants : la surface se VIT pendant que l'encre la couvre. « Chandelle » : la même flamme, plus étroite, plus vive, plus chaude. « Lumière du jour » : la page nue, sans lampe ni relief. « Selon le fond » : la lampe fixe que le fond porte, et rien de plus — le rendu d'avant. La conclusion reprend la même flamme à la seconde où le déroulement s'arrête : le raccord ne bouge pas.",
-        "encre": "Comment l'encre restitue l'image : lavis (défaut), trait sec, encre dense.",
-        "style_approche": "COMMENT la révélation se conduit — c'est l'intention qui la reçoit, pas la peinture. « Peinture calme » (le défaut) : peu de temps, longs, un chemin continu dans l'image sans retour, et une caméra qui glisse sans jamais s'arrêter — c'est l'encre qui révèle. « Visite guidée » : plus de temps, plus courts, une caméra qui va d'élément en élément.",
-        "rendu": "Comment l'encre vient. « Encre qui saigne » (le défaut) : une tache par temps, qui fleurit depuis lui, s'étend à bords humides et rejoint les autres — l'image apparaît dedans, sans réserve blanche découpée. Ce qui a un CONTOUR NET (une partie de figure : visage, main, crâne, gueule) est DESSINÉ d'abord, par des traits d'encre qui suivent ses propres contours, et la tache part de ces traits. « Classique » : le rendu du 13 septembre, des touches d'encre par temps. « Front organique » : le même, avec un lavis qui ne suit plus le rectangle de la caméra.",
-        "bords": "Les BORDS de l'œuvre sur la feuille. « Fondus » (le défaut) : la matière de l'œuvre continue au-delà de son arête (les traits d'encre ne s'arrêtent pas net) et se fond dans la feuille sur un front ondulé, puis en chapelet de taches — le rectangle de l'œuvre ne se lit jamais pendant la construction. « Francs » : le prolongement d'avant le 2026-09-15 après-midi, flouté dès l'arête, où le rectangle se lisait. Le récit mesure ce que la feuille montre (cadre_lu_encre, cadre_lu_couleur : part du côté qui porte un bord continu).",
-        "conduite": "Qui mène : le PLAN (l'ordre des temps, leur rythme et le cadrage viennent de l'intention, et la caméra est bâtie sur eux — aucun temps n'est écarté, la durée demandée est celle qui est livrée), ou la CAMÉRA (le déroulement d'avant : la géométrie réordonne les temps et plafonne la durée)."
-      }
+      "ordre": 1
     },
     "_lire_moi_entrees_techniques": "Sans titre ni catégorie, une entrée reste hors de la vue du lanceur. « image-iconographe », « image-iconologue » et « image-intention » ne livrent AUCUN média : leur artefact .json est leur livrable, et la chaîne le lit sous $etape.recit.",
     "image-iconographe": {
@@ -454,5 +425,44 @@
       "categorie": "animer-une-image",
       "ordre": 1
     }
-  }
+  },
+  "categories_de_champs": [
+    {
+      "valeur": "oeuvre",
+      "titre": "L'œuvre",
+      "resume": "Ce qui est révélé."
+    },
+    {
+      "valeur": "recit",
+      "titre": "Récit",
+      "resume": "La structure, l'approche, les durées, l'appel final."
+    },
+    {
+      "valeur": "format",
+      "titre": "Format",
+      "resume": "Orientation, résolution, cadence."
+    },
+    {
+      "valeur": "technique",
+      "titre": "Technique",
+      "resume": "La façon dont l'image se révèle."
+    },
+    {
+      "valeur": "matiere",
+      "titre": "Matière",
+      "resume": "Les réglages propres à la technique : papier, tracé, brume."
+    },
+    {
+      "valeur": "lumiere",
+      "titre": "Lumière",
+      "resume": "Sous quelle lumière la page se dessine."
+    },
+    {
+      "valeur": "avance",
+      "titre": "Réglages avancés",
+      "resume": "Utiles, jamais le sujet.",
+      "repliee": true
+    }
+  ],
+  "_lire_moi_categories_de_champs": "« categories_de_champs » : le vocabulaire, déclaré UNE fois, des catégories qui rangent les champs exposés — une liste ordonnée de {valeur, titre, resume}. Chaque champ d'une chaîne ou d'une technique nomme la sienne (« categorie ») et porte son « aide » ; /io les publie tels quels et GET /v1/workflows publie le vocabulaire : un lanceur regroupe dans cet ordre sans rien connaître des champs. Antoine, 2026-09-17 : « chacun porte une réconciliation concrète, standardisée par catégorie »."
 }

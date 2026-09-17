@@ -13,7 +13,9 @@
         "blanc-casse",
         "gris-perle"
       ],
-      "libelle": "Papier du livre"
+      "libelle": "Papier du livre",
+      "categorie": "matiere",
+      "aide": "La teinte des pages du livre : ivoire (le défaut), crème, blanc cassé, gris perle."
     }
   },
   "roles": {

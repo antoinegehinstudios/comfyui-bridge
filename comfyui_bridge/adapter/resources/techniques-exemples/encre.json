@@ -10,22 +10,12 @@
       "defaut": "washi",
       "options": [
         "washi",
-        "washi-sans-lampe",
         "sepia",
         "gris-atelier"
       ],
-      "libelle": "Fond de départ"
-    },
-    "ambiance": {
-      "type": "COMBO",
-      "defaut": "lanterne",
-      "options": [
-        "lanterne",
-        "chandelle",
-        "atelier",
-        "selon-le-fond"
-      ],
-      "libelle": "Ambiance"
+      "libelle": "Papier",
+      "categorie": "matiere",
+      "aide": "Le papier sur lequel l'encre se pose : sa teinte, son grain, sa vignette. La lumière, elle, vient de l'ambiance."
     },
     "encre": {
       "type": "COMBO",
@@ -35,45 +25,32 @@
         "trait-sec",
         "encre-dense"
       ],
-      "libelle": "Style de tracé"
+      "libelle": "Style de tracé",
+      "categorie": "matiere",
+      "aide": "Comment l'encre restitue l'image : lavis (le défaut), trait sec, encre dense."
     },
     "negatif": {
       "type": "COMBO",
       "defaut": "non",
       "options": [
         "non",
-        "oui",
-        "selon-l-oeuvre"
+        "oui"
       ],
-      "libelle": "Négatif (l'encre inverse la lumière)"
+      "libelle": "Négatif",
+      "categorie": "matiere",
+      "aide": "« Non » (le défaut) : l'encre est ce qui est sombre dans l'œuvre — une nuit se peint en lavis noir autour d'une lune laissée en réserve. « Oui » : l'encre inverse la lumière, ce qui est clair s'encre."
     },
-    "rendu": {
+    "ambiance": {
       "type": "COMBO",
-      "defaut": "ink-bleed",
+      "defaut": "lanterne",
       "options": [
-        "ink-bleed",
-        "classique",
-        "front-organique"
+        "lanterne",
+        "chandelle",
+        "atelier"
       ],
-      "libelle": "Rendu"
-    },
-    "bords": {
-      "type": "COMBO",
-      "defaut": "fondus",
-      "options": [
-        "fondus",
-        "francs"
-      ],
-      "libelle": "Bords de l'œuvre"
-    },
-    "conduite": {
-      "type": "COMBO",
-      "defaut": "le plan",
-      "options": [
-        "le plan",
-        "la camera"
-      ],
-      "libelle": "Qui commande le déroulement"
+      "libelle": "Ambiance",
+      "categorie": "lumiere",
+      "aide": "Sous quelle lumière la page se dessine. « Lanterne » (le défaut) : une flaque chaude qui dérive lentement, une flamme qui respire, le grain du papier qui accroche les rayons rasants. « Chandelle » : la même flamme, plus étroite, plus vive, plus chaude. « Lumière du jour » : la page nue, sans lampe ni relief. La conclusion reprend la même lumière à la seconde où le déroulement s'arrête."
     }
   },
   "roles": {
@@ -85,11 +62,8 @@
         "61.fond": "$fond",
         "61.ambiance": "$ambiance",
         "61.encre": "$encre",
-        "61.rendu": "$rendu",
-        "61.conduite": "$conduite",
         "61.contemplation_s": "$contemplation_s",
-        "61.negatif": "$negatif",
-        "61.bords": "$bords"
+        "61.negatif": "$negatif"
       }
     },
     "conclusion": {
@@ -221,6 +195,7 @@
     "les_reglages_propres": "Fond, ambiance, style de tracé, négatif et rendu n'ont de sens que sous l'encre : ils vivent ici. Les réglages COMMUNS (durée, contemplation, conclusion, appel final et sa police, structure du récit, approche, bords, conduite, format, graine) restent dans la chaîne — ce sont ceux du PLAN, pas de la peinture.",
     "les_defauts_sont_ceux_du_socle": "Les défauts de cette technique sont ceux des vidéos ink livrées le 2026-09-15 à midi (« c'est parfait — assure cette standardisation ») : washi, lanterne, lavis, non, ink-bleed. Le témoin `tests/test_socle_ink.py` les épingle : les changer est une décision à écrire, jamais un accident.",
     "la_conduite_est_commune": "« conduite » est un champ de la CHAÎNE, avec ses deux valeurs (« le plan », « la camera ») : le rôle « deroulement » de l'encre la passe au nœud (61.conduite). Une autre technique qui ne saurait pas s'en servir ne la reçoit simplement pas — elle n'a pas à faire rétrécir la liste d'un champ commun.",
-    "les_bords_la_conduite_et_l_appel": "2026-09-16 au soir : « bords » et « conduite » sont des réglages de la peinture, pas du plan — ils vivent ici. L'appel final est un rôle que l'encre tient avec son graphe d'écriture (le texte s'écrit à l'encre sur les dernières images de la conclusion). Et l'encre se dit « par_defaut » : c'est la technique qui s'ouvre quand l'appelant n'en nomme aucune, le plan ne la nomme pas."
+    "les_bords_la_conduite_et_l_appel": "2026-09-16 au soir : « bords » et « conduite » sont des réglages de la peinture, pas du plan — ils vivent ici. L'appel final est un rôle que l'encre tient avec son graphe d'écriture (le texte s'écrit à l'encre sur les dernières images de la conclusion). Et l'encre se dit « par_defaut » : c'est la technique qui s'ouvre quand l'appelant n'en nomme aucune, le plan ne la nomme pas.",
+    "champs_standardises": "2026-09-17 : ses champs portent leur catégorie et leur aide ; « rendu », « bords » et « conduite » ne sont plus exposés (leurs options « d'avant » et « essai » faisaient des fantômes : le graphe porte en littéral ink-bleed, fondus, le plan, et le nœud garde ses défauts d'identité), « washi-sans-lampe » et l'ambiance « selon-le-fond » de même ; « negatif » n'offre plus que oui et non."
   }
 }

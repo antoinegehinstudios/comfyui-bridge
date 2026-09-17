@@ -4,7 +4,7 @@
   "libelle": "Brume, refermée à l'encre",
   "resume": "L'image est là, entière et en couleur, sous une nappe de brume qui se dissipe le long du récit ; puis c'est l'encre qui referme la page sur elle, et l'appel s'écrit à l'encre. Une technique d'ESSAI : elle n'écrit rien de neuf, elle recompose deux façons de tenir les rôles — la preuve qu'une technique de plus est un fichier de plus, sans une ligne de chaîne ni de code.",
   "expose": {
-    "fond": {
+    "brume": {
       "type": "COMBO",
       "defaut": "brume-dorée",
       "options": [
@@ -12,7 +12,9 @@
         "brume-blanche",
         "brume-grise"
       ],
-      "libelle": "Teinte de la brume"
+      "libelle": "Teinte de la brume",
+      "categorie": "matiere",
+      "aide": "La nappe qui couvre l'œuvre et se dissipe le long du récit : blanche (un jour pâle, le défaut), grise (un temps couvert), dorée (une lanterne dans la brume)."
     },
     "papier": {
       "type": "COMBO",
@@ -22,16 +24,9 @@
         "washi",
         "gris-atelier"
       ],
-      "libelle": "Papier de la fermeture"
-    },
-    "bords": {
-      "type": "COMBO",
-      "defaut": "fondus",
-      "options": [
-        "fondus",
-        "francs"
-      ],
-      "libelle": "Bords de l'œuvre"
+      "libelle": "Papier de la fermeture",
+      "categorie": "matiere",
+      "aide": "Le papier sur lequel l'encre referme la page : la fermeture à l'encre veut un papier, pas une teinte de brume."
     }
   },
   "roles": {
@@ -40,9 +35,8 @@
       "inputs": {
         "61.markers_json": "$analyse.recit.markers_json",
         "61.direction_json": "$intention.recit.direction_json",
-        "61.fond": "$fond",
-        "61.contemplation_s": "$contemplation_s",
-        "61.bords": "$bords"
+        "61.fond": "$brume",
+        "61.contemplation_s": "$contemplation_s"
       }
     },
     "conclusion": {

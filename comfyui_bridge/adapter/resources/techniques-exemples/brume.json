@@ -4,7 +4,7 @@
   "libelle": "Brume",
   "resume": "L'image est déjà là, entière et en couleur, sous une nappe de bruit fractal animé qui se dissipe selon le chemin du récit ; sous la brume elle est floue et désaturée d'autant qu'elle est couverte.",
   "expose": {
-    "fond": {
+    "brume": {
       "type": "COMBO",
       "defaut": "brume-blanche",
       "options": [
@@ -12,16 +12,9 @@
         "brume-grise",
         "brume-dorée"
       ],
-      "libelle": "Teinte de la brume"
-    },
-    "bords": {
-      "type": "COMBO",
-      "defaut": "fondus",
-      "options": [
-        "fondus",
-        "francs"
-      ],
-      "libelle": "Bords de l'œuvre"
+      "libelle": "Teinte de la brume",
+      "categorie": "matiere",
+      "aide": "La nappe qui couvre l'œuvre et se dissipe le long du récit : blanche (un jour pâle, le défaut), grise (un temps couvert), dorée (une lanterne dans la brume)."
     }
   },
   "roles": {
@@ -30,15 +23,14 @@
       "inputs": {
         "61.markers_json": "$analyse.recit.markers_json",
         "61.direction_json": "$intention.recit.direction_json",
-        "61.fond": "$fond",
-        "61.contemplation_s": "$contemplation_s",
-        "61.bords": "$bords"
+        "61.fond": "$brume",
+        "61.contemplation_s": "$contemplation_s"
       }
     },
     "conclusion": {
       "workflow": "video-reveal-brume-closing",
       "inputs": {
-        "6.fond": "$fond",
+        "6.fond": "$brume",
         "6.depart_s": "$deroulement.recit.duree_retenue_s",
         "6.appel_texte": "$cta",
         "6.fermeture_json": "$deroulement.recit.fermeture_json"
@@ -123,6 +115,7 @@
     "ce_que_le_plan_tenu_mesure": "Les mêmes grandeurs que sous l'encre quand elles ont un sens, mesurées sur la CARTE DE DENSITÉ que le nœud vient de rendre, jamais promises : l'accroche vue à 2,5 s (part de sa boîte dont la brume est descendue sous la moitié), le climax hors du cadre d'ouverture et tenu, la caméra qui glisse sans saccade, la LISIBILITÉ (part de la boîte et de son halo passée sous 0,3 de densité à la fin de sa tenue), l'ORDRE D'ARRIVÉE (l'heure médiane de dissipation croît-elle dans l'ordre du plan), le CŒUR EN DERNIER, et aucun temps supprimé. Le nœud, lui, ne supprime rien : un temps hors de l'image ou incadrable REFUSE le plan avec sa raison. DEUX GRANDEURS DE PLUS sont rendues et ne sont pas encore contrôlées ici, parce qu'elles séparent ce que la peinture a fait de ce que le plan lui a demandé d'impossible : « boite_dissipee_min » (la BOÎTE de chaque temps dégagée à son heure — le contrat irréductible, qu'aucune géométrie n'excuse) et « lisibilite_min_hors_dispute » (la lisibilité des seuls temps dont un temps plus tardif ne revendique pas déjà le voisinage ; « temps_au_voisinage_dispute » les nomme).",
     "la_conduite_ne_lui_est_pas_passee": "« conduite » est un champ COMMUN de la chaîne, avec ses deux valeurs — mais le rôle « deroulement » de la brume ne le reçoit pas : la brume ne sait se dissiper que le long d'un chemin narratif, et son nœud porte « le plan » en littéral. Lui passer le champ aurait obligé la chaîne à rétrécir la liste d'un champ commun pour une technique, c'est-à-dire à reprendre la dépendance qu'on vient de lui retirer. Ce qu'un appelant choisit là n'est donc pas appliqué sous la brume, et la passerelle le DIT au journal.",
     "ni_encre_ni_rendu": "Ni « encre », ni « rendu », ni « ambiance », ni « negatif » : la brume n'a pas de trait, pas de lumière de page, rien à inverser. Le champ « fond » y choisit la TEINTE de la brume (blanche, grise, dorée) — c'est le même nom que sous l'encre, avec d'autres valeurs, et c'est la technique choisie qui dit lesquelles (« selon_options » dans /io).",
-    "les_bords_et_l_appel": "2026-09-16 au soir : « bords » est un réglage de la peinture, il vit ici (la brume les lit comme l'encre) ; « conduite », que la brume ne lit pas, n'est plus exposé sous elle. L'appel final est un rôle qu'elle tient avec le même graphe d'écriture à l'encre que l'encre — une autre technique pourrait écrire autrement."
+    "les_bords_et_l_appel": "2026-09-16 au soir : « bords » est un réglage de la peinture, il vit ici (la brume les lit comme l'encre) ; « conduite », que la brume ne lit pas, n'est plus exposé sous elle. L'appel final est un rôle qu'elle tient avec le même graphe d'écriture à l'encre que l'encre — une autre technique pourrait écrire autrement.",
+    "champs_standardises": "2026-09-17 : le champ s'appelle « brume » (« fond » désignait à la fois le papier de l'encre et la teinte de la nappe : un même nom pour deux choses) ; il porte sa catégorie et son aide ; « bords » n'est plus exposé (le graphe porte « fondus » en littéral)."
   }
 }

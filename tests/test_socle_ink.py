@@ -65,19 +65,35 @@ DEFAUTS_DU_PLAN = {
 }
 
 # LES DÉFAUTS DU STYLE INK — ceux des vidéos livrées le 2026-09-15 à midi.
-DEFAUTS_INK = {"fond": "washi", "ambiance": "lanterne", "encre": "lavis",
-               "negatif": "non", "rendu": "ink-bleed",
-               "bords": "fondus", "conduite": "le plan"}
+# DÉCISION ÉCRITE, 2026-09-17 (Antoine : « les champs doivent être nettoyés
+# pour enlever ceux en doublon ou fantômes ») : « rendu », « bords » et
+# « conduite » ne sont plus EXPOSÉS — leurs autres options étaient « le rendu
+# d'avant » ou « essai » —, ni « washi-sans-lampe », ni l'ambiance
+# « selon-le-fond », ni le négatif « selon-l-oeuvre ». Ce que le mode emploie
+# reste en LITTÉRAL dans le graphe (LITTERAUX_DU_GRAPHE) et les nœuds gardent
+# leurs défauts d'identité : le rendu livré le 15 à midi n'a pas bougé.
+DEFAUTS_INK = {"fond": "washi", "ambiance": "lanterne", "encre": "lavis", "negatif": "non"}
+LITTERAUX_DU_GRAPHE = {"rendu": "ink-bleed", "conduite": "le plan", "bords": "fondus"}
 
 BORNES_DU_PLAN = {"contemplation_s": (3, 5), "conclusion_s": (0, 30), "duration_s": (5, 79)}
 OPTIONS_INK = {
-    "conduite": ["le plan", "la camera"], "bords": ["fondus", "francs"],
-    "fond": ["washi", "washi-sans-lampe", "sepia", "gris-atelier"],
-    "ambiance": ["lanterne", "chandelle", "atelier", "selon-le-fond"],
+    "fond": ["washi", "sepia", "gris-atelier"],
+    "ambiance": ["lanterne", "chandelle", "atelier"],
     "encre": ["lavis", "trait-sec", "encre-dense"],
-    "negatif": ["non", "oui", "selon-l-oeuvre"],
-    "rendu": ["ink-bleed", "classique", "front-organique"],
+    "negatif": ["non", "oui"],
 }
+# LE VOCABULAIRE DES CATÉGORIES DE CHAMPS, déclaré une fois (réconciliation),
+# dans cet ordre ; chaque champ exposé en nomme une et porte son aide.
+CATEGORIES_DE_CHAMPS = ["oeuvre", "recit", "format", "technique", "matiere", "lumiere", "avance"]
+CATEGORIES_DU_PLAN = {
+    "image": "oeuvre",
+    "duration_s": "recit", "contemplation_s": "recit", "conclusion_s": "recit",
+    "cta": "recit", "cta_police": "recit", "style_narratif": "recit", "style_approche": "recit",
+    "width": "format", "height": "format", "fps": "format",
+    "seed": "avance", "technique": "technique",
+}
+CATEGORIES_DE_L_ENCRE = {"fond": "matiere", "encre": "matiere", "negatif": "matiere",
+                         "ambiance": "lumiere"}
 
 # CE QUE CHAQUE ÉTAPE DU PLAN APPELLE, ET CE QU'ELLE REÇOIT DE L'AMONT.
 CONTRAT_DU_PLAN = {
@@ -97,9 +113,7 @@ CONTRAT_DE_L_ENCRE = {
         "61.markers_json": "$analyse.recit.markers_json",
         "61.direction_json": "$intention.recit.direction_json",
         "61.fond": "$fond", "61.ambiance": "$ambiance", "61.encre": "$encre",
-        "61.rendu": "$rendu", "61.conduite": "$conduite",
-        "61.contemplation_s": "$contemplation_s", "61.negatif": "$negatif",
-        "61.bords": "$bords"}),
+        "61.contemplation_s": "$contemplation_s", "61.negatif": "$negatif"}),
     "conclusion": ("video-reveal-closing", {
         "6.fond": "$fond", "6.ambiance": "$ambiance",
         "6.depart_s": "$deroulement.recit.duree_retenue_s",
@@ -173,13 +187,18 @@ def test_les_defauts_communs_sont_ceux_du_plan(ink):
     approche, conduite, bords, format, graine — et le choix de la technique, qui
     s'ouvre sur l'encre."""
     expose = ink["expose"]
-    assert expose["image"] == {"media": "image", "requis": True, "libelle": "L'image à révéler"}
+    assert {k: expose["image"][k] for k in ("media", "requis", "libelle", "categorie")} == {
+        "media": "image", "requis": True, "libelle": "L'image à révéler", "categorie": "oeuvre"}
     defauts = {k: v["defaut"] for k, v in expose.items() if k not in ("image", "technique")}
     assert defauts == DEFAUTS_DU_PLAN
     for champ, (mini, maxi) in BORNES_DU_PLAN.items():
         assert (expose[champ]["min"], expose[champ]["max"]) == (mini, maxi), champ
     assert "conduite" not in expose and "bords" not in expose        # chez les techniques
-    assert expose["style_narratif"]["options_depuis"] == {"menu": "style_narratif"}
+    # DÉCISION ÉCRITE, 2026-09-17 : la structure du récit ne liste que celles
+    # qui portent une accroche — le plan l'exige (plan_valide), et dix-neuf
+    # structures du catalogue sur vingt et une faisaient échouer le mode.
+    assert expose["style_narratif"]["options_depuis"] == {"menu": "style_narratif",
+                                                          "requiert": {"temps": "hook"}}
     assert expose["style_approche"]["options_depuis"] == {"menu": "style_approche"}
     # La liste des techniques n'est écrite nulle part : elle est celle des fichiers.
     assert expose["technique"]["options_depuis"] == {"techniques": True}
@@ -257,12 +276,43 @@ def test_l_encre_tient_les_roles_du_plan(technique_encre):
 def test_les_defauts_de_l_encre_sont_ceux_du_style_livre(technique_encre):
     """Tous les réglages par défaut de l'encre sont ceux du rendu livré le
     2026-09-15 : cette base ne change pas. Un style de plus est une OPTION de
-    plus, jamais un défaut de moins."""
+    plus, jamais un défaut de moins — et depuis le 2026-09-17, une option
+    « d'avant » ou « essai » n'est plus une option : ce que le mode n'emploie
+    pas ne s'expose pas (voir DEFAUTS_INK)."""
     expose = technique_encre["expose"]
     assert {k: v["defaut"] for k, v in expose.items()} == DEFAUTS_INK
     for champ, options in OPTIONS_INK.items():
         assert expose[champ]["options"][0] == options[0], champ      # le défaut en tête
-        assert set(expose[champ]["options"]) >= set(options), champ  # rien de retiré
+        assert expose[champ]["options"] == options, champ           # ni plus, ni moins
+
+
+def test_chaque_champ_porte_sa_categorie_et_son_aide(ink, technique_encre):
+    """Antoine, 2026-09-17 : « chacun porte une réconciliation concrète, en
+    standardisant par catégorie ». Chaque champ exposé — par le plan comme par
+    chaque technique — nomme sa catégorie dans le vocabulaire déclaré une fois,
+    et dit ce qu'il fait. Les aides ne vivent plus sur l'entrée de
+    réconciliation du mode : six d'entre elles y parlaient de champs que le plan
+    n'expose plus (mesuré)."""
+    extrait = json.loads((EXEMPLES / "reconciliation.extrait.json").read_text(encoding="utf-8"))
+    assert [c["valeur"] for c in extrait["categories_de_champs"]] == CATEGORIES_DE_CHAMPS
+    assert all(c["titre"] for c in extrait["categories_de_champs"])
+    assert "aides" not in extrait["workflows"]["video-revelation"]
+    assert "encre" not in extrait["workflows"]["video-revelation"]["description"].lower()
+    for nom, champ in ink["expose"].items():
+        assert champ.get("categorie") == CATEGORIES_DU_PLAN[nom], nom
+        assert champ.get("aide", "").strip(), nom
+    assert {k: v["categorie"] for k, v in technique_encre["expose"].items()} == CATEGORIES_DE_L_ENCRE
+    for fichier in sorted(TECHNIQUES.glob("*.json")):
+        expose = json.loads(fichier.read_text(encoding="utf-8"))["expose"]
+        for nom, champ in expose.items():
+            assert champ.get("categorie") in CATEGORIES_DE_CHAMPS, (fichier.name, nom)
+            assert champ.get("aide", "").strip(), (fichier.name, nom)
+    # Un même nom ne désigne plus deux choses : la teinte de la brume a son nom.
+    brume = json.loads((TECHNIQUES / "brume.json").read_text(encoding="utf-8"))
+    assert "fond" not in brume["expose"] and "brume" in brume["expose"]
+    assert "rendu" not in extrait["menus"] and "conduite" not in extrait["menus"] \
+        and "bords" not in extrait["menus"]
+    assert list(extrait["menus"]["fond"]["libelles"]) == OPTIONS_INK["fond"]
 
 
 def test_l_encre_porte_les_controles_de_la_peinture(technique_encre):
@@ -307,10 +357,11 @@ def test_le_graphe_local_du_deroulement_porte_les_memes_defauts():
         pytest.skip("pas de _data/workflows sur ce poste")
     noeud = json.loads((graphes / "video-reveal-cinematic-dirige.json").read_text(encoding="utf-8"))["61"]
     assert noeud["class_type"] == "RevealCinematic"
-    for cle in ("fond", "ambiance", "encre", "rendu", "negatif"):
-        assert noeud["inputs"][cle] == DEFAUTS_INK[cle], cle
-    assert noeud["inputs"]["conduite"] == DEFAUTS_INK["conduite"]
-    assert noeud["inputs"]["bords"] == DEFAUTS_INK["bords"]
+    for cle, valeur in DEFAUTS_INK.items():
+        assert noeud["inputs"][cle] == valeur, cle
+    # Ce que le mode emploie sans plus l'exposer : en littéral dans le graphe.
+    for cle, valeur in LITTERAUX_DU_GRAPHE.items():
+        assert noeud["inputs"][cle] == valeur, cle
     assert noeud["inputs"]["contemplation_s"] == DEFAUTS_DU_PLAN["contemplation_s"]
     fermeture = json.loads((graphes / "video-reveal-closing.json").read_text(encoding="utf-8"))["6"]
     assert fermeture["class_type"] == "InkClosing"
