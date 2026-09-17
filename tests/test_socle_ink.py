@@ -328,9 +328,15 @@ def test_l_encre_porte_les_controles_de_la_peinture(technique_encre):
     assert [c["id"] for c in lue.controles["plan_tenu"]] == CONTROLES_PLAN_TENU
     # Et ce que l'encre exige du PLAN, avant de peindre : un quart de temps
     # tracés au moins — la part des tracés que l'intention écrit dans son récit.
-    assert lue.controles["plan"] == ({"id": "le_plan_porte_des_traits",
-                                      "valeur": "$intention.recit.part_des_traces",
-                                      "op": "gte", "attendu": 0.25},)
+    assert lue.controles["plan"] == (
+        {"id": "le_plan_porte_des_traits", "valeur": "$intention.recit.part_des_traces",
+         "op": "gte", "attendu": 0.25},
+        # …et une accroche que le temps suivant ne recouvre pas : nichée dans
+        # lui, sa saignée s'arrête à sa porte dès l'ouverture (job 9b554fd9,
+        # vingt-cinq minutes de peinture avant le refus).
+        {"id": "l_accroche_n_est_pas_dans_le_temps_suivant",
+         "valeur": "$intention.recit.accroche_couverte_par_le_suivant",
+         "op": "lte", "attendu": 0.5})
     # Chaque technique dit ce qu'elle exige du plan, fût-ce rien (liste vide).
     for fichier in sorted(TECHNIQUES.glob("*.json")):
         autre = noyau.lire_technique(json.loads(fichier.read_text(encoding="utf-8")), fichier.stem)

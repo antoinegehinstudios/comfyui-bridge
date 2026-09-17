@@ -1117,10 +1117,14 @@ seulement : sous elle, « qui commande » n'existe pas.
   que la technique porte sous ce nom — c'est ainsi que `plan_valide` juge le
   plan **avant de peindre** aussi sur ce que la technique exige de lui (l'encre
   déclare `plan` : un quart de temps tracés au moins,
-  `$intention.recit.part_des_traces` ; une technique qui n'exige rien déclare
-  `"plan": []`). Mesuré le 2026-09-17 : un plan à un tracé sur six temps avait
-  été peint trente-deux minutes en 720p avant que
-  `des_traits_et_pas_que_des_blocs` le refuse.
+  `$intention.recit.part_des_traces`, et une accroche que le temps suivant ne
+  recouvre pas à plus de moitié, `$intention.recit.accroche_couverte_par_le_suivant`
+  ; une technique qui n'exige rien déclare `"plan": []`). Mesuré le
+  2026-09-17 : un plan à un tracé sur six temps avait été peint trente-deux
+  minutes en 720p avant que `des_traits_et_pas_que_des_blocs` le refuse, et une
+  accroche nichée dans le temps suivant vingt-cinq minutes avant
+  `l_accroche_est_vue_a_2_5_s` (la saignée de l'encre s'arrête à la porte du
+  temps suivant dès l'ouverture).
 * Les **renvois** d'une technique se résolvent avec les champs de la chaîne, les
   siens et les résultats des étapes précédentes, comme dans une chaîne ; un rôle
   absent, une liste de contrôles absente ou un renvoi qui ne désigne rien sont

@@ -95,7 +95,10 @@ un RÔLE et la technique qui le tient (`"role"` + `"technique": "$technique"`), 
 `plan_tenu` prend la liste de contrôles de cette technique ; `plan_valide` joint
 aux dix contrôles du plan la liste `plan` de la technique (ce qu'elle exige du
 plan se juge AVANT de peindre — 2026-09-17, trente-deux minutes perdues sur un
-plan à un tracé sur six ; une technique qui n'exige rien déclare `"plan": []`).
+plan à un tracé sur six, vingt-cinq sur une accroche nichée dans le temps
+suivant ; l'encre exige `part_des_traces` ≥ 0,25 et
+`accroche_couverte_par_le_suivant` ≤ 0,5 ; une technique qui n'exige rien
+déclare `"plan": []`).
 Quel graphe tient chaque rôle, ses réglages propres (`fond`, `encre`, `ambiance`,
 `negatif`… :
 ce que la PEINTURE lit ne vit pas dans le plan) et ses contrôles vivent dans
