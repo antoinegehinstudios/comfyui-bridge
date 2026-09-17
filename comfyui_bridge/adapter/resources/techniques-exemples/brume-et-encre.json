@@ -58,6 +58,7 @@
     }
   },
   "controles": {
+    "plan": [],
     "plan_tenu": [
       {
         "id": "l_accroche_est_vue_a_2_5_s",

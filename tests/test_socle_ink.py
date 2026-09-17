@@ -248,7 +248,12 @@ def test_les_controles_communs_gardent_le_plan_et_le_livrable(ink):
     """Le plan se juge avant de peindre, et le livrable après le montage : ces
     deux-là ne dépendent d'aucune technique et restent dans la chaîne."""
     etapes = {e["id"]: e for e in ink["etapes"]}
-    assert [c["id"] for c in etapes["plan_valide"]["verifier"]] == CONTROLES_PLAN_VALIDE
+    plan = etapes["plan_valide"]["verifier"]
+    assert [c["id"] for c in plan["controles"]] == CONTROLES_PLAN_VALIDE
+    # …ET ce que la technique choisie exige du plan, jugé au même moment :
+    # un plan à un tracé sur six temps a été peint trente-deux minutes en 720p
+    # avant que l'encre le refuse (2026-09-17, job 464e6a4c).
+    assert (plan["technique"], plan["controles_de_la_technique"]) == ("$technique", "plan")
     assert [c["id"] for c in etapes["controle"]["verifier"]] == [
         "le_montage_a_ses_parts", "livrable_pese"]
     # Deux parts (sans appel) ou trois (avec) : le contrôle dit l'un ET l'autre
@@ -321,6 +326,16 @@ def test_l_encre_porte_les_controles_de_la_peinture(technique_encre):
     autre technique en mesure d'autres."""
     lue = noyau.lire_technique(technique_encre, "encre")
     assert [c["id"] for c in lue.controles["plan_tenu"]] == CONTROLES_PLAN_TENU
+    # Et ce que l'encre exige du PLAN, avant de peindre : un quart de temps
+    # tracés au moins — la part des tracés que l'intention écrit dans son récit.
+    assert lue.controles["plan"] == ({"id": "le_plan_porte_des_traits",
+                                      "valeur": "$intention.recit.part_des_traces",
+                                      "op": "gte", "attendu": 0.25},)
+    # Chaque technique dit ce qu'elle exige du plan, fût-ce rien (liste vide).
+    for fichier in sorted(TECHNIQUES.glob("*.json")):
+        autre = noyau.lire_technique(json.loads(fichier.read_text(encoding="utf-8")), fichier.stem)
+        assert "plan" in autre.controles, fichier.name
+        assert (autre.controles["plan"] == ()) == (fichier.stem != "encre"), fichier.name
 
 
 def test_la_chaine_et_ses_techniques_tiennent_ensemble(ink):

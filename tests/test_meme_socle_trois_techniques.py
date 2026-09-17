@@ -101,7 +101,8 @@ RECIT_CULTURE = {"culture_json": json.dumps({"identite": "oeuvre-inedite"}),
 RECIT_INTENTION = {"hook": "la lanterne", "climax": "le visage", "hook_recouvre_climax": False,
                    "nb_temps": 3, "hook_aire": 0.028, "hook_est_vide": False,
                    "climax_est_central": True, "climax_coeur": "oe.p3", "trajet_retours": 0,
-                   "temps_dans_l_approche": True, "direction_json": DIRECTION}
+                   "temps_dans_l_approche": True, "part_des_traces": 0.5,
+                   "direction_json": DIRECTION}
 RECIT_APPEL = {"images_reprises": IMAGES_REPRISES, "images_ecrites": 10}
 
 
@@ -600,7 +601,11 @@ def test_les_controles_du_plan_sont_les_memes_et_ceux_de_la_peinture_sont_a_la_t
     sont pas les mêmes."""
     tenus = {}
     for nom, (job, _) in productions.items():
-        for ident, attendu in (("plan_valide", CONTROLES_PLAN_VALIDE),
+        # Le plan se juge sur les dix contrôles de la chaîne PUIS sur ce que la
+        # technique exige de lui — l'encre, un quart de temps tracés ; les deux
+        # autres, rien (2026-09-17).
+        du_plan = ["le_plan_porte_des_traits"] if nom == "encre" else []
+        for ident, attendu in (("plan_valide", CONTROLES_PLAN_VALIDE + du_plan),
                                ("controle", ["le_montage_a_ses_parts", "livrable_pese"])):
             lignes = _etape(job, ident)["resultat"]["controles"]
             assert [c["id"] for c in lignes] == attendu and all(c["ok"] for c in lignes), (nom, ident)

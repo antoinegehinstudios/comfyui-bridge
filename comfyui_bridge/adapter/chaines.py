@@ -512,12 +512,16 @@ class RunnerDeChaines:
 
     def _verifier(self, etape: noyau.Etape, valeurs: dict[str, Any],
                   resultats: dict[str, Any], technique=None) -> dict[str, Any]:
-        controles = etape.params
+        # Les contrôles de la CHAÎNE, puis ceux que la TECHNIQUE choisie porte
+        # sous le nom demandé : deux peintures ne se jugent pas sur les mêmes
+        # grandeurs, et la chaîne n'a pas à porter les deux — mais le plan se
+        # juge AVANT de peindre aussi sur ce que la technique exige de lui
+        # (mesuré le 2026-09-17 : un plan à un tracé sur six a coûté trente-deux
+        # minutes de peinture avant d'être refusé par l'encre).
+        controles = list(etape.controles_propres)
         if etape.controles_nommes is not None:
-            # La liste appartient à la technique : deux peintures ne se jugent
-            # pas sur les mêmes grandeurs, et la chaîne n'a pas à porter les deux.
-            controles = technique.controles[etape.controles_nommes]
-        lignes = noyau.controler(list(controles), valeurs, resultats)
+            controles += list(technique.controles[etape.controles_nommes])
+        lignes = noyau.controler(controles, valeurs, resultats)
         faux = [l for l in lignes if not l["ok"]]
         if faux:
             dit = " ; ".join(f"{l['id']} : mesuré {l['mesure']!r}, attendu "

@@ -209,6 +209,117 @@ def test_un_renvoi_qui_ne_designe_rien_est_refuse_quand_les_deux_sont_lus():
         noyau.verifier_techniques(chaine, {"pressee": vers_l_aval})
 
 
+# -- le plan se juge aussi sur ce que la technique exige de lui ----------------
+
+# La même chaîne, dont l'étape de contrôle JOINT sa propre liste à celle que la
+# technique porte sous le nom demandé.
+CHAINE_QUI_JUGE_AUSSI_POUR_LA_TECHNIQUE = {
+    **CHAINE_A_TECHNIQUES, "resume": "un plan jugé aussi sur ce que la technique exige",
+    "etapes": [
+        CHAINE_A_TECHNIQUES["etapes"][0],
+        {"id": "tenue", "verifier": {
+            "controles": [{"id": "la_peinture_est_la", "valeur": "$peinture.livrable",
+                           "op": "exists"}],
+            "technique": "$technique", "controles_de_la_technique": "tenue"}},
+    ],
+}
+TECHNIQUE_MUETTE = {**TECHNIQUE_VOILE, "controles": {"tenue": []}}          # n'exige rien
+TECHNIQUE_EXIGEANTE = {
+    **TECHNIQUE_VOILE, "technique": "exigeante", "libelle": "Exigeante",
+    "controles": {"tenue": [{"id": "cinq_temps_au_moins",
+                             "valeur": "$peinture.recit.temps_retenue",
+                             "op": "gte", "attendu": 5}]},
+}
+
+
+def test_une_etape_joint_ses_controles_a_ceux_que_la_technique_exige():
+    """2026-09-17 : un plan à un tracé sur six temps a été peint trente-deux
+    minutes en 720p avant que l'encre le refuse — la part des tracés se lit
+    dans le plan. Une étape « verifier » peut donc joindre sa liste à celle que
+    la technique choisie porte sous un nom ; une technique qui n'exige rien le
+    dit d'une liste VIDE (permise à elle seule : une étape qui ne juge rien n'a
+    pas à exister), et la lecture prouve toujours que chacune porte le nom."""
+    chaine = noyau.lire(CHAINE_QUI_JUGE_AUSSI_POUR_LA_TECHNIQUE)
+    etape = chaine.etapes[1]
+    assert etape.controles_nommes == "tenue"
+    assert [c["id"] for c in etape.controles_propres] == ["la_peinture_est_la"]
+    # Les deux formes d'avant ne bougent pas.
+    empruntee = noyau.lire(CHAINE_A_TECHNIQUES).etapes[1]
+    assert empruntee.controles_nommes == "tenue" and empruntee.controles_propres == ()
+    ecrite = noyau.lire({**CHAINE_A_TECHNIQUES, "etapes": [
+        CHAINE_A_TECHNIQUES["etapes"][0],
+        {"id": "tenue", "verifier": [{"id": "c", "valeur": "$peinture.livrable", "op": "exists"}]},
+    ]}).etapes[1]
+    assert ecrite.controles_nommes is None and [c["id"] for c in ecrite.controles_propres] == ["c"]
+
+    muette = noyau.lire_technique(TECHNIQUE_MUETTE)
+    assert muette.controles["tenue"] == ()
+    noyau.verifier_techniques(chaine, {"trait": noyau.lire_technique(TECHNIQUE_TRAIT),
+                                       "voile": muette})
+    sans = noyau.lire_technique({**TECHNIQUE_TRAIT, "technique": "sans", "controles": {}})
+    with pytest.raises(WorkflowMappingError, match="contrôles 'tenue'"):
+        noyau.verifier_techniques(chaine, {"sans": sans})
+
+    def _avec(verifier):
+        return {**CHAINE_A_TECHNIQUES, "etapes": [CHAINE_A_TECHNIQUES["etapes"][0],
+                                                  {"id": "tenue", "verifier": verifier}]}
+    liste = [{"id": "c", "valeur": "$peinture.livrable", "op": "exists"}]
+    with pytest.raises(WorkflowMappingError, match="liste de contrôles"):
+        noyau.lire(_avec([]))                                       # une étape ne juge pas « rien »
+    with pytest.raises(WorkflowMappingError, match="controles_de_la_technique"):
+        noyau.lire(_avec({"controles": liste, "technique": "$technique"}))
+    with pytest.raises(WorkflowMappingError, match="ne va qu'avec une liste"):
+        noyau.lire(_avec({"controles": "tenue", "technique": "$technique",
+                          "controles_de_la_technique": "tenue"}))
+    with pytest.raises(WorkflowMappingError, match="encore"):
+        noyau.lire(_avec({"controles": liste, "technique": "$technique",
+                          "controles_de_la_technique": "tenue", "encore": 1}))
+    with pytest.raises(WorkflowMappingError, match="opérateur"):
+        noyau.lire(_avec({"controles": [{"id": "c", "valeur": "$peinture.livrable"}],
+                          "technique": "$technique", "controles_de_la_technique": "tenue"}))
+
+
+def test_le_plan_est_refuse_sur_ce_que_la_technique_exige_avant_la_suite():
+    """En marche : l'étape juge la liste de la chaîne PUIS celle de la technique
+    choisie, dans cet ordre ; une technique muette laisse la seule liste de la
+    chaîne ; une technique exigeante arrête la chaîne à cette étape, en nommant
+    son contrôle."""
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="comfybridge_techniques_plan_"))
+    _ecrire(tmp, techniques=(TECHNIQUE_TRAIT, TECHNIQUE_MUETTE, TECHNIQUE_EXIGEANTE))
+    (tmp / "chaine-a-techniques.json").write_text(
+        json.dumps(CHAINE_QUI_JUGE_AUSSI_POUR_LA_TECHNIQUE, ensure_ascii=False), encoding="utf-8")
+    settings = Settings(comfy_backend="cli", dry_run=True,
+                        comfyui_base_url="http://127.0.0.1:9", comfyui_request_timeout_s=1,
+                        hermes_db=tmp / "hermes.sqlite3", comfy_output_dir=tmp / "out",
+                        hermes_mode="local", workflows_dir=tmp / "workflows",
+                        tranche_octets=0)
+    app = create_app(settings)
+    app.state.container.orchestrator._backend = BackendQuiLivre(settings.comfy_output_dir)
+    with TestClient(app) as client:
+        def _controles(job):
+            return [(c["id"], c["ok"]) for c in
+                    [e for e in job["etapes"] if e["id"] == "tenue"][0]["resultat"]["controles"]]
+
+        trait = _job(client, client.post("/v1/render", json={"workflow": "chaine-a-techniques",
+                                                             "technique": "trait"}))
+        assert trait["status"] == "succeeded", trait.get("problem")
+        assert _controles(trait) == [("la_peinture_est_la", True), ("le_trait_est_nomme", True)]
+
+        voile = _job(client, client.post("/v1/render", json={"workflow": "chaine-a-techniques",
+                                                             "technique": "voile"}))
+        assert voile["status"] == "succeeded", voile.get("problem")
+        assert _controles(voile) == [("la_peinture_est_la", True)]
+
+        refus = _job(client, client.post("/v1/render", json={"workflow": "chaine-a-techniques",
+                                                             "technique": "exigeante"}))
+        assert refus["status"] == "failed"
+        assert refus["problem"]["problem_kind"] == "controle-echoue"
+        assert refus["problem"]["etape"] == "tenue"
+        assert "cinq_temps_au_moins" in refus["problem"]["detail"]
+        assert [(c["id"], c["ok"]) for c in refus["problem"]["controles"]] == [
+            ("la_peinture_est_la", True), ("cinq_temps_au_moins", False)]
+
+
 # -- les valeurs ---------------------------------------------------------------
 
 

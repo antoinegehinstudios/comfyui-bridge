@@ -92,8 +92,12 @@ mention de brume ne doit pas être tenue par le workflow de la passerelle : cela
 veut dire qu'il porte une dépendance à la brume et devra se faire doublon pour
 faire autrement ») : ses étapes `deroulement`, `conclusion` et `appel` nomment
 un RÔLE et la technique qui le tient (`"role"` + `"technique": "$technique"`), et
-`plan_tenu` prend la liste de contrôles de cette technique. Quel graphe tient
-chaque rôle, ses réglages propres (`fond`, `ambiance`, `bords`, `conduite`… :
+`plan_tenu` prend la liste de contrôles de cette technique ; `plan_valide` joint
+aux dix contrôles du plan la liste `plan` de la technique (ce qu'elle exige du
+plan se juge AVANT de peindre — 2026-09-17, trente-deux minutes perdues sur un
+plan à un tracé sur six ; une technique qui n'exige rien déclare `"plan": []`).
+Quel graphe tient chaque rôle, ses réglages propres (`fond`, `encre`, `ambiance`,
+`negatif`… :
 ce que la PEINTURE lit ne vit pas dans le plan) et ses contrôles vivent dans
 `_data/techniques/<nom>.json` — une technique de plus est un FICHIER de plus,
 `video-revelation-brume` a disparu au profit de la technique `brume`, et le

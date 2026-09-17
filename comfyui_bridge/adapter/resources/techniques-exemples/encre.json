@@ -85,6 +85,14 @@
     }
   },
   "controles": {
+    "plan": [
+      {
+        "id": "le_plan_porte_des_traits",
+        "valeur": "$intention.recit.part_des_traces",
+        "op": "gte",
+        "attendu": 0.25
+      }
+    ],
     "plan_tenu": [
       {
         "id": "l_accroche_est_vue_a_2_5_s",
@@ -196,6 +204,7 @@
     "les_defauts_sont_ceux_du_socle": "Les défauts de cette technique sont ceux des vidéos ink livrées le 2026-09-15 à midi (« c'est parfait — assure cette standardisation ») : washi, lanterne, lavis, non, ink-bleed. Le témoin `tests/test_socle_ink.py` les épingle : les changer est une décision à écrire, jamais un accident.",
     "la_conduite_est_commune": "« conduite » est un champ de la CHAÎNE, avec ses deux valeurs (« le plan », « la camera ») : le rôle « deroulement » de l'encre la passe au nœud (61.conduite). Une autre technique qui ne saurait pas s'en servir ne la reçoit simplement pas — elle n'a pas à faire rétrécir la liste d'un champ commun.",
     "les_bords_la_conduite_et_l_appel": "2026-09-16 au soir : « bords » et « conduite » sont des réglages de la peinture, pas du plan — ils vivent ici. L'appel final est un rôle que l'encre tient avec son graphe d'écriture (le texte s'écrit à l'encre sur les dernières images de la conclusion). Et l'encre se dit « par_defaut » : c'est la technique qui s'ouvre quand l'appelant n'en nomme aucune, le plan ne la nomme pas.",
-    "champs_standardises": "2026-09-17 : ses champs portent leur catégorie et leur aide ; « rendu », « bords » et « conduite » ne sont plus exposés (leurs options « d'avant » et « essai » faisaient des fantômes : le graphe porte en littéral ink-bleed, fondus, le plan, et le nœud garde ses défauts d'identité), « washi-sans-lampe » et l'ambiance « selon-le-fond » de même ; « negatif » n'offre plus que oui et non."
+    "champs_standardises": "2026-09-17 : ses champs portent leur catégorie et leur aide ; « rendu », « bords » et « conduite » ne sont plus exposés (leurs options « d'avant » et « essai » faisaient des fantômes : le graphe porte en littéral ink-bleed, fondus, le plan, et le nœud garde ses défauts d'identité), « washi-sans-lampe » et l'ambiance « selon-le-fond » de même ; « negatif » n'offre plus que oui et non.",
+    "le_plan_porte_des_traits": "2026-09-17 : l'encre exige du PLAN un quart de temps tracés au moins — « des traits et pas que des blocs » se décide sur les gestes que l'intention écrit, avant de peindre ; le contrôle du même nom sur la peinture reste, il juge ce que l'encre en a fait."
   }
 }
