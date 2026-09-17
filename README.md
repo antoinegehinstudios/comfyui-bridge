@@ -1240,6 +1240,25 @@ graphes locaux quand ils sont là. Le paquet de nœuds a le sien
 (`tests/test_socle_ink.py` de `comfyui-ink-reveal`) pour les défauts des nœuds
 et les constantes du rendu.
 
+**La même base sous trois techniques, prouvée** (2026-09-17, Antoine :
+« prouve par des tests qui seraient drastiquement différents mais prouvent que
+la base est la même ») : `tests/test_meme_socle_trois_techniques.py` fait
+tourner la chaîne de référence et les techniques de référence (encre, brume,
+livre, et l'hybride) de bout en bout, avec la même demande, sur un moteur
+d'essai qui honore les tranches et ne sait rien des techniques. Identique chez
+toutes, mesuré : les onze étapes, l'amont (analyse, culture, intention), les
+réglages du run et les entrées du plan qui atteignent le nœud de rôle (relevé,
+plan, contemplation), trois tranches au déroulement, les contrôles du plan, un
+seul livrable de trois parts et de la même durée. Différent chez les trois,
+mesuré : les nœuds appelés, les réglages qui atteignent le nœud (le livre n'a
+pas une clé en commun avec les deux autres ; l'encre et la brume partagent un
+nom, « fond », pour d'autres valeurs), les grandeurs que « plan_tenu » juge. Le
+paquet de nœuds porte le jumeau sur les IMAGES (même nom de fichier) : même
+plan, même œuvre, trois rendus qui s'écartent de 0,12 à 0,24 par pixel à chaque
+instant du corps, et la même base tenue — 75 s livrées, temps nommés d'après la
+structure, ordre du plan, cœur en dernier, contemplation, contrat de fermeture,
+et trois conclusions qui prolongent leur page du même temps pour le même appel.
+
 ### Ce qui est agnostique est APPELÉ, jamais ancré
 
 Une étape qui ne regarde pas ce flux-ci n'a rien à faire dedans. Cinq
