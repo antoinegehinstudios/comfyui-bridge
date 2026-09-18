@@ -769,7 +769,14 @@ l'amorce, ensuite le segment » s'écrit sans sortir l'amorce de la boucle — e
 donc sans lui donner un run à part. Un appelant peut demander UN tour
 (`"tour": 2` dans la demande, avec `relais_<port>` = un fichier déposé) pour le
 rejouer seul. Un seul tour = un run ordinaire ; le jalon n'a plus lieu d'être
-dans une boucle à un run par tour, l'ordre étant celui des runs.
+dans une boucle à un run par tour, l'ordre étant celui des runs. Avec
+**`"phases": 2`**, chaque tour de boucle (un bloc) se déplie en deux runs
+successifs — le corps voit `bloc` et `phase` (dans `si` et dans `$calc`),
+`tour` numérote les runs — pour qu'un run n'ait à tenir que les modèles de
+sa phase : ce qui est posé une fois et cité par son nom (`$texte.x`,
+`$modele.x`) n'entre que dans les runs qui le citent. Chaque run n'écrit que
+les relais que son dernier fragment OFFRE ; un run qui n'en offrirait aucun
+est refusé.
 
 Ce qui reste dans un run : UN bloc et les modèles (39 Go ici) — et un voisin
 peut encore arriver PENDANT le run (mesuré le 2026-09-18, deux fois : un serveur
@@ -1348,13 +1355,22 @@ changer ici ; une entrée ne s'y écrit qu'après un rendu qui montre qu'elle
 tient (« des choix qui ne mentent pas »).
 
 La DURÉE ne tient pas dans un run : le montage emploie les **blocs de boucle**
-de la passerelle, **un run du moteur par tour** (voir « Un run par tour ») —
-au tour 0 l'amorce (la seule consigne, `MiniMaxH3ImageToVideo` sans
-`first_frame`), ensuite `segment-h3-texte` (le rendu, dirigé), qui reprend la
-DERNIÈRE IMAGE NATIVE du tour précédent par le relais `derniere_image`
-(écrite en PNG en queue du run, déposée chez le moteur, relue au début du
-suivant) ; puis `livrer` (la livraison du bloc). La passerelle attend la place
-avant chaque run et recolle les runs en copie de flux. Le nombre de blocs se
+de la passerelle, **deux runs du moteur par bloc** (voir « Un run par tour » :
+`un_run_par_tour`, `phases: 2`). La phase 0 ENCODE : au bloc 0 l'amorce (la
+seule consigne — ou texte + références), ensuite `segment-h3-encodage`, depuis
+la DERNIÈRE IMAGE NATIVE du bloc précédent relayée ; `DirectionDuBloc` puis le
+nœud MiniMax rendent un CONDITIONNEMENT et un LATENT, écrits en fichiers en
+queue du run (relais `conditionnement` — `SauverConditionnement` /
+`ChargerConditionnement`, paquet `comfyui-conditionnement-en-fichier` — et
+`latent` — `SauverLatent` / `ChargerLatent`, du même paquet : le latent MiniMax est EMBOÎTÉ, vidéo + son, ce que `SaveLatent` du cœur refuse). Ce run ne pose que l'encodeur de
+texte et le VAE. La phase 1 REND ET LIVRE : `rendu` relit les deux fichiers,
+pose le modèle (fragment `modele` : UNET, LoRA, ordonnanceur — le commun est
+séparé en `texte`, `modele`, `commun`, et chaque run ne pose que ce qu'il
+cite), échantillonne, décode ; puis `livrer`. Mesuré le 2026-09-18 : encodé
+dans le même prompt que le rendu, l'encodeur (Qwen3-VL 32B, 14,6 Go) restait
+en mémoire tout le bloc — 60 Go de commit pour le moteur seul, et la garde de
+place ne trouvait plus ses 6 Gio. La passerelle attend la place avant chaque
+run et recolle les runs en copie de flux. Le nombre de blocs se
 déduit de la durée demandée, en secondes natives : `pour { jusqu_a:
 duration_s, chaque: 5,125 s, deja: 0,042 s }` — un bloc fait 124 images à
 24 i/s, la borne basse de la plage d'entraînement du modèle (124 à 362).

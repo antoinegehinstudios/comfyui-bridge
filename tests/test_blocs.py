@@ -213,3 +213,30 @@ def test_un_run_par_tour_imbrique_ou_double_est_refuse():
               {"pour": _boucle_par_run(), "faire": [_segment("b")]}]
     with pytest.raises(IntentValidationError, match="deux boucles"):
         boucle_par_run(double)
+
+
+# -- phases -------------------------------------------------------------------
+
+def test_des_phases_deplient_chaque_bloc_en_plusieurs_tours_qui_se_voient():
+    # « En phase 0, encoder ; en phase 1, rendre » : le corps voit le bloc et la
+    # phase, le tour numérote les runs.
+    plan = [{"pour": {"jusqu_a": "duration_s", "chaque": 8.0, "phases": 2, "un_run_par_tour": True,
+                      "relais": RELAIS_IMAGE},
+             "faire": [{"si": {"parametre": "phase", "op": "eq", "valeur": 0},
+                        "alors": [_segment("encodage")], "sinon": [_segment("rendu")]}]}]
+    sortie = deplier(plan, {"duration_s": 16})
+    assert [(f.nom, f.tour, f.tours_total) for f in sortie] == [
+        ("encodage", 0, 4), ("rendu", 1, 4), ("encodage", 2, 4), ("rendu", 3, 4)]
+    assert tours_separes(plan, {"duration_s": 16}) == 4
+    assert tours_separes(plan, {"duration_s": 8}) == 2          # un bloc, deux runs
+    plan_bloc = [{"pour": {"jusqu_a": "duration_s", "chaque": 8.0, "phases": 2},
+                  "faire": [{"si": {"parametre": "bloc", "op": "eq", "valeur": 0},
+                             "alors": [_segment("premier")], "sinon": [_segment("suivant")]}]}]
+    assert [f.nom for f in deplier(plan_bloc, {"duration_s": 16})] == ["premier", "premier", "suivant", "suivant"]
+
+
+def test_des_phases_mal_declarees_se_lisent():
+    with pytest.raises(IntentValidationError, match="phases"):
+        deplier([{"pour": {"jusqu_a": "n", "chaque": 1, "phases": 0}, "faire": [_segment()]}], {"n": 1})
+    with pytest.raises(IntentValidationError, match="phases"):
+        deplier([{"pour": {"jusqu_a": "n", "chaque": 1, "phases": "deux"}, "faire": [_segment()]}], {"n": 1})

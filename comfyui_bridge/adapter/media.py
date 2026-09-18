@@ -24,9 +24,12 @@ KIND_BY_EXT: dict[str, str] = {
     # nombres, une légende, une liste de régions. Ignorer ces fichiers livrait
     # l'illustration d'une analyse sans jamais livrer son résultat.
     "txt": "text", "json": "text", "csv": "text", "md": "text", "yaml": "text",
+    # Ce qu'un run écrit pour le run SUIVANT — un conditionnement, un latent
+    # (relais entre deux runs d'un même tour) : ni un média, ni des nombres.
+    "pt": "relais", "latent": "relais",
 }
 
-MEDIA_EXT = frozenset("." + e for e, k in KIND_BY_EXT.items() if k != "text")
+MEDIA_EXT = frozenset("." + e for e, k in KIND_BY_EXT.items() if k not in ("text", "relais"))
 DATA_EXT = frozenset("." + e for e, k in KIND_BY_EXT.items() if k == "text")
 # Tout ce qu'un run peut livrer. Les deux backends s'y réfèrent : leurs tables
 # d'extensions avaient déjà divergé une fois, l'un connaissant l'audio et
@@ -40,7 +43,10 @@ DELIVERABLE_EXT = MEDIA_EXT | DATA_EXT
 # `IO.NodeOutput(ui={"3d": results})`) et MESURÉE sur un run réel — sans elle,
 # le maillage écrit par le moteur n'était jamais ramassé, et le run livrait à sa
 # place les aperçus temporaires du graphe (ou rien, quand il n'y en a pas).
-OUTPUT_KEYS = ("images", "gifs", "videos", "audio", "3d", "files")
+# « latents » (SaveLatent) et « conditionnements » (SauverConditionnement) : ce
+# qu'un run écrit pour le run SUIVANT — un relais entre deux runs d'un même
+# tour — se ramasse comme un livrable, sans quoi il n'existerait pas ici.
+OUTPUT_KEYS = ("images", "gifs", "videos", "audio", "3d", "files", "latents", "conditionnements")
 
 # La VERSION de ce mécanisme de livraison : ce que ce module sait ramasser et
 # reconnaître. Elle est enregistrée avec chaque run, comme WORK_MODEL l'est pour

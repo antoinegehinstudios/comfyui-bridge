@@ -87,13 +87,20 @@ def _verifier(bloc: dict[str, Any], montage: list[Any], precedents: list[dict[st
     nom = bloc.get("bloc", "?")
     besoin = dict(bloc.get("besoin") or {})
     if besoin:
-        commun = _offert_par(montage, "commun")
-        manque = [r for r in besoin if r not in commun]
+        # Ce que le bloc a besoin de trouver posé UNE fois : dans « commun », ou
+        # dans tout autre fragment nommé hors boucle (« modele », « texte » —
+        # quand un montage sépare ses chargeurs pour que chaque run ne tienne
+        # que les siens). Le contenu du bloc dit lequel il vise.
+        offert: dict[str, Any] = {}
+        for element in montage or []:
+            if isinstance(element, dict) and element.get("fragment") and element.get("sorties"):
+                offert.update(dict(element["sorties"]))
+        manque = [r for r in besoin if r not in offert]
         if manque:
             raise WorkflowMappingError(
                 f"bloc {nom!r} : le montage ne fournit pas {', '.join(sorted(manque))} "
-                f"dans les sorties de « commun »",
-                available=sorted(commun))
+                f"dans les sorties de ses fragments nommés (« commun »…)",
+                available=sorted(offert))
     attend = dict(bloc.get("attend") or {})
     for precedent in (precedents if attend else []):
         offert = dict(precedent.get("sorties") or {})

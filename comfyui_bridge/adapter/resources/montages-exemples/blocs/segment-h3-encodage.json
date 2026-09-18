@@ -1,0 +1,94 @@
+{
+ "bloc": "segment-h3-encodage",
+ "fragment": "encodage",
+ "_lisez_moi": [
+  "L'ENCODAGE d'un bloc MiniMax H3 dirigé, sans rendu : la direction du bloc (le",
+  "temps du récit d'après son rang, « bloc »), puis le nœud MiniMaxH3ImageToVideo",
+  "qui encode la consigne et la dernière image native du bloc précédent (« first_frame »,",
+  "relayée) en un CONDITIONNEMENT et un LATENT — écrits en fichiers en queue du run.",
+  "Ce bloc ne cite que « texte » (l'encodeur), « commun » (VAE, cadrage, longueur,",
+  "style) : le run qui le porte ne charge pas le modèle. Le bloc « rendu » du montage",
+  "relit le conditionnement et le latent et rend ; « livrer » livre. Mesuré le",
+  "2026-09-18 : encoder dans le même prompt que le rendu tenait 14,6 Go de commit de",
+  "trop pendant tout le bloc.",
+  "Il offre aussi « derniere_image » (l'image relayée, telle quelle) pour que le run",
+  "de rendu l'ait comme ancre."
+ ],
+ "besoin": {
+  "texte": "CLIP",
+  "vae": "VAE",
+  "cadrage": "INT",
+  "style": "STRING",
+  "longueur": "INT",
+  "blocs_total": "INT"
+ },
+ "attend": {
+  "derniere_image": "IMAGE"
+ },
+ "sorties": {
+  "conditionnement": "3",
+  "latent": "3",
+  "derniere_image": "10"
+ },
+ "contenu": {
+  "2": {
+   "class_type": "DirectionDuBloc",
+   "inputs": {
+    "plan_json": [
+     "$commun.style",
+     3
+    ],
+    "rang": {
+     "$calc": "bloc"
+    },
+    "total": [
+     "$commun.blocs_total",
+     0
+    ]
+   }
+  },
+  "3": {
+   "class_type": "MiniMaxH3ImageToVideo",
+   "inputs": {
+    "clip": [
+     "$texte.texte",
+     0
+    ],
+    "vae": [
+     "$commun.vae",
+     0
+    ],
+    "prompt": [
+     "2",
+     0
+    ],
+    "width": [
+     "$commun.cadrage",
+     0
+    ],
+    "height": [
+     "$commun.cadrage",
+     1
+    ],
+    "length": [
+     "$commun.longueur",
+     0
+    ],
+    "first_frame": [
+     "10",
+     0
+    ]
+   }
+  },
+  "10": {
+   "class_type": "RepeatImageBatch",
+   "inputs": {
+    "image": [
+     "$precedent.derniere_image",
+     0
+    ],
+    "amount": 1
+   }
+  }
+ }
+}

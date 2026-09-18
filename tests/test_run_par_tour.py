@@ -297,7 +297,7 @@ def test_un_tour_qui_n_ecrit_pas_son_relais_se_lit(banc):
     job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-par-tours",
                                                          "secondes": 3, "label": "muet"}))
     assert job["status"] == "failed"
-    assert "n'a pas écrit le relais 'derniere_image'" in job["problem"]["detail"]
+    assert "n'a écrit aucun relais (derniere_image)" in job["problem"]["detail"]
 
 
 # -- le catalogue --------------------------------------------------------------

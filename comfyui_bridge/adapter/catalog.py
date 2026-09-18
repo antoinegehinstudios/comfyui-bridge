@@ -452,6 +452,18 @@ class WorkflowCatalog:
         montage, valeurs = _montage_et_valeurs(brut, params, spec.name)
         return blocs.tours_separes(montage, valeurs)
 
+    def phases_de(self, spec: WorkflowSpec) -> int:
+        """Combien de runs par tour de boucle ce montage déclare (1 sans phases)."""
+        if spec.est_chaine:
+            return 1
+        brut = self._brut(spec)
+        if not est_montage(brut):
+            return 1
+        montage = bibliotheque.resoudre(list(brut.get("montage") or []),
+                                        bibliotheque.charger(_racine_des_blocs()))
+        pour = blocs.boucle_par_run(montage)
+        return blocs.phases_de(pour) if pour else 1
+
     def relais_de(self, spec: WorkflowSpec) -> dict[str, Any]:
         """Ce qui passe d'un run au suivant dans ce montage, par port : la
         déclaration « relais » de sa boucle à un run par tour, ou rien."""

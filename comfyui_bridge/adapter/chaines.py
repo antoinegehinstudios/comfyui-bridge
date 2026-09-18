@@ -1083,7 +1083,17 @@ class RunnerDeChaines:
                           n: int, travail: Path | None, chaine_nom: str) -> dict[str, Any]:
         c = self._c
         store = c.store
-        ports = sorted(c.catalog.relais_de(c.catalog.get_spec(nom)))
+        spec = c.catalog.get_spec(nom)
+        ports = sorted(c.catalog.relais_de(spec))
+        # Entre deux runs, le moteur GARDE ses modèles chargés (c'est voulu :
+        # ne pas recharger). Quand les runs d'un même bloc portent des modèles
+        # différents (phases : l'encodeur de texte, puis le modèle), les garder
+        # rend la séparation vaine — mesuré le 2026-09-18 : 63,8 Go de commit au
+        # rendu du bloc 1, l'encodeur du run précédent encore en mémoire. On
+        # demande alors au moteur, par son opération officielle, de libérer ses
+        # modèles avant chaque run ; le rechargement coûte des secondes, pas des
+        # dizaines de Go.
+        liberer = c.catalog.phases_de(spec) > 1
         pic = self._pic_d_un_tour(nom, reglages, n)
         if pic is not None:
             besoin, par_tour, facteur = self._pic_attendu(pic, n, None)
@@ -1111,6 +1121,16 @@ class RunnerDeChaines:
                     f"étape {etape.id!r} : arrêt demandé avant le tour {i + 1}/{n}")
             etapes[rang]["note"] = f"tour {i + 1}/{n}"
             store.set_etapes(parent_id, etapes)
+            if liberer and i > 0:
+                try:
+                    c.comfyui.free(unload_models=True, free_memory=True)
+                    store.append_log(parent_id, f"étape {etape.id} : modèles du run précédent "
+                                                f"libérés chez le moteur avant le tour {i + 1}/{n}")
+                except Exception as exc:                    # noqa: BLE001
+                    # repli: un moteur qui ne libère pas ne bloque pas le tour ;
+                    # la garde de place, elle, dira si la place manque.
+                    store.append_log(parent_id, f"étape {etape.id} : le moteur n'a pas libéré ses "
+                                                f"modèles ({exc}) — la garde de place jugera")
             if pic is not None:
                 self._attendre_la_place(parent_id, etape, nom, i, n, pic)
             media_i = dict(media)
@@ -1141,22 +1161,32 @@ class RunnerDeChaines:
                         f"(essai {essais}/{REPRISES_MAX})")
                     self._attendre_la_place(parent_id, etape, nom, i, n, pic)
             livrable = _principal(fini.artifacts)
-            if livrable is None or livrable.kind != "video":
+            relayes = [a for a in fini.artifacts if "_relais_" in Path(a.path).name]
+            if livrable is not None and livrable.kind == "video":
+                parts.append(livrable.path)
+            elif not relayes:
+                # Un run qui ne livre ni vidéo ni relais n'a rien fait pour la
+                # suite. Un run d'ENCODAGE (une phase sans rendu) livre ses
+                # relais seulement : il compte, sans ajouter de morceau.
                 raise MediaAssemblyError(
-                    f"étape {etape.id!r} ({nom}) : le tour {i + 1}/{n} n'a pas livré de vidéo",
-                    job_id=fini.id, workflow=nom)
-            parts.append(livrable.path)
+                    f"étape {etape.id!r} ({nom}) : le tour {i + 1}/{n} n'a livré ni vidéo "
+                    f"ni relais", job_id=fini.id, workflow=nom)
             sous_ids.append(fini.id)
             if i < n - 1:
-                # Ce que le tour suivant relit : écrit par ce run, déposé chez le
-                # moteur sous un nom que le graphe du run suivant peut citer.
-                for port in ports:
-                    ecrit = _relais_ecrit(fini.artifacts, port)
-                    if ecrit is None:
-                        raise MediaAssemblyError(
-                            f"étape {etape.id!r} ({nom}) : le tour {i + 1}/{n} n'a pas écrit "
-                            f"le relais {port!r} (aucune image « _relais_{port} » parmi ses "
-                            f"{len(fini.artifacts)} fichiers)", job_id=fini.id, workflow=nom)
+                # Ce que les tours suivants relisent : ce que CE run a écrit,
+                # déposé chez le moteur sous un nom que leur graphe peut citer.
+                # Un run n'écrit que les relais que son dernier fragment offre
+                # (une phase d'encodage : le conditionnement, pas l'image) ; le
+                # reste garde ce qu'un run d'avant a déposé, et le run qui
+                # relit un relais jamais écrit le dit lui-même.
+                ecrits = [(port, _relais_ecrit(fini.artifacts, port)) for port in ports]
+                ecrits = [(port, a) for port, a in ecrits if a is not None]
+                if not ecrits:
+                    raise MediaAssemblyError(
+                        f"étape {etape.id!r} ({nom}) : le tour {i + 1}/{n} n'a écrit aucun "
+                        f"relais ({', '.join(ports)}) parmi ses {len(fini.artifacts)} fichiers",
+                        job_id=fini.id, workflow=nom)
+                for port, ecrit in ecrits:
                     relais[port] = self._deposer(Path(ecrit.path))
                     store.append_log(
                         parent_id,
@@ -1174,6 +1204,10 @@ class RunnerDeChaines:
                 recits.append(recit)
         etapes[rang]["note"] = f"{n} tours"
         store.set_etapes(parent_id, etapes)
+        if not parts:
+            raise MediaAssemblyError(
+                f"étape {etape.id!r} ({nom}) : aucun des {n} tours n'a livré de vidéo",
+                workflow=nom)
 
         sortie = self._sortie(parent_id, label, etape.id, ".mp4", chaine=chaine_nom)
         try:
@@ -1503,8 +1537,7 @@ def _relais_ecrit(artefacts: list[Artifact], port: str) -> Artifact | None:
     porte la marque « _relais_<port> » (le préfixe que l'assembleur donne au
     nœud qui l'écrit). Plusieurs images sous la même marque : la dernière
     écrite, celle qui compte pour une suite."""
-    vus = [a for a in artefacts
-           if a.kind == "image" and f"_relais_{port}" in Path(a.path).name]
+    vus = [a for a in artefacts if f"_relais_{port}" in Path(a.path).name]
     if not vus:
         return None
     return sorted(vus, key=lambda a: Path(a.path).name)[-1]

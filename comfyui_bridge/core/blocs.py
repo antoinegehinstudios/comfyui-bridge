@@ -165,6 +165,26 @@ UN_RUN_PAR_TOUR = "un_run_par_tour"
 RELAIS = "relais"
 TOUR = "tour"
 TOURS_TOTAL = "tours_total"
+# Des PHASES : chaque tour de boucle (un bloc) se déplie en `phases` tours
+# successifs — « encoder » puis « rendre », par exemple — pour qu'un run n'ait
+# à tenir que les modèles de sa phase. Dans le corps, `bloc` est le tour de
+# boucle proprement dit et `phase` le rang dans le bloc ; `tour` numérote les
+# runs. Sans déclaration : une phase, et `bloc` vaut `tour`.
+PHASES = "phases"
+BLOC = "bloc"
+PHASE = "phase"
+
+
+def phases_de(pour: dict[str, Any]) -> int:
+    """Combien de phases par tour de boucle (1 sans déclaration)."""
+    brut = pour.get(PHASES, 1)
+    try:
+        phases = int(brut)
+    except (TypeError, ValueError):
+        raise IntentValidationError(f"bloc « pour » : « phases » vaut {brut!r}, un entier était attendu") from None
+    if phases < 1:
+        raise IntentValidationError("bloc « pour » : « phases » doit valoir au moins 1")
+    return phases
 
 
 # -- dépliage -----------------------------------------------------------------
@@ -214,18 +234,22 @@ def deplier(plan: list[dict[str, Any]], params: dict[str, Any]) -> list[Fragment
         if "pour" in bloc:
             pour = bloc["pour"] or {}
             n = tours_de(pour, params)
+            phases = phases_de(pour)
             corps = bloc.get("faire") or []
-            for tour in range(n):
+            for tour in range(n * phases):
                 # Dans le corps, un « si » voit le tour : c'est ce qui permet
                 # d'écrire « au premier tour, l'amorce ; ensuite, le segment »
                 # sans sortir l'amorce de la boucle — et donc sans lui donner
-                # un run à part quand chaque tour est un run.
-                portee = dict(params, **{TOUR: tour, TOURS_TOTAL: n})
+                # un run à part quand chaque tour est un run. Avec des PHASES,
+                # il voit aussi le bloc (le tour de boucle proprement dit) et
+                # la phase : « en phase 0, encoder ; en phase 1, rendre ».
+                portee = dict(params, **{TOUR: tour, TOURS_TOTAL: n * phases,
+                                         BLOC: tour // phases, PHASE: tour % phases})
                 for f in deplier(corps, portee):
                     # Le tour du fragment est celui de la boucle qui l'englobe ;
                     # une boucle imbriquée garderait sinon le tour de l'intérieur
                     # et deux tours différents porteraient le même numéro.
-                    sortie.append(Fragment(f.nom, tour, f.contenu, n, f.sorties,
+                    sortie.append(Fragment(f.nom, tour, f.contenu, n * phases, f.sorties,
                                            f.boucle if f.boucle is not None else pour))
         elif "si" in bloc:
             branche = bloc.get("alors") if evaluer(bloc["si"], params) else bloc.get("sinon")
@@ -280,5 +304,5 @@ def tours_separes(plan: list[dict[str, Any]], params: dict[str, Any]) -> int | N
     pour = boucle_par_run(plan)
     if pour is None:
         return None
-    n = tours_de(pour, params)
+    n = tours_de(pour, params) * phases_de(pour)
     return n if n > 1 else None

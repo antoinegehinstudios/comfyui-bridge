@@ -371,14 +371,22 @@ class _Fenetre:
         du_tour = [(f.nom, f.tour) for f in fragments[debut:fin] if f.tour == tour_seul]
         self.dernier = du_tour[-1]
         garde = set(du_tour)
+        contenus = {(f.nom, f.tour): f.contenu for f in fragments}
+        # Ce qui est avant la boucle et que PERSONNE ne cite par son nom est une
+        # amorce : elle se joue au premier run. Ce qui est cité (« commun »,
+        # « modele », « texte » — posé une fois, pour ceux qui le citent) ne se
+        # pose que dans les runs qui le citent, de proche en proche : un run
+        # d'encodage ne charge pas le modèle, un run de rendu pas l'encodeur.
+        cites_quelque_part: set[str] = set()
+        for contenu in contenus.values():
+            cites_quelque_part |= _noms_cites(contenu or {})
         if tour_seul == 0:
-            garde |= set(avant)
+            garde |= {a for a in avant if a[0] not in cites_quelque_part}
         if tour_seul == self.total - 1:
             garde |= set(apres)
         # Les fragments d'avant que le run cite par leur nom, de proche en
         # proche : ils sont posés dans CHAQUE run.
         par_nom = {f.nom: (f.nom, f.tour) for f in fragments[:debut]}
-        contenus = {(f.nom, f.tour): f.contenu for f in fragments}
         a_voir = list(garde)
         while a_voir:
             for nom in _noms_cites(contenus.get(a_voir.pop()) or {}):
@@ -447,15 +455,25 @@ def _noeud_lire(fenetre: _Fenetre, port: str, suivant: list[int]) -> tuple[str, 
 
 def _noeuds_ecrire(fenetre: _Fenetre, table: dict[tuple[str, int], dict[str, str]],
                    sorties: dict[tuple[str, int], dict[str, str]], suivant: list[int]) -> None:
-    """Les nœuds qui écrivent les relais en queue du run, un par port déclaré."""
+    """Les nœuds qui écrivent les relais en queue du run — un par port déclaré
+    que le dernier fragment du run OFFRE. Avec des phases, chaque run finit sur
+    un fragment différent (l'encodage offre le conditionnement, la livraison la
+    dernière image) : ce qu'il n'offre pas n'a pas à être écrit, et le run qui
+    le lirait le dira si le fichier manque. Un run qui n'écrirait AUCUN relais
+    déclaré est une faute : rien ne passerait au suivant."""
+    offerts = sorties.get(fenetre.dernier) or {}
+    ecrits = 0
     for port in fenetre.declares:
+        if port not in offerts:
+            continue
         recette = _recette_relais(fenetre, port, "ecrire")
         local = _resoudre_nom(port, fenetre.dernier, sorties)
         if local not in table[fenetre.dernier]:
             raise WorkflowMappingError(
                 f"montage : le relais {port!r} doit être écrit depuis {fenetre.dernier[0]!r} "
-                f"(tour {fenetre.dernier[1]}), qui n'offre pas ce port",
-                available=sorted(sorties.get(fenetre.dernier) or {}))
+                f"(tour {fenetre.dernier[1]}), dont la sortie {local!r} n'existe pas",
+                available=sorted(table[fenetre.dernier]))
+        ecrits += 1
         source = table[fenetre.dernier][local]
         entrees: dict[str, Any] = {}
         for champ, valeur in (recette.get("inputs") or {}).items():
@@ -471,6 +489,12 @@ def _noeuds_ecrire(fenetre: _Fenetre, table: dict[tuple[str, int], dict[str, str
         suivant[0] += 1
         fenetre.graphe[numero] = {**{k: v for k, v in recette.items() if k != "inputs"},
                                   "inputs": entrees}
+    if fenetre.declares and not ecrits:
+        raise WorkflowMappingError(
+            f"montage : le run du tour {fenetre.tour} finit sur {fenetre.dernier[0]!r}, qui "
+            f"n'offre aucun des relais déclarés ({', '.join(sorted(fenetre.declares))}) — "
+            f"rien ne passerait au run suivant",
+            available=sorted(offerts))
 
 
 def assembler(fragments: list[Fragment],
@@ -546,6 +570,11 @@ def assembler(fragments: list[Fragment],
                     # pouvoir placer quelque chose plus loin à chaque répétition.
                     portee = dict(constantes or {},
                                   tour=f.tour, tours_total=f.tours_total)
+                    # Avec des phases, le bloc (le tour de boucle proprement dit)
+                    # et la phase : « rang = bloc » pour la direction du bloc.
+                    phases = int((f.boucle or {}).get("phases", 1) or 1) if isinstance(f.boucle, dict) else 1
+                    portee["bloc"] = f.tour // phases
+                    portee["phase"] = f.tour % phases
                     if moi in rangs:
                         portee["bloc_rang"] = rangs[moi]
                         portee["blocs_total"] = len(rangs)

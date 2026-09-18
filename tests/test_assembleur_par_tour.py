@@ -148,7 +148,7 @@ def test_un_dernier_fragment_qui_n_offre_pas_le_port_se_lit():
     muet = {"fragment": "livrer", "contenu": {
         "1": {"class_type": "Livrer", "inputs": {"images": ["$precedent.images", 0]}}}}
     plan = _plan(corps=[AU_PREMIER_TOUR_L_AMORCE, muet])
-    with pytest.raises(WorkflowMappingError, match="n'offre pas ce port"):
+    with pytest.raises(WorkflowMappingError, match="n'offre aucun des relais"):
         _run(0, plan=plan)
 
 
@@ -174,3 +174,66 @@ def test_sans_tour_le_montage_a_un_run_par_tour_se_recoud_entier():
     g = assembler(deplier(_plan(), {"duration_s": 24}), {}, blocs=["livrer"])
     assert _types(g) == ["CheckpointLoaderSimple", "EmptyLatent", "Livrer", "Livrer", "Livrer",
                          "Sampler", "Sampler"]
+
+
+# -- phases : encoder dans un run, rendre dans l'autre --------------------------
+
+RELAIS_DEUX = {
+    "images": RELAIS_IMAGES["images"],
+    "conditionnement": {
+        "ecrire": {"class_type": "SauverConditionnement",
+                   "inputs": {"conditioning": "$relais.port", "filename_prefix": "$relais.prefixe"}},
+        "lire": {"class_type": "ChargerConditionnement", "inputs": {"fichier": "$relais.fichier"}}}}
+
+TEXTE = {"fragment": "texte", "sorties": {"clip": "1"}, "contenu": {
+    "1": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen.safetensors"}}}}
+
+ENCODAGE = {"fragment": "encodage", "sorties": {"conditionnement": "1"}, "contenu": {
+    "1": {"class_type": "Encoder", "inputs": {"clip": ["$texte.clip", 0], "rang": {"$calc": "bloc"},
+                                              "phase": {"$calc": "phase"}}}}}
+
+RENDU = {"fragment": "rendu", "sorties": {"images": "1"}, "contenu": {
+    "1": {"class_type": "Sampler", "inputs": {"model": ["$commun.1", 0],
+                                              "conditioning": ["$precedent.conditionnement", 0]}}}}
+
+PLAN_PHASES = [COMMUN, TEXTE,
+               {"pour": {"jusqu_a": "duration_s", "chaque": 8.0, "un_run_par_tour": True,
+                         "phases": 2, "relais": RELAIS_DEUX},
+                "faire": [{"si": {"parametre": "phase", "op": "eq", "valeur": 0},
+                           "alors": [ENCODAGE], "sinon": [RENDU, LIVRER]}]}]
+
+
+def _run_phase(tour, fichiers=None):
+    return assembler(deplier(PLAN_PHASES, {"duration_s": 16}), {}, blocs=["livrer"], tour_seul=tour,
+                     relais_fichiers=fichiers, prefixe_relais="cortex/essai")
+
+
+def test_chaque_phase_ne_pose_que_les_chargeurs_qu_elle_cite():
+    # Phase 0 : l'encodeur de texte, pas le modèle ; elle écrit le conditionnement.
+    encodage = _run_phase(0)
+    assert _types(encodage) == ["CLIPLoader", "Encoder", "SauverConditionnement"]
+    assert g_val(encodage, "Encoder", "rang") == 0 and g_val(encodage, "Encoder", "phase") == 0
+    # Phase 1 : le modèle, pas l'encodeur ; elle relit le conditionnement et écrit l'image.
+    rendu = _run_phase(1, fichiers={"conditionnement": "c_00001_.pt"})
+    assert _types(rendu) == ["ChargerConditionnement", "CheckpointLoaderSimple", "Livrer", "Sampler", "SaveImage"]
+    assert g_val(rendu, "Sampler", "conditioning") == [_le(rendu, "ChargerConditionnement"), 0]
+    # Le bloc suivant : l'encodeur revoit son rang de bloc, pas le numéro de run.
+    suivant = _run_phase(2)
+    assert g_val(suivant, "Encoder", "rang") == 1 and g_val(suivant, "Encoder", "phase") == 0
+    # Le dernier run n'écrit rien.
+    assert "SaveImage" not in _types(_run_phase(3, fichiers={"conditionnement": "c.pt"}))
+
+
+def test_un_run_dont_le_dernier_fragment_n_offre_aucun_relais_se_lit():
+    muet = {"fragment": "encodage", "contenu": {"1": {"class_type": "Encoder", "inputs": {}}}}
+    plan = [COMMUN, TEXTE, {"pour": {"jusqu_a": "duration_s", "chaque": 8.0, "un_run_par_tour": True,
+                                     "phases": 2, "relais": RELAIS_DEUX},
+                            "faire": [{"si": {"parametre": "phase", "op": "eq", "valeur": 0},
+                                       "alors": [muet], "sinon": [RENDU, LIVRER]}]}]
+    with pytest.raises(WorkflowMappingError, match="n'offre aucun des relais"):
+        assembler(deplier(plan, {"duration_s": 16}), {}, blocs=["livrer"], tour_seul=0,
+                  prefixe_relais="cortex/essai")
+
+
+def g_val(g, class_type, entree):
+    return g[_le(g, class_type)]["inputs"][entree]
