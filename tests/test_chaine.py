@@ -189,6 +189,20 @@ def test_un_renvoi_inconnu_niche_dans_inputs_est_refuse_avec_son_nom():
     assert "$inconnu" in refus.value.detail
 
 
+def test_une_piece_jointe_facultative_laissee_au_repos_vaut_non_fourni():
+    """Une image de référence facultative absente ne doit pas faire échouer
+    l'étape qui l'écrit dans ses médias : elle vaut None, et le média est
+    simplement absent du run (mesuré le 2026-09-18 : « $image » n'avait rien à
+    désigner). Un champ typé sans défaut, lui, reste absent."""
+    chaine = noyau.lire(_minimale(
+        expose={"image": {"media": "image", "requis": False, "libelle": "Une image"},
+                "libre": {"type": "STRING"}},
+        etapes=[{"id": "un", "rendre": {"workflow": "wf", "media": {"image": "$image"}}}]))
+    assert noyau.valeurs(chaine, {})[0] == {"image": None}
+    assert noyau.resoudre("$image", {"image": None}, {}) is None
+    assert noyau.valeurs(chaine, {"image": "photo.png"})[0] == {"image": "photo.png"}
+
+
 def test_un_texte_facultatif_vaut_sa_chaine_vide_et_un_booleen_son_faux():
     """« "" » et « false » sont des DÉFAUTS, pas des absences : un appel final
     facultatif laissé vide vaut la chaîne vide dans les valeurs, sinon le

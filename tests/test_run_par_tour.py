@@ -303,6 +303,38 @@ def test_un_tour_qui_n_ecrit_pas_son_relais_se_lit(banc):
 # -- le catalogue --------------------------------------------------------------
 
 
+def test_une_liaison_vers_une_variante_absente_ne_gene_que_si_son_parametre_est_fourni(tmp_path):
+    """Une variante sous « si » (les références d'image, quand une image est
+    jointe) porte des liaisons déclarées : sans l'image, la variante n'est pas
+    posée et la liaison n'a rien à écrire ; avec elle, un fragment absent est
+    une vraie faute, dite."""
+    wf = tmp_path / "wf"
+    wf.mkdir()
+    montage = {"assemblage": 1, "exemple": {"n": 1}, "montage": [
+        {"fragment": "commun", "contenu": {"1": {"class_type": "Charger", "inputs": {}}}},
+        {"si": {"parametre": "image", "op": "ne", "valeur": None},
+         "alors": [{"fragment": "references", "contenu": {
+             "1": {"class_type": "LoadImage", "inputs": {"image": "exemple.png"}}}}]},
+    ]}
+    (wf / "m.json").write_text(json.dumps(montage), encoding="utf-8")
+    rec = tmp_path / "reconciliation.json"
+    rec.write_text(json.dumps({"default": "m", "workflows": {"m": {
+        "kind": "video", "workflow": str(wf / "m.json"),
+        "bindings": {"image": {"node": "$references.1", "input": "image"}}}}}), encoding="utf-8")
+    cat = load_catalog(rec, workflows_dir=wf)
+    spec = cat.get_spec("m")
+    g, liaisons = cat.monter(spec, {"n": 1})
+    assert "image" not in liaisons and "LoadImage" not in _types(g)
+    g, liaisons = cat.monter(spec, {"n": 1, "image": "photo.png"})
+    assert "LoadImage" in _types(g) and liaisons["image"].node in g
+    sans = json.loads(json.dumps(montage))
+    sans["montage"][1]["alors"][0]["fragment"] = "autre"
+    (wf / "m.json").write_text(json.dumps(sans), encoding="utf-8")
+    cat = load_catalog(rec, workflows_dir=wf)
+    with pytest.raises(WorkflowMappingError, match="references"):
+        cat.monter(cat.get_spec("m"), {"n": 1, "image": "photo.png"})
+
+
 def test_le_catalogue_compte_les_tours_et_monte_la_fenetre_d_un_tour(tmp_path):
     wf = tmp_path / "wf"
     wf.mkdir()

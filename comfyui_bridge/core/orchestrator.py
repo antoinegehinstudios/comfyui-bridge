@@ -109,6 +109,11 @@ class Orchestrator:
         for param, nom in (intent.media or {}).items():
             if nom:
                 params[param] = nom
+        # Les réglages nommés, de même : une valeur vide n'écrit rien (le champ
+        # est resté au repos), une valeur écrit ce que la liaison vise.
+        for param, valeur in (intent.parametres or {}).items():
+            if valeur is not None and valeur != "":
+                params[param] = valeur
         for field, cast in (("negative_prompt", str), ("width", int), ("height", int),
                             ("steps", int), ("cfg", float), ("seed", int), ("fps", int),
                             ("duration_s", float),

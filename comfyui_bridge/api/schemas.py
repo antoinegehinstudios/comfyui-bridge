@@ -68,6 +68,9 @@ class IntentIn(BaseModel):
     tour: int | None = Field(None, ge=0, description=
         "Montage à un run par tour : le tour de boucle à rendre seul (0, 1, 2…) ; "
         "sans lui, la passerelle enchaîne elle-même les tours")
+    parametres: dict[str, Any] = Field(default_factory=dict, description=
+        "Réglages nommés, injectés par les liaisons du workflow (le rôle d'une image de "
+        "référence, par exemple) : {nom annoncé -> valeur}, sans nommer aucun nœud")
     label: str | None = Field(None, max_length=40, description=
         "Nom de la sortie côté hôte (fichiers 'cortex/<label>_00001_.…'), pour "
         "qu'un flux appelant retrouve SES livrables. Caractères non sûrs retirés.")
@@ -119,6 +122,7 @@ class IntentIn(BaseModel):
             style_graphique=self.style_graphique,
             style_narratif=self.style_narratif,
             tour=self.tour,
+            parametres=dict(self.parametres or {}),
             inputs=dict(self.inputs or {}),
             constraints=tuple(
                 Constraint(c.key, ConstraintOp(c.op), c.value) for c in self.constraints

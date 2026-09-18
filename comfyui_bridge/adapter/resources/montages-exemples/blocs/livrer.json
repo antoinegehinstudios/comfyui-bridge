@@ -51,7 +51,9 @@
   "L'ÉCRITURE : un morceau par tier, VHS_VideoCombine, nommé 3·bloc_rang + t,",
   "cadence « cadence_sortie » ; le recollage de la passerelle les joint dans",
   "l'ordre de ce numéro, en copie de flux. Le bloc offre « ecrit » (les fichiers",
-  "du dernier tier) et « derniere_image » : ce que le jalon du tour suivant attend."
+  "du dernier tier) et « derniere_image » : ce que le jalon du tour suivant attend.",
+  "",
+  "En tête de chaque tier, entre l'ImageBatch et FILM, une GARDE DE PLACE (nœud « GardeDePlace », paquet comfyui-garde-de-place) mesure la marge du poste — RAM physique ET commit — et attend qu'elle tienne « garde_go » Gio (constante du montage, 6 ici : FILM ×5 puis l'agrandisseur d'un tier) avant de laisser passer les images ; au-delà de 30 min, elle refuse par une erreur propre. Mesuré le 2026-09-18 : sans elle, le moteur est mort deux fois à l'entrée d'un tier, un voisin ayant chargé 25 Go de commit pendant le run. Elle ne libère rien : elle empêche d'aller dans le mur sans rien dire."
  ],
  "besoin": {
   "lisseur": "INTERP_MODEL",
@@ -116,7 +118,7 @@
      0
     ],
     "images": [
-     "103",
+     "111",
      0
     ],
     "multiplier": [
@@ -289,7 +291,7 @@
      0
     ],
     "images": [
-     "203",
+     "211",
      0
     ],
     "multiplier": [
@@ -462,7 +464,7 @@
      0
     ],
     "images": [
-     "303",
+     "311",
      0
     ],
     "multiplier": [
@@ -574,6 +576,54 @@
     "format": "video/h264-mp4",
     "pingpong": false,
     "save_output": true
+   }
+  },
+  "111": {
+   "class_type": "GardeDePlace",
+   "inputs": {
+    "images": [
+     "103",
+     0
+    ],
+    "besoin_go": "$const.garde_go",
+    "attente_max_s": 1800,
+    "pas_s": 15,
+    "etiquette": {
+     "$texte": "livraison tier",
+     "$rang": "3 * bloc_rang + 0"
+    }
+   }
+  },
+  "211": {
+   "class_type": "GardeDePlace",
+   "inputs": {
+    "images": [
+     "203",
+     0
+    ],
+    "besoin_go": "$const.garde_go",
+    "attente_max_s": 1800,
+    "pas_s": 15,
+    "etiquette": {
+     "$texte": "livraison tier",
+     "$rang": "3 * bloc_rang + 1"
+    }
+   }
+  },
+  "311": {
+   "class_type": "GardeDePlace",
+   "inputs": {
+    "images": [
+     "303",
+     0
+    ],
+    "besoin_go": "$const.garde_go",
+    "attente_max_s": 1800,
+    "pas_s": 15,
+    "etiquette": {
+     "$texte": "livraison tier",
+     "$rang": "3 * bloc_rang + 2"
+    }
    }
   }
  }

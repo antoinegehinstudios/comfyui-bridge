@@ -418,11 +418,20 @@ class WorkflowCatalog:
         # Une liaison déclarée vise un RÔLE (« $commun.prompt ») quand le
         # fragment en déclare un : le numéro de nœud n'a pas à être recopié dans
         # la réconciliation, où il vieillirait sans que personne le voie.
-        liaisons = {
-            k: (Binding(node=assembleur.adresse(b.node, table, sorties), input=b.input)
-                if b.node.startswith(assembleur.PREFIXE) else b)
-            for k, b in spec.bindings.items()
-        }
+        liaisons: dict[str, Binding] = {}
+        for k, b in spec.bindings.items():
+            if not b.node.startswith(assembleur.PREFIXE):
+                liaisons[k] = b
+                continue
+            try:
+                liaisons[k] = Binding(node=assembleur.adresse(b.node, table, sorties), input=b.input)
+            except WorkflowMappingError:
+                # Une liaison vers un fragment que CE dépliage n'a pas posé (une
+                # variante sous « si », les références d'image quand aucune
+                # n'est jointe) n'est une faute que si le paramètre est fourni :
+                # sans lui, elle n'a rien à écrire.
+                if (params or {}).get(k) is not None:
+                    raise
         if (params or {}).get(blocs.TOUR) is not None:
             # Le run d'UN tour ne porte pas tout le montage : une liaison qui
             # vise un fragment d'un autre run (l'amorce, au tour 2) a été

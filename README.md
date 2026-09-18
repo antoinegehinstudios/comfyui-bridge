@@ -771,9 +771,20 @@ donc sans lui donner un run à part. Un appelant peut demander UN tour
 rejouer seul. Un seul tour = un run ordinaire ; le jalon n'a plus lieu d'être
 dans une boucle à un run par tour, l'ordre étant celui des runs.
 
-Ce qui reste dans un run : UN bloc et les modèles (39 Go ici). La sortie du
-moteur est gardée dans `_data/moteur-<nom>.log` — jetée, la mort du 2026-09-18
-n'avait laissé aucune trace. Un run que le moteur ne tient plus (moteur
+Ce qui reste dans un run : UN bloc et les modèles (39 Go ici) — et un voisin
+peut encore arriver PENDANT le run (mesuré le 2026-09-18, deux fois : un serveur
+de LLM local a chargé 19 puis 25 Go de commit au milieu d'un bloc, et le moteur
+est mort à l'entrée d'un tier). La garde de la passerelle ne voit pas ce qui
+arrive après elle ; la garde qui manquait est DANS le graphe : le nœud
+`GardeDePlace` (paquet `comfyui-garde-de-place`, posé sur le chemin des images
+en tête de chaque tier de `livrer`, besoin `garde_go` du montage) mesure la
+marge du poste — RAM physique ET commit — et attend qu'elle tienne avant de
+laisser passer, en le disant au journal du moteur et dans sa barre de
+progression ; au-delà de la borne il refuse par une erreur propre, que la
+passerelle lit et sur laquelle elle reprend après attente. Il ne libère rien :
+il empêche d'aller dans le mur sans rien dire. La sortie du moteur est gardée
+dans `_data/moteur-<nom>.log` — jetée, la mort du 2026-09-18 n'avait laissé
+aucune trace. Un run que le moteur ne tient plus (moteur
 injoignable, ou qui a oublié le run) se ferme à l'arrêt en le disant, jamais par
 une erreur serveur ; une chaîne « en cours » au démarrage de la passerelle n'a
 plus de fil : elle est close, et `POST /v1/jobs/{id}/reprendre` repart de la
@@ -1385,6 +1396,20 @@ fichier du poste résolu par son nom (`_data/polices.json` fait le menu
 moteur n'écrit une police du poste sans tenir toute la vidéo en mémoire — c'est
 pourquoi le texte est un service de la livraison, pas du rendu.
 
+Les IMAGES DE RÉFÉRENCE COMMENTÉES : jusqu'à trois images jointes (`image`,
+`image_2`, `image_3`), chacune avec son rôle (`role_image`… — « le personnage
+principal », « l'objet exact à montrer », « le lieu »). Au tour 0, l'amorce
+devient alors « texte + références → vidéo » (`MiniMaxH3ReferenceToVideo` :
+les images en `ref_images.ref_image_0…`, la consigne du bloc suivie d'une
+phrase « `<Picture i>` is <rôle> » par image, la grammaire d'étiquettes du
+modèle) ; trois variantes de l'amorce sous le même nom, une par nombre
+d'images, choisies par `si` ; les tours suivants repartent de la dernière
+image, où l'identité est déjà. Les rôles sont des **réglages nommés** de
+l'étape (`parametres`), injectés par les liaisons du montage (`$amorce.21`…)
+exactement comme une pièce jointe l'est — la chaîne ne nomme aucun nœud, et
+une liaison vers une variante que ce dépliage n'a pas posée n'est une faute
+que si son paramètre est fourni. Sans image, rien ne change.
+
 Trois choses que ce mode DIT au lieu de les maquiller : la **durée** livrée est
 ronde au bloc supérieur — au plus ~5 s de plus que demandé, jamais moins, et le
 champ s'appelle « Durée (au moins) » ; la **cadence** livrée est la cadence
@@ -1611,6 +1636,7 @@ modifier ça ? » a donc une réponse par nature de changement :
 | un CONTRÔLE sur ce que le nœud a MESURÉ (hook vu, climax tenu, durée retenue) | l'étape `verifier` de la chaîne, sur `$etape.recit.<clé>` (le premier artefact `.json` d'un run est parsé sous `recit`) | le runner de chaînes |
 | une RÉPÉTITION (blocs de boucle, conditions) — et l'ORDRE des tours (le bloc `jalon`, en tête du corps de la boucle) | le montage `_data/workflows/<montage>.json`, ses blocs `_data/blocs/` | le dépliage |
 | la MÉMOIRE d'un montage à blocs (un run du moteur par tour, ce qui passe d'un run au suivant) | la boucle du montage : `un_run_par_tour`, `relais` (les nœuds qui écrivent et relisent) | la fenêtre de chaque run, la garde de place, le recollage des runs |
+| une IMAGE DE RÉFÉRENCE et son rôle (personnage, objet, lieu) | la chaîne (`image`, `role_image`… exposés ; `media` et `parametres` de l'étape), la réconciliation (liaisons `$amorce.11`, `$amorce.21`…), la variante « références » de l'amorce du montage | le tour 0 du rendu |
 | les LIMITES du poste (RAM, VRAM, cœurs) — donc le BUDGET MÉMOIRE d'une tranche | `_data/materiel.local.json` (copie d'exemple `resources/materiel.exemple.json`) ; `COMFY_TRANCHE_GO` ne reste qu'une surcharge d'essai. C'est une propriété du POSTE, jamais de la chaîne ni du flux | le rendu par tranches, `GET /v1/materiel` |
 | la QUALITÉ d'un INTERMÉDIAIRE (ce qu'un graphe écrit avant le montage final) | le nœud `SaveVideo` du graphe, dans `_data/workflows/<nom>.json` : `codec`, `codec.encoding`, `codec.encoding.crf` (10 sur les graphes de la révélation) | le moteur, à l'écriture du fichier |
 | ce que l'utilisateur VOIT d'un MODE (titre, catégorie de la vitrine, résumé, libellés des valeurs) | `_data/reconciliation.local.json` : `titre`, `categorie`, `menus` ; `aides` sur l'entrée d'un GRAPHE seulement | `/v1/workflows`, `/io` |

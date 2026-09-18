@@ -95,6 +95,12 @@ class RenderIntent:
     # rendre SEUL dans ce run (0, 1, 2…). La passerelle l'envoie run après
     # run ; un appelant peut aussi demander un tour précis, pour le rejouer.
     tour: int | None = None
+    # Des réglages NOMMÉS, injectés par les liaisons du workflow — comme les
+    # pièces jointes, mais des valeurs : le rôle d'une image de référence
+    # (« le personnage principal », « l'objet exact »), tout ce qu'un flux
+    # expose sous un nom sans nommer aucun nœud. Un nom que le workflow ne lie
+    # pas est dit « non appliqué », jamais avalé.
+    parametres: dict[str, object] = field(default_factory=dict)
     # Direct overrides on the workflow's OWN inputs, keyed "node.input".
     # The neutral params above are conveniences; this is the full surface the
     # workflow declares (discovered from ComfyUI's node schemas).

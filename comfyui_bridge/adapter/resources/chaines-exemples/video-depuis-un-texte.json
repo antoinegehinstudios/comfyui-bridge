@@ -42,6 +42,48 @@
       "categorie": "plan",
       "aide": "La vidéo se fabrique par blocs de 5,2 s enchaînés, un bloc à la fois : elle va jusqu'au bloc qui couvre la durée demandée, donc au plus 5 s de plus, jamais moins. Chaque bloc de plus est plusieurs minutes de calcul de plus (mesuré le 2026-09-18 : 36 min pour 20 s en 1080p à 30 i/s, quatre blocs) ; la mémoire, elle, ne dépend pas de la durée (un bloc à la fois : pic mesuré 50 Go de mémoire de travail du moteur en 1080p à 30 i/s, quel que soit le rang du bloc)."
     },
+    "image": {
+      "media": "image",
+      "requis": false,
+      "libelle": "Image de référence (facultatif)",
+      "categorie": "references",
+      "aide": "Une image que la vidéo doit faire apparaître fidèlement — un personnage, un objet, un décor. Elle guide le premier bloc (le modèle la voit) ; les blocs suivants continuent depuis la dernière image, où elle est déjà. Jusqu'à trois images, chacune avec son rôle."
+    },
+    "role_image": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Ce que cette image est",
+      "categorie": "references",
+      "aide": "Dites ce que cette image est, pour que la vidéo la respecte : « le personnage principal », « l'objet exact à montrer », « le lieu où ça se passe »… Sans image jointe, ce champ ne sert pas."
+    },
+    "image_2": {
+      "media": "image",
+      "requis": false,
+      "libelle": "Deuxième image de référence (facultatif)",
+      "categorie": "references",
+      "aide": "Une image que la vidéo doit faire apparaître fidèlement — un personnage, un objet, un décor. Elle guide le premier bloc (le modèle la voit) ; les blocs suivants continuent depuis la dernière image, où elle est déjà. Jusqu'à trois images, chacune avec son rôle."
+    },
+    "role_image_2": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Ce que cette image est (2)",
+      "categorie": "references",
+      "aide": "Dites ce que cette image est, pour que la vidéo la respecte : « le personnage principal », « l'objet exact à montrer », « le lieu où ça se passe »… Sans image jointe, ce champ ne sert pas."
+    },
+    "image_3": {
+      "media": "image",
+      "requis": false,
+      "libelle": "Troisième image de référence (facultatif)",
+      "categorie": "references",
+      "aide": "Une image que la vidéo doit faire apparaître fidèlement — un personnage, un objet, un décor. Elle guide le premier bloc (le modèle la voit) ; les blocs suivants continuent depuis la dernière image, où elle est déjà. Jusqu'à trois images, chacune avec son rôle."
+    },
+    "role_image_3": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Ce que cette image est (3)",
+      "categorie": "references",
+      "aide": "Dites ce que cette image est, pour que la vidéo la respecte : « le personnage principal », « l'objet exact à montrer », « le lieu où ça se passe »… Sans image jointe, ce champ ne sert pas."
+    },
     "accroche": {
       "type": "STRING",
       "defaut": "",
@@ -137,7 +179,17 @@
         "width": "$width",
         "height": "$height",
         "seed": "$seed",
-        "negative_prompt": "$negatif"
+        "negative_prompt": "$negatif",
+        "media": {
+          "image": "$image",
+          "image_2": "$image_2",
+          "image_3": "$image_3"
+        },
+        "parametres": {
+          "role_image": "$role_image",
+          "role_image_2": "$role_image_2",
+          "role_image_3": "$role_image_3"
+        }
       }
     },
     {
@@ -213,6 +265,7 @@
     "livraison_au_recollage": "L'étape « livraison » ré-encode une seule fois (libx264 crf 18) le fichier recollé par la passerelle : c'est là que la taille demandée est atteinte quand elle dépasse le plafond tenu dans le rendu (1080 de petit côté), par un agrandissement exact (1080×1920 vers 2160×3840), sans image en mémoire. Sa cadence est la cadence demandée : pour 24, 30, 40 et 60 le fichier rendu la porte déjà et rien n'est retiré ; pour une autre valeur des images sont retirées (dit dans l'aide du champ). La mesure d'une étape « rendre » ne porte pas la cadence du fichier (« $rendu.mesure.fps » n'existe pas — mesuré le 2026-09-17 : l'étape échouait) ; l'exposer serait une ligne de code agnostique dans l'adaptateur, à faire.",
     "styles_a_part": "Le style ne vit pas ici : « style_graphique » et « style_narratif » sont des menus du catalogue du paquet comfyui-direction-de-style (une entrée de plus = une ligne de catalogue de plus), appliqués dans le montage par DirectionDeStyle / DirectionDuBloc. La chaîne reste neutre.",
     "textes_au_recollage": "Les textes s'incrustent à la livraison (ffmpeg drawtext, en flux, police par fichier, fondu, minutage exact) : aucun nœud du moteur n'écrit une police du poste sans tenir toute la vidéo en mémoire. Un temps négatif se compte depuis la fin (« -4 » : quatre secondes avant la fin).",
-    "agrandissement": "L'agrandissement ×2 (RealESRGAN) est une constante du montage (« agrandir »), pas un champ : la chaîne n'a pas de moyen de porter un booléen jusqu'au graphe autrement que par une entrée d'intention, et la qualité livrée n'est pas un réglage d'usage. Il a été validé face au lanczos seul par un rendu comparé (voir tasks/todo-ecrire-une-video-outillage.md)."
+    "agrandissement": "L'agrandissement ×2 (RealESRGAN) est une constante du montage (« agrandir »), pas un champ : la chaîne n'a pas de moyen de porter un booléen jusqu'au graphe autrement que par une entrée d'intention, et la qualité livrée n'est pas un réglage d'usage. Il a été validé face au lanczos seul par un rendu comparé (voir tasks/todo-ecrire-une-video-outillage.md).",
+    "references_commentees": "Une image jointe (image, image_2, image_3) et son rôle (role_image…) passent au montage : au tour 0, l'amorce devient « texte + références → vidéo » (MiniMaxH3ReferenceToVideo, étiquettes « <Picture i> » dans la consigne, une phrase « <Picture i> is <rôle> » par image) ; les tours suivants repartent de la dernière image, où l'identité est déjà. Les rôles sont des réglages NOMMÉS de l'étape (« parametres »), injectés par les liaisons du montage — la chaîne ne nomme aucun nœud. Sans image, rien ne change : l'amorce ordinaire."
   }
 }

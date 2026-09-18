@@ -24,6 +24,15 @@
   "    run, déposée chez le moteur, relue par LoadImage au début du suivant —",
   "    c'est elle que vise « $precedent.derniere_image » du segment. Le jalon",
   "    n'a plus lieu d'être : l'ordre est celui des runs.",
+  "",
+  "  - les RÉFÉRENCES : au tour 0, si une image est jointe (« image », puis",
+  "    « image_2 », « image_3 »), l'amorce devient « texte + références → vidéo » :",
+  "    MiniMaxH3ReferenceToVideo reçoit les images (ref_images.ref_image_0…) et la",
+  "    consigne du bloc suivie d'une phrase par image, « <Picture i> is <rôle> »",
+  "    (les rôles : role_image, role_image_2, role_image_3 — « le personnage",
+  "    principal », « l'objet exact », « le lieu »). Trois variantes de l'amorce,",
+  "    une par nombre d'images, sous le même nom ; les tours suivants repartent de",
+  "    la dernière image, où l'identité est déjà. Le VAE audio n'est chargé que là.",
   "La passerelle recolle les tiers d'un run (copie de flux), puis les runs.",
   "",
   "LE STYLE est un catalogue à part (paquet comfyui-direction-de-style) : le",
@@ -60,7 +69,8 @@
   "prefixe_morceaux": "cortex/morceaux/bloc",
   "agrandisseur": "RealESRGAN_x2plus.pth",
   "agrandir": true,
-  "secondes_de_la_premiere_image": 0.041667
+  "secondes_de_la_premiere_image": 0.041667,
+  "garde_go": 6.0
  },
  "exemple": {
   "duration_s": 5,
@@ -527,145 +537,880 @@
      },
      "alors": [
       {
-       "fragment": "amorce",
-       "sorties": {
-        "images": "4",
-        "nouvelles": "9",
-        "derniere_image": "5",
-        "ancre": "10"
+       "si": {
+        "parametre": "image_3",
+        "op": "ne",
+        "valeur": null
        },
-       "contenu": {
-        "2": {
-         "class_type": "DirectionDuBloc",
-         "inputs": {
-          "plan_json": [
-           "$commun.style",
-           3
-          ],
-          "rang": 0,
-          "total": [
-           "$commun.blocs_total",
-           0
-          ]
-         }
-        },
-        "1": {
-         "class_type": "MiniMaxH3ImageToVideo",
-         "inputs": {
-          "clip": [
-           "$commun.texte",
-           0
-          ],
-          "vae": [
-           "$commun.vae",
-           0
-          ],
-          "prompt": [
-           "2",
-           0
-          ],
-          "width": [
-           "$commun.cadrage",
-           0
-          ],
-          "height": [
-           "$commun.cadrage",
-           1
-          ],
-          "length": [
-           "$commun.longueur",
-           0
-          ]
-         }
-        },
-        "6": {
-         "class_type": "BasicGuider",
-         "inputs": {
-          "model": [
-           "$commun.modele",
-           0
-          ],
-          "conditioning": [
-           "1",
-           0
-          ]
-         }
-        },
-        "3": {
-         "class_type": "SamplerCustomAdvanced",
-         "inputs": {
-          "noise": [
-           "$commun.bruit",
-           0
-          ],
-          "guider": [
-           "6",
-           0
-          ],
-          "sampler": [
-           "$commun.echantillonneur",
-           0
-          ],
-          "sigmas": [
-           "$commun.sigmas",
-           0
-          ],
-          "latent_image": [
-           "1",
-           1
-          ]
-         }
-        },
-        "4": {
-         "class_type": "VAEDecode",
-         "inputs": {
-          "samples": [
-           "3",
-           0
-          ],
-          "vae": [
-           "$commun.vae",
-           0
-          ]
-         }
-        },
-        "5": {
-         "class_type": "GetImageRangeFromBatch",
-         "inputs": {
-          "start_index": -1,
-          "num_frames": 1,
-          "images": [
-           "4",
-           0
-          ]
-         }
-        },
-        "9": {
-         "class_type": "GetImageRangeFromBatch",
-         "inputs": {
-          "start_index": 1,
-          "num_frames": [
-           "$commun.images_utiles",
-           0
-          ],
-          "images": [
-           "4",
-           0
-          ]
-         }
-        },
-        "10": {
-         "class_type": "GetImageRangeFromBatch",
-         "inputs": {
-          "start_index": 0,
-          "num_frames": 1,
-          "images": [
-           "4",
-           0
-          ]
+       "alors": [
+        {
+         "fragment": "amorce",
+         "sorties": {
+          "images": "4",
+          "nouvelles": "9",
+          "derniere_image": "5",
+          "ancre": "10"
+         },
+         "contenu": {
+          "2": {
+           "class_type": "DirectionDuBloc",
+           "inputs": {
+            "plan_json": [
+             "$commun.style",
+             3
+            ],
+            "rang": 0,
+            "total": [
+             "$commun.blocs_total",
+             0
+            ]
+           }
+          },
+          "6": {
+           "class_type": "BasicGuider",
+           "inputs": {
+            "model": [
+             "$commun.modele",
+             0
+            ],
+            "conditioning": [
+             "1",
+             0
+            ]
+           }
+          },
+          "3": {
+           "class_type": "SamplerCustomAdvanced",
+           "inputs": {
+            "noise": [
+             "$commun.bruit",
+             0
+            ],
+            "guider": [
+             "6",
+             0
+            ],
+            "sampler": [
+             "$commun.echantillonneur",
+             0
+            ],
+            "sigmas": [
+             "$commun.sigmas",
+             0
+            ],
+            "latent_image": [
+             "1",
+             1
+            ]
+           }
+          },
+          "4": {
+           "class_type": "VAEDecode",
+           "inputs": {
+            "samples": [
+             "3",
+             0
+            ],
+            "vae": [
+             "$commun.vae",
+             0
+            ]
+           }
+          },
+          "5": {
+           "class_type": "GetImageRangeFromBatch",
+           "inputs": {
+            "start_index": -1,
+            "num_frames": 1,
+            "images": [
+             "4",
+             0
+            ]
+           }
+          },
+          "9": {
+           "class_type": "GetImageRangeFromBatch",
+           "inputs": {
+            "start_index": 1,
+            "num_frames": [
+             "$commun.images_utiles",
+             0
+            ],
+            "images": [
+             "4",
+             0
+            ]
+           }
+          },
+          "10": {
+           "class_type": "GetImageRangeFromBatch",
+           "inputs": {
+            "start_index": 0,
+            "num_frames": 1,
+            "images": [
+             "4",
+             0
+            ]
+           }
+          },
+          "1": {
+           "class_type": "MiniMaxH3ReferenceToVideo",
+           "inputs": {
+            "clip": [
+             "$commun.texte",
+             0
+            ],
+            "vae": [
+             "$commun.vae",
+             0
+            ],
+            "audio_vae": [
+             "7",
+             0
+            ],
+            "prompt": [
+             "50",
+             0
+            ],
+            "width": [
+             "$commun.cadrage",
+             0
+            ],
+            "height": [
+             "$commun.cadrage",
+             1
+            ],
+            "length": [
+             "$commun.longueur",
+             0
+            ],
+            "ref_image_size": "match",
+            "ref_images.ref_image_0": [
+             "11",
+             0
+            ],
+            "ref_images.ref_image_1": [
+             "12",
+             0
+            ],
+            "ref_images.ref_image_2": [
+             "13",
+             0
+            ]
+           }
+          },
+          "7": {
+           "class_type": "VAELoader",
+           "inputs": {
+            "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+           }
+          },
+          "11": {
+           "class_type": "LoadImage",
+           "inputs": {
+            "image": "reference_1.png"
+           }
+          },
+          "21": {
+           "class_type": "PrimitiveStringMultiline",
+           "inputs": {
+            "value": "the exact subject to show, same identity and details"
+           }
+          },
+          "31": {
+           "class_type": "StringConcatenate",
+           "inputs": {
+            "string_a": "<Picture 1> is ",
+            "string_b": [
+             "21",
+             0
+            ],
+            "delimiter": ""
+           }
+          },
+          "12": {
+           "class_type": "LoadImage",
+           "inputs": {
+            "image": "reference_2.png"
+           }
+          },
+          "22": {
+           "class_type": "PrimitiveStringMultiline",
+           "inputs": {
+            "value": "the exact subject to show, same identity and details"
+           }
+          },
+          "32": {
+           "class_type": "StringConcatenate",
+           "inputs": {
+            "string_a": "<Picture 2> is ",
+            "string_b": [
+             "22",
+             0
+            ],
+            "delimiter": ""
+           }
+          },
+          "13": {
+           "class_type": "LoadImage",
+           "inputs": {
+            "image": "reference_3.png"
+           }
+          },
+          "23": {
+           "class_type": "PrimitiveStringMultiline",
+           "inputs": {
+            "value": "the exact subject to show, same identity and details"
+           }
+          },
+          "33": {
+           "class_type": "StringConcatenate",
+           "inputs": {
+            "string_a": "<Picture 3> is ",
+            "string_b": [
+             "23",
+             0
+            ],
+            "delimiter": ""
+           }
+          },
+          "41": {
+           "class_type": "StringConcatenate",
+           "inputs": {
+            "string_a": [
+             "31",
+             0
+            ],
+            "string_b": [
+             "32",
+             0
+            ],
+            "delimiter": ". "
+           }
+          },
+          "42": {
+           "class_type": "StringConcatenate",
+           "inputs": {
+            "string_a": [
+             "41",
+             0
+            ],
+            "string_b": [
+             "33",
+             0
+            ],
+            "delimiter": ". "
+           }
+          },
+          "50": {
+           "class_type": "StringConcatenate",
+           "inputs": {
+            "string_a": [
+             "2",
+             0
+            ],
+            "string_b": [
+             "42",
+             0
+            ],
+            "delimiter": "\n"
+           }
+          }
          }
         }
-       }
+       ],
+       "sinon": [
+        {
+         "si": {
+          "parametre": "image_2",
+          "op": "ne",
+          "valeur": null
+         },
+         "alors": [
+          {
+           "fragment": "amorce",
+           "sorties": {
+            "images": "4",
+            "nouvelles": "9",
+            "derniere_image": "5",
+            "ancre": "10"
+           },
+           "contenu": {
+            "2": {
+             "class_type": "DirectionDuBloc",
+             "inputs": {
+              "plan_json": [
+               "$commun.style",
+               3
+              ],
+              "rang": 0,
+              "total": [
+               "$commun.blocs_total",
+               0
+              ]
+             }
+            },
+            "6": {
+             "class_type": "BasicGuider",
+             "inputs": {
+              "model": [
+               "$commun.modele",
+               0
+              ],
+              "conditioning": [
+               "1",
+               0
+              ]
+             }
+            },
+            "3": {
+             "class_type": "SamplerCustomAdvanced",
+             "inputs": {
+              "noise": [
+               "$commun.bruit",
+               0
+              ],
+              "guider": [
+               "6",
+               0
+              ],
+              "sampler": [
+               "$commun.echantillonneur",
+               0
+              ],
+              "sigmas": [
+               "$commun.sigmas",
+               0
+              ],
+              "latent_image": [
+               "1",
+               1
+              ]
+             }
+            },
+            "4": {
+             "class_type": "VAEDecode",
+             "inputs": {
+              "samples": [
+               "3",
+               0
+              ],
+              "vae": [
+               "$commun.vae",
+               0
+              ]
+             }
+            },
+            "5": {
+             "class_type": "GetImageRangeFromBatch",
+             "inputs": {
+              "start_index": -1,
+              "num_frames": 1,
+              "images": [
+               "4",
+               0
+              ]
+             }
+            },
+            "9": {
+             "class_type": "GetImageRangeFromBatch",
+             "inputs": {
+              "start_index": 1,
+              "num_frames": [
+               "$commun.images_utiles",
+               0
+              ],
+              "images": [
+               "4",
+               0
+              ]
+             }
+            },
+            "10": {
+             "class_type": "GetImageRangeFromBatch",
+             "inputs": {
+              "start_index": 0,
+              "num_frames": 1,
+              "images": [
+               "4",
+               0
+              ]
+             }
+            },
+            "1": {
+             "class_type": "MiniMaxH3ReferenceToVideo",
+             "inputs": {
+              "clip": [
+               "$commun.texte",
+               0
+              ],
+              "vae": [
+               "$commun.vae",
+               0
+              ],
+              "audio_vae": [
+               "7",
+               0
+              ],
+              "prompt": [
+               "50",
+               0
+              ],
+              "width": [
+               "$commun.cadrage",
+               0
+              ],
+              "height": [
+               "$commun.cadrage",
+               1
+              ],
+              "length": [
+               "$commun.longueur",
+               0
+              ],
+              "ref_image_size": "match",
+              "ref_images.ref_image_0": [
+               "11",
+               0
+              ],
+              "ref_images.ref_image_1": [
+               "12",
+               0
+              ]
+             }
+            },
+            "7": {
+             "class_type": "VAELoader",
+             "inputs": {
+              "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+             }
+            },
+            "11": {
+             "class_type": "LoadImage",
+             "inputs": {
+              "image": "reference_1.png"
+             }
+            },
+            "21": {
+             "class_type": "PrimitiveStringMultiline",
+             "inputs": {
+              "value": "the exact subject to show, same identity and details"
+             }
+            },
+            "31": {
+             "class_type": "StringConcatenate",
+             "inputs": {
+              "string_a": "<Picture 1> is ",
+              "string_b": [
+               "21",
+               0
+              ],
+              "delimiter": ""
+             }
+            },
+            "12": {
+             "class_type": "LoadImage",
+             "inputs": {
+              "image": "reference_2.png"
+             }
+            },
+            "22": {
+             "class_type": "PrimitiveStringMultiline",
+             "inputs": {
+              "value": "the exact subject to show, same identity and details"
+             }
+            },
+            "32": {
+             "class_type": "StringConcatenate",
+             "inputs": {
+              "string_a": "<Picture 2> is ",
+              "string_b": [
+               "22",
+               0
+              ],
+              "delimiter": ""
+             }
+            },
+            "41": {
+             "class_type": "StringConcatenate",
+             "inputs": {
+              "string_a": [
+               "31",
+               0
+              ],
+              "string_b": [
+               "32",
+               0
+              ],
+              "delimiter": ". "
+             }
+            },
+            "50": {
+             "class_type": "StringConcatenate",
+             "inputs": {
+              "string_a": [
+               "2",
+               0
+              ],
+              "string_b": [
+               "41",
+               0
+              ],
+              "delimiter": "\n"
+             }
+            }
+           }
+          }
+         ],
+         "sinon": [
+          {
+           "si": {
+            "parametre": "image",
+            "op": "ne",
+            "valeur": null
+           },
+           "alors": [
+            {
+             "fragment": "amorce",
+             "sorties": {
+              "images": "4",
+              "nouvelles": "9",
+              "derniere_image": "5",
+              "ancre": "10"
+             },
+             "contenu": {
+              "2": {
+               "class_type": "DirectionDuBloc",
+               "inputs": {
+                "plan_json": [
+                 "$commun.style",
+                 3
+                ],
+                "rang": 0,
+                "total": [
+                 "$commun.blocs_total",
+                 0
+                ]
+               }
+              },
+              "6": {
+               "class_type": "BasicGuider",
+               "inputs": {
+                "model": [
+                 "$commun.modele",
+                 0
+                ],
+                "conditioning": [
+                 "1",
+                 0
+                ]
+               }
+              },
+              "3": {
+               "class_type": "SamplerCustomAdvanced",
+               "inputs": {
+                "noise": [
+                 "$commun.bruit",
+                 0
+                ],
+                "guider": [
+                 "6",
+                 0
+                ],
+                "sampler": [
+                 "$commun.echantillonneur",
+                 0
+                ],
+                "sigmas": [
+                 "$commun.sigmas",
+                 0
+                ],
+                "latent_image": [
+                 "1",
+                 1
+                ]
+               }
+              },
+              "4": {
+               "class_type": "VAEDecode",
+               "inputs": {
+                "samples": [
+                 "3",
+                 0
+                ],
+                "vae": [
+                 "$commun.vae",
+                 0
+                ]
+               }
+              },
+              "5": {
+               "class_type": "GetImageRangeFromBatch",
+               "inputs": {
+                "start_index": -1,
+                "num_frames": 1,
+                "images": [
+                 "4",
+                 0
+                ]
+               }
+              },
+              "9": {
+               "class_type": "GetImageRangeFromBatch",
+               "inputs": {
+                "start_index": 1,
+                "num_frames": [
+                 "$commun.images_utiles",
+                 0
+                ],
+                "images": [
+                 "4",
+                 0
+                ]
+               }
+              },
+              "10": {
+               "class_type": "GetImageRangeFromBatch",
+               "inputs": {
+                "start_index": 0,
+                "num_frames": 1,
+                "images": [
+                 "4",
+                 0
+                ]
+               }
+              },
+              "1": {
+               "class_type": "MiniMaxH3ReferenceToVideo",
+               "inputs": {
+                "clip": [
+                 "$commun.texte",
+                 0
+                ],
+                "vae": [
+                 "$commun.vae",
+                 0
+                ],
+                "audio_vae": [
+                 "7",
+                 0
+                ],
+                "prompt": [
+                 "50",
+                 0
+                ],
+                "width": [
+                 "$commun.cadrage",
+                 0
+                ],
+                "height": [
+                 "$commun.cadrage",
+                 1
+                ],
+                "length": [
+                 "$commun.longueur",
+                 0
+                ],
+                "ref_image_size": "match",
+                "ref_images.ref_image_0": [
+                 "11",
+                 0
+                ]
+               }
+              },
+              "7": {
+               "class_type": "VAELoader",
+               "inputs": {
+                "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+               }
+              },
+              "11": {
+               "class_type": "LoadImage",
+               "inputs": {
+                "image": "reference_1.png"
+               }
+              },
+              "21": {
+               "class_type": "PrimitiveStringMultiline",
+               "inputs": {
+                "value": "the exact subject to show, same identity and details"
+               }
+              },
+              "31": {
+               "class_type": "StringConcatenate",
+               "inputs": {
+                "string_a": "<Picture 1> is ",
+                "string_b": [
+                 "21",
+                 0
+                ],
+                "delimiter": ""
+               }
+              },
+              "50": {
+               "class_type": "StringConcatenate",
+               "inputs": {
+                "string_a": [
+                 "2",
+                 0
+                ],
+                "string_b": [
+                 "31",
+                 0
+                ],
+                "delimiter": "\n"
+               }
+              }
+             }
+            }
+           ],
+           "sinon": [
+            {
+             "fragment": "amorce",
+             "sorties": {
+              "images": "4",
+              "nouvelles": "9",
+              "derniere_image": "5",
+              "ancre": "10"
+             },
+             "contenu": {
+              "2": {
+               "class_type": "DirectionDuBloc",
+               "inputs": {
+                "plan_json": [
+                 "$commun.style",
+                 3
+                ],
+                "rang": 0,
+                "total": [
+                 "$commun.blocs_total",
+                 0
+                ]
+               }
+              },
+              "1": {
+               "class_type": "MiniMaxH3ImageToVideo",
+               "inputs": {
+                "clip": [
+                 "$commun.texte",
+                 0
+                ],
+                "vae": [
+                 "$commun.vae",
+                 0
+                ],
+                "prompt": [
+                 "2",
+                 0
+                ],
+                "width": [
+                 "$commun.cadrage",
+                 0
+                ],
+                "height": [
+                 "$commun.cadrage",
+                 1
+                ],
+                "length": [
+                 "$commun.longueur",
+                 0
+                ]
+               }
+              },
+              "6": {
+               "class_type": "BasicGuider",
+               "inputs": {
+                "model": [
+                 "$commun.modele",
+                 0
+                ],
+                "conditioning": [
+                 "1",
+                 0
+                ]
+               }
+              },
+              "3": {
+               "class_type": "SamplerCustomAdvanced",
+               "inputs": {
+                "noise": [
+                 "$commun.bruit",
+                 0
+                ],
+                "guider": [
+                 "6",
+                 0
+                ],
+                "sampler": [
+                 "$commun.echantillonneur",
+                 0
+                ],
+                "sigmas": [
+                 "$commun.sigmas",
+                 0
+                ],
+                "latent_image": [
+                 "1",
+                 1
+                ]
+               }
+              },
+              "4": {
+               "class_type": "VAEDecode",
+               "inputs": {
+                "samples": [
+                 "3",
+                 0
+                ],
+                "vae": [
+                 "$commun.vae",
+                 0
+                ]
+               }
+              },
+              "5": {
+               "class_type": "GetImageRangeFromBatch",
+               "inputs": {
+                "start_index": -1,
+                "num_frames": 1,
+                "images": [
+                 "4",
+                 0
+                ]
+               }
+              },
+              "9": {
+               "class_type": "GetImageRangeFromBatch",
+               "inputs": {
+                "start_index": 1,
+                "num_frames": [
+                 "$commun.images_utiles",
+                 0
+                ],
+                "images": [
+                 "4",
+                 0
+                ]
+               }
+              },
+              "10": {
+               "class_type": "GetImageRangeFromBatch",
+               "inputs": {
+                "start_index": 0,
+                "num_frames": 1,
+                "images": [
+                 "4",
+                 0
+                ]
+               }
+              }
+             }
+            }
+           ]
+          }
+         ]
+        }
+       ]
       }
      ],
      "sinon": [

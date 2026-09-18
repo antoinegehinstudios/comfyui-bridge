@@ -251,6 +251,30 @@
     "negative_prompt": {
      "node": "$commun.style",
      "input": "negatif_supplementaire"
+    },
+    "image": {
+     "node": "$amorce.11",
+     "input": "image"
+    },
+    "role_image": {
+     "node": "$amorce.21",
+     "input": "value"
+    },
+    "image_2": {
+     "node": "$amorce.12",
+     "input": "image"
+    },
+    "role_image_2": {
+     "node": "$amorce.22",
+     "input": "value"
+    },
+    "image_3": {
+     "node": "$amorce.13",
+     "input": "image"
+    },
+    "role_image_3": {
+     "node": "$amorce.23",
+     "input": "value"
     }
    }
   },
@@ -310,6 +334,11 @@
    "titre": "Réglages avancés",
    "resume": "Utiles, jamais le sujet.",
    "repliee": true
+  },
+  {
+   "valeur": "references",
+   "titre": "Images de référence",
+   "resume": "Des images à faire apparaître, et ce qu'elles sont : un personnage, l'objet exact, le lieu."
   }
  ],
  "menus": {

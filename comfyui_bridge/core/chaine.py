@@ -903,6 +903,14 @@ def valeurs(chaine: Chaine, demande: dict[str, Any],
                 raise _refus(champ, f"est requis par la chaîne {chaine.nom!r}",
                              workflow=chaine.nom)
             if champ.defaut is None:
+                # Une PIÈCE JOINTE facultative laissée au repos vaut « non
+                # fourni » (None) : l'étape qui l'écrit dans ses médias
+                # (« "image": "$image" ») reçoit rien, au lieu de « n'a rien à
+                # désigner » — mesuré le 2026-09-18 sur une image de référence
+                # absente. Un champ typé sans défaut, lui, reste absent : « "" »
+                # et « false » sont des défauts déclarés, pas des absences.
+                if champ.media is not None:
+                    sorties[nom] = None
                 continue
             brute = champ.defaut
         sorties[nom] = valeur_de(champ, brute, options.get(nom))
