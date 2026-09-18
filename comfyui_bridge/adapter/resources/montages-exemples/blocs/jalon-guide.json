@@ -1,0 +1,44 @@
+{
+ "bloc": "jalon-guide",
+ "fragment": "jalon",
+ "_lisez_moi": [
+  "Le même jalon que « jalon » (lire son _lisez_moi), pour un maillon qui attend",
+  "« queue » — les dernières images du tour précédent, guide de recouvrement —",
+  "au lieu de « derniere_image ». Il rend la queue inchangée sous le même nom."
+ ],
+ "attend": {
+  "queue": "IMAGE",
+  "ecrit": "VHS_FILENAMES"
+ },
+ "sorties": {
+  "queue": "2"
+ },
+ "contenu": {
+  "1": {
+   "class_type": "VRAM_Debug",
+   "inputs": {
+    "empty_cache": true,
+    "gc_collect": true,
+    "unload_all_models": false,
+    "any_input": [
+     "$precedent.ecrit",
+     0
+    ],
+    "image_pass": [
+     "$precedent.queue",
+     0
+    ]
+   }
+  },
+  "2": {
+   "class_type": "RepeatImageBatch",
+   "inputs": {
+    "image": [
+     "1",
+     1
+    ],
+    "amount": 1
+   }
+  }
+ }
+}

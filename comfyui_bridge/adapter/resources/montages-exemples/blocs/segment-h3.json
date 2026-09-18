@@ -19,7 +19,8 @@
   "",
   "La première image produite est jetée : c'est la re-génération de l'ancre,",
   "déjà livrée par le bloc précédent. Aucun fondu — un fondu après coup",
-  "fabriquerait une surimpression au raccord."
+  "fabriquerait une surimpression au raccord.",
+  "Ce maillon offre « ecrit » (son VHS_VideoCombine, nœud 8) : c'est ce qu'attend le bloc « jalon » posé en tête du corps de la boucle, pour que le moteur écrive un tour avant de commencer le suivant (lire _data/blocs/jalon.json)."
  ],
  "besoin": {
   "modele": "MODEL",
@@ -39,7 +40,8 @@
  },
  "sorties": {
   "images": "5",
-  "derniere_image": "6"
+  "derniere_image": "6",
+  "ecrit": "8"
  },
  "contenu": {
   "3": {

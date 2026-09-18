@@ -20,7 +20,7 @@
       "unite": "s",
       "libelle": "Durée (au moins)",
       "categorie": "plan",
-      "aide": "La vidéo se fabrique par blocs de 5,2 s enchaînés : elle va jusqu'au bloc qui couvre la durée demandée, donc au plus 5 s de plus, jamais moins. Chaque bloc de plus est plusieurs minutes de calcul de plus (mesuré : 8 min pour deux blocs en 480p à 24 i/s, 17 min en 720p à 30 i/s) et de la mémoire (47 Go de mémoire de travail du moteur pour ces deux blocs à 30 i/s) — au-delà d'une dizaine de secondes à 30 i/s, la mémoire reste à mesurer."
+      "aide": "La vidéo se fabrique par blocs de 5,2 s enchaînés, un bloc à la fois : elle va jusqu'au bloc qui couvre la durée demandée, donc au plus 5 s de plus, jamais moins. Chaque bloc de plus est plusieurs minutes de calcul de plus (mesuré le 2026-09-18 : 36 min pour 20 s en 1080p à 30 i/s, quatre blocs) ; la mémoire, elle, ne dépend pas de la durée (un bloc à la fois : pic mesuré 50 Go de mémoire de travail du moteur en 1080p à 30 i/s, quel que soit le rang du bloc)."
     },
     "fps": {
       "type": "INT",

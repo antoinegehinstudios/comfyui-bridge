@@ -15,7 +15,8 @@
   "",
   "La consigne du bloc vient de « DirectionDuBloc » (le temps du récit où ce",
   "bloc tombe, dans le style choisi). Le morceau est nommé par son rang.",
-  "La queue de 22 images se prend avec start_index -1 : pour GetImageRangeFromBatch, -1 veut dire « les num_frames dernières images » (un index négatif quelconque est refusé)."
+  "La queue de 22 images se prend avec start_index -1 : pour GetImageRangeFromBatch, -1 veut dire « les num_frames dernières images » (un index négatif quelconque est refusé).",
+  "Ce maillon offre « ecrit » (son VHS_VideoCombine, nœud 8) : c'est ce qu'attend le bloc « jalon » posé en tête du corps de la boucle, pour que le moteur écrive un tour avant de commencer le suivant (lire _data/blocs/jalon.json)."
  ],
  "besoin": {
   "modele": "MODEL",
@@ -38,7 +39,8 @@
   "images": "5",
   "queue": "6",
   "derniere_image": "10",
-  "consigne": "2"
+  "consigne": "2",
+  "ecrit": "8"
  },
  "contenu": {
   "2": {

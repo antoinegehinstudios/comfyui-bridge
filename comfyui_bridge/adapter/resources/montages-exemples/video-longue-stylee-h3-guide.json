@@ -166,7 +166,8 @@
     "images": "5",
     "derniere_image": "6",
     "consigne": "9",
-    "queue": "10"
+    "queue": "10",
+    "ecrit": "8"
    },
    "contenu": {
     "1": {
@@ -351,6 +352,9 @@
     "max": 60
    },
    "faire": [
+    {
+     "utiliser": "jalon-guide"
+    },
     {
      "utiliser": "segment-h3-guide"
     }

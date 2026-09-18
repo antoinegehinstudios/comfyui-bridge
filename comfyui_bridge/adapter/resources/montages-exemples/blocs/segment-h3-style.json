@@ -15,7 +15,8 @@
   "",
   "« bloc_rang » et « blocs_total » viennent de la déclaration « blocs » du",
   "montage : l'amorce compte comme premier morceau, le tour de boucle ne le",
-  "dirait pas."
+  "dirait pas.",
+  "Ce maillon offre « ecrit » (son VHS_VideoCombine, nœud 8) : c'est ce qu'attend le bloc « jalon » posé en tête du corps de la boucle, pour que le moteur écrive un tour avant de commencer le suivant (lire _data/blocs/jalon.json)."
  ],
  "besoin": {
   "modele": "MODEL",
@@ -36,51 +37,107 @@
  "sorties": {
   "images": "5",
   "derniere_image": "6",
-  "consigne": "2"
+  "consigne": "2",
+  "ecrit": "8"
  },
  "contenu": {
   "2": {
    "class_type": "DirectionDuBloc",
    "inputs": {
-    "plan_json": ["$commun.style", 3],
-    "rang": {"$calc": "bloc_rang"},
-    "total": {"$calc": "blocs_total"}
+    "plan_json": [
+     "$commun.style",
+     3
+    ],
+    "rang": {
+     "$calc": "bloc_rang"
+    },
+    "total": {
+     "$calc": "blocs_total"
+    }
    }
   },
   "3": {
    "class_type": "MiniMaxH3ImageToVideo",
    "inputs": {
-    "clip": ["$commun.texte", 0],
-    "vae": ["$commun.vae", 0],
-    "prompt": ["2", 0],
-    "width": ["$commun.cadrage", 0],
-    "height": ["$commun.cadrage", 1],
-    "length": ["$commun.longueur", 0],
-    "first_frame": ["$precedent.derniere_image", 0]
+    "clip": [
+     "$commun.texte",
+     0
+    ],
+    "vae": [
+     "$commun.vae",
+     0
+    ],
+    "prompt": [
+     "2",
+     0
+    ],
+    "width": [
+     "$commun.cadrage",
+     0
+    ],
+    "height": [
+     "$commun.cadrage",
+     1
+    ],
+    "length": [
+     "$commun.longueur",
+     0
+    ],
+    "first_frame": [
+     "$precedent.derniere_image",
+     0
+    ]
    }
   },
   "4": {
    "class_type": "BasicGuider",
    "inputs": {
-    "model": ["$commun.modele", 0],
-    "conditioning": ["3", 0]
+    "model": [
+     "$commun.modele",
+     0
+    ],
+    "conditioning": [
+     "3",
+     0
+    ]
    }
   },
   "7": {
    "class_type": "SamplerCustomAdvanced",
    "inputs": {
-    "noise": ["$commun.bruit", 0],
-    "guider": ["4", 0],
-    "sampler": ["$commun.echantillonneur", 0],
-    "sigmas": ["$commun.sigmas", 0],
-    "latent_image": ["3", 1]
+    "noise": [
+     "$commun.bruit",
+     0
+    ],
+    "guider": [
+     "4",
+     0
+    ],
+    "sampler": [
+     "$commun.echantillonneur",
+     0
+    ],
+    "sigmas": [
+     "$commun.sigmas",
+     0
+    ],
+    "latent_image": [
+     "3",
+     1
+    ]
    }
   },
   "5": {
    "class_type": "VAEDecode",
    "inputs": {
-    "samples": ["7", 0],
-    "vae": ["$commun.vae", 0]
+    "samples": [
+     "7",
+     0
+    ],
+    "vae": [
+     "$commun.vae",
+     0
+    ]
    }
   },
   "6": {
@@ -88,24 +145,42 @@
    "inputs": {
     "start_index": -1,
     "num_frames": 1,
-    "images": ["5", 0]
+    "images": [
+     "5",
+     0
+    ]
    }
   },
   "9": {
    "class_type": "GetImageRangeFromBatch",
    "inputs": {
     "start_index": 1,
-    "num_frames": ["$commun.images_utiles", 0],
-    "images": ["5", 0]
+    "num_frames": [
+     "$commun.images_utiles",
+     0
+    ],
+    "images": [
+     "5",
+     0
+    ]
    }
   },
   "8": {
    "class_type": "VHS_VideoCombine",
    "inputs": {
-    "images": ["9", 0],
-    "frame_rate": ["$commun.cadence", 0],
+    "images": [
+     "9",
+     0
+    ],
+    "frame_rate": [
+     "$commun.cadence",
+     0
+    ],
     "loop_count": 0,
-    "filename_prefix": {"$texte": "$const.prefixe_morceaux", "$rang": "bloc_rang"},
+    "filename_prefix": {
+     "$texte": "$const.prefixe_morceaux",
+     "$rang": "bloc_rang"
+    },
     "format": "video/h264-mp4",
     "pingpong": false,
     "save_output": true

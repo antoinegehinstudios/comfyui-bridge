@@ -36,15 +36,12 @@
   "Le bloc suivant reçoit toujours la dernière image NATIVE (avant lissage et",
   "mise à l'échelle) : le modèle reprend sur ce qu'il a lui-même produit.",
   "",
-  "MÉMOIRE (mesuré le 2026-09-18 : deux blocs rendus à 576×1024, livrés en 720×1280",
-  "à 30 i/s) : le processus du moteur a atteint 47 Go de mémoire de travail et",
-  "61 Go engagés, rendus à la fin du run. Le moteur n'exécute pas un bloc après",
-  "l'autre : il a échantillonné le bloc 2 avant d'interpoler le bloc 1 et n'a",
-  "écrit les morceaux qu'à la fin — les images décodées, interpolées et mises à",
-  "l'échelle de plusieurs blocs coexistent. La mémoire n'est donc bornée par bloc",
-  "que si l'ordre d'exécution le permet ; au-delà de deux blocs à 30 i/s elle",
-  "reste à mesurer, et forcer l'ordre (chaque bloc dépendant de l'écriture du",
-  "précédent) est le chantier suivant."
+  "ORDRE D'EXÉCUTION : ce maillon n'attend que l'ancre du tour précédent, pas son",
+  "écriture — comme tout maillon. C'est le bloc « jalon », posé en tête du corps",
+  "de la boucle par le montage, qui oblige le moteur à écrire un tour avant de",
+  "commencer le suivant (lire _data/blocs/jalon.json : la cause et la mesure y",
+  "sont). Ce maillon offre « ecrit » (son VHS_VideoCombine) pour que le jalon",
+  "du tour suivant ait de quoi attendre."
  ],
  "besoin": {
   "modele": "MODEL",
@@ -70,7 +67,8 @@
  },
  "sorties": {
   "images": "5",
-  "derniere_image": "6"
+  "derniere_image": "6",
+  "ecrit": "8"
  },
  "contenu": {
   "3": {
