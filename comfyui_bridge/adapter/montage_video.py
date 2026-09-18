@@ -314,10 +314,14 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
     entrelace = "".join(f"[v{i}][a{i}]" for i in range(len(pieces)))
     filtre.append(f"{entrelace}concat=n={len(pieces)}:v=1:a=1[vout][aout]")
     sortie_video = "[vout]"
+    dossier_textes = None
     if textes:
+        import shutil as _shutil
+        import tempfile as _tempfile
         from . import textes as _textes
+        dossier_textes = _tempfile.mkdtemp(prefix="incrustation-")
         duree_totale = sum(max(0.0, s["duree"] - s["saute"] - s["rogne"]) for s in sons)
-        incrustations, _vides = _textes.filtres(textes, largeur, hauteur, duree_totale)
+        incrustations, _vides = _textes.filtres(textes, largeur, hauteur, duree_totale, dossier_textes)
         if incrustations:
             filtre.append("[vout]" + ",".join(incrustations) + "[vtxt]")
             sortie_video = "[vtxt]"
@@ -325,7 +329,11 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
     args += ["-filter_complex", ";".join(filtre), "-map", sortie_video, "-map", "[aout]",
              "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "aac",
              "-movflags", "+faststart", str(cible)]
-    _lancer(outil(), args, f"recollage de {len(pieces)} parts")
+    try:
+        _lancer(outil(), args, f"recollage de {len(pieces)} parts")
+    finally:
+        if dossier_textes:
+            _shutil.rmtree(dossier_textes, ignore_errors=True)
     return {"livrable": str(cible.resolve()), "parts": len(pieces),
             "mesure": mesurer(cible)}
 

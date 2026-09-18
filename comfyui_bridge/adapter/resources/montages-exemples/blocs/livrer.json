@@ -6,41 +6,52 @@
   "l'écrire — l'action de livraison, séparée du rendu pour que n'importe quel",
   "maillon de rendu puisse la réutiliser. Il se place juste APRÈS le fragment",
   "de rendu (l'amorce, puis chaque maillon de la boucle) et attend de lui :",
-  "  - « ancre » : l'image sur laquelle ce bloc a démarré (la dernière du bloc",
-  "    précédent, ou la première image de l'amorce) ;",
-  "  - « nouvelles » : les images nouvelles du bloc (l'ancre re-générée en",
-  "    moins) ;",
+  "  - « images » : les 124 images natives du bloc (la première est l'ancre",
+  "    re-générée, ou la première image de l'amorce) ;",
+  "  - « ancre » : la VRAIE image sur laquelle le bloc a démarré (la dernière du",
+  "    bloc précédent ; pour l'amorce, sa première image) ;",
   "  - « derniere_image » : la dernière image native, rendue telle quelle au",
   "    suivant (le jalon la lit ici).",
   "",
-  "LA CADENCE : ImageBatch met l'ancre en tête du lot (la couture est ainsi",
-  "interpolée comme n'importe quelle paire — mesuré le 2026-09-17 : sans cela",
-  "la couture était le minimum de ressemblance du plan), FrameInterpolate (FILM)",
-  "multiplie par « multiplicateur » (5 : une grille à 120 i/s), puis",
-  "VHS_SelectEveryNthImage en garde une sur « selection » (4 → 30 i/s, 2 → 60).",
-  "La PHASE se calcule sur la grille globale de la vidéo : un bloc apporte 123",
-  "images natives = 615 images fines, qui n'est pas un multiple de 4 ; pour le",
-  "bloc de rang r (« bloc_rang », le montage nomme « livrer » dans « blocs »),",
-  "skip = ((d − 1 − (615·r) mod d) mod d + 1) × (1 − 0^r) : 0 pour l'amorce",
-  "(sa première image est à elle), sinon ≥ 1 (l'image 0 du lot est l'ancre,",
-  "déjà livrée). Un commutateur paresseux saute tout cela à 24 i/s.",
+  "EN TROIS TIERS. Mesuré le 2026-09-18 : livrer un bloc d'un seul tenant en",
+  "1080p à 30 i/s avec l'agrandisseur demandait 4,36 Go d'un coup pour la seule",
+  "sortie de l'agrandisseur (154 images à 1152×2048 en float32), par-dessus les",
+  "images interpolées (616 images fines, 4,36 Go, plus leur concaténation) et les",
+  "modèles gardés en RAM (lowvram, ~30 Go) — refusé (« DefaultCPUAllocator: not",
+  "enough memory »). Le bloc livre donc ses 123 images nouvelles en trois tiers",
+  "de 41, chacun avec sa propre ancre (la dernière image native du tier",
+  "précédent) : interpolation, sélection, agrandissement, mise à l'échelle et",
+  "écriture par tier, le tier suivant n'étant lancé qu'une fois le précédent",
+  "ÉCRIT (une porte VRAM_Debug sur ses fichiers, avec gc et vidage CUDA). Le pic",
+  "des étapes d'image est divisé par trois ; le film est le même : les images",
+  "sélectionnées sont exactement celles de la grille globale, tier après tier.",
   "",
-  "L'AGRANDISSEMENT : quand « agrandir » est vrai, ImageUpscaleWithModelBatched",
-  "(KJNodes) passe les images sélectionnées par l'agrandisseur ×2",
-  "(« agrandisseur » : RealESRGAN_x2plus, téléchargé le 2026-09-18 avec l'accord",
-  "d'Antoine — sha256 49fafd45…), par lots de 8 en fp16 pour borner la mémoire,",
-  "AVANT le lanczos qui donne la taille de livraison : net en 1080p au lieu",
-  "d'un rééchantillonnage doux du rendu natif 576×1024. Paresseux aussi :",
-  "faux, l'agrandisseur n'est jamais chargé.",
+  "LA CADENCE : ImageBatch met l'ancre du tier en tête de son lot (la couture est",
+  "interpolée comme n'importe quelle paire), FrameInterpolate (FILM) multiplie",
+  "par « multiplicateur » (5 : une grille à 120 i/s), VHS_SelectEveryNthImage en",
+  "garde une sur « selection » (4 → 30 i/s, 2 → 60). La PHASE se calcule sur la",
+  "grille GLOBALE : le tier t du bloc de rang r (« bloc_rang » : le montage nomme",
+  "« livrer-amorce » et « livrer » dans « blocs ») commence à l'image fine",
+  "F0 = 615·r + 205·t ; skip = ((d − 1 − F0 mod d) mod d) + 1 — et 0 pour le tout",
+  "premier tier de l'amorce (sa première image est à elle) ; ailleurs l'image 0",
+  "du lot est l'ancre, déjà livrée. Un commutateur paresseux saute tout cela à",
+  "24 i/s (les 41 images natives partent telles quelles).",
   "",
-  "LA TAILLE : ImageScale (lanczos, recadrage centré) vers",
-  "« largeur_livraison » × « hauteur_livraison » (la demande, plafonnée par le",
-  "montage — au-delà, la chaîne finit au recollage, en flux).",
+  "L'AGRANDISSEMENT : « agrandir » vrai, ImageUpscaleWithModelBatched (KJNodes)",
+  "passe les images sélectionnées par l'agrandisseur ×2 (« agrandisseur » :",
+  "RealESRGAN_x2plus, téléchargé le 2026-09-18 avec l'accord d'Antoine, sha256",
+  "49fafd45…), par lots de 8 en fp16, AVANT le lanczos qui donne la taille de",
+  "livraison — validé face au lanczos seul (variance du laplacien ×4,6 pour",
+  "+20 % de temps). Paresseux : faux, l'agrandisseur n'est jamais chargé.",
   "",
-  "L'ÉCRITURE : VHS_VideoCombine, morceau nommé par le rang du bloc",
-  "(« bloc_rang »), cadence « cadence_sortie ». Le bloc offre « ecrit » (les",
-  "fichiers écrits) et « derniere_image » : c'est ce que le jalon du tour",
-  "suivant attend (lire _data/blocs/jalon.json)."
+  "LA TAILLE : ImageScale (lanczos, recadrage centré) vers « largeur_livraison » ×",
+  "« hauteur_livraison » (la demande, plafonnée par le montage — au-delà, la",
+  "chaîne finit au recollage, en flux).",
+  "",
+  "L'ÉCRITURE : un morceau par tier, VHS_VideoCombine, nommé 3·bloc_rang + t,",
+  "cadence « cadence_sortie » ; le recollage de la passerelle les joint dans",
+  "l'ordre de ce numéro, en copie de flux. Le bloc offre « ecrit » (les fichiers",
+  "du dernier tier) et « derniere_image » : ce que le jalon du tour suivant attend."
  ],
  "besoin": {
   "lisseur": "INTERP_MODEL",
@@ -54,17 +65,37 @@
   "hauteur_livraison": "INT"
  },
  "attend": {
+  "images": "IMAGE",
   "ancre": "IMAGE",
-  "nouvelles": "IMAGE",
   "derniere_image": "IMAGE"
  },
  "sorties": {
-  "derniere_image": "9",
-  "ecrit": "8",
-  "images": "7"
+  "derniere_image": "1",
+  "ecrit": "310"
  },
  "contenu": {
   "1": {
+   "class_type": "RepeatImageBatch",
+   "inputs": {
+    "image": [
+     "$precedent.derniere_image",
+     0
+    ],
+    "amount": 1
+   }
+  },
+  "100": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": 1,
+    "num_frames": 41,
+    "images": [
+     "$precedent.images",
+     0
+    ]
+   }
+  },
+  "103": {
    "class_type": "ImageBatch",
    "inputs": {
     "image1": [
@@ -72,12 +103,12 @@
      0
     ],
     "image2": [
-     "$precedent.nouvelles",
+     "100",
      0
     ]
    }
   },
-  "2": {
+  "104": {
    "class_type": "FrameInterpolate",
    "inputs": {
     "interp_model": [
@@ -85,7 +116,7 @@
      0
     ],
     "images": [
-     "1",
+     "103",
      0
     ],
     "multiplier": [
@@ -94,11 +125,11 @@
     ]
    }
   },
-  "3": {
+  "105": {
    "class_type": "VHS_SelectEveryNthImage",
    "inputs": {
     "images": [
-     "2",
+     "104",
      0
     ],
     "select_every_nth": [
@@ -106,11 +137,11 @@
      0
     ],
     "skip_first_images": {
-     "$calc": "(((cadence * multiplicateur // fps - 1 - (images_nouvelles_par_bloc * multiplicateur * bloc_rang) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1) * (1 - 0 ** bloc_rang)"
+     "$calc": "((((cadence * multiplicateur // fps) - 1 - (images_nouvelles_par_bloc * multiplicateur * bloc_rang + 0 * 41 * multiplicateur) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1) * (1 - 0 ** bloc_rang)"
     }
    }
   },
-  "4": {
+  "106": {
    "class_type": "ComfySwitchNode",
    "inputs": {
     "switch": [
@@ -118,16 +149,16 @@
      0
     ],
     "on_true": [
-     "3",
+     "105",
      0
     ],
     "on_false": [
-     "$precedent.nouvelles",
+     "100",
      0
     ]
    }
   },
-  "5": {
+  "107": {
    "class_type": "ImageUpscaleWithModelBatched",
    "inputs": {
     "upscale_model": [
@@ -135,14 +166,14 @@
      0
     ],
     "images": [
-     "4",
+     "106",
      0
     ],
     "per_batch": 8,
     "precision": "float16"
    }
   },
-  "6": {
+  "108": {
    "class_type": "ComfySwitchNode",
    "inputs": {
     "switch": [
@@ -150,20 +181,20 @@
      0
     ],
     "on_true": [
-     "5",
+     "107",
      0
     ],
     "on_false": [
-     "4",
+     "106",
      0
     ]
    }
   },
-  "7": {
+  "109": {
    "class_type": "ImageScale",
    "inputs": {
     "image": [
-     "6",
+     "108",
      0
     ],
     "upscale_method": "lanczos",
@@ -178,11 +209,11 @@
     "crop": "center"
    }
   },
-  "8": {
+  "110": {
    "class_type": "VHS_VideoCombine",
    "inputs": {
     "images": [
-     "7",
+     "109",
      0
     ],
     "frame_rate": [
@@ -192,21 +223,357 @@
     "loop_count": 0,
     "filename_prefix": {
      "$texte": "$const.prefixe_morceaux",
-     "$rang": "bloc_rang"
+     "$rang": "3 * bloc_rang + 0"
     },
     "format": "video/h264-mp4",
     "pingpong": false,
     "save_output": true
    }
   },
-  "9": {
-   "class_type": "RepeatImageBatch",
+  "200": {
+   "class_type": "GetImageRangeFromBatch",
    "inputs": {
-    "image": [
-     "$precedent.derniere_image",
+    "start_index": 42,
+    "num_frames": 41,
+    "images": [
+     "$precedent.images",
+     0
+    ]
+   }
+  },
+  "201": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": 41,
+    "num_frames": 1,
+    "images": [
+     "$precedent.images",
+     0
+    ]
+   }
+  },
+  "202": {
+   "class_type": "VRAM_Debug",
+   "inputs": {
+    "empty_cache": true,
+    "gc_collect": true,
+    "unload_all_models": false,
+    "any_input": [
+     "110",
      0
     ],
-    "amount": 1
+    "image_pass": [
+     "200",
+     0
+    ]
+   }
+  },
+  "203": {
+   "class_type": "ImageBatch",
+   "inputs": {
+    "image1": [
+     "201",
+     0
+    ],
+    "image2": [
+     "202",
+     1
+    ]
+   }
+  },
+  "204": {
+   "class_type": "FrameInterpolate",
+   "inputs": {
+    "interp_model": [
+     "$commun.lisseur",
+     0
+    ],
+    "images": [
+     "203",
+     0
+    ],
+    "multiplier": [
+     "$commun.multiplicateur",
+     0
+    ]
+   }
+  },
+  "205": {
+   "class_type": "VHS_SelectEveryNthImage",
+   "inputs": {
+    "images": [
+     "204",
+     0
+    ],
+    "select_every_nth": [
+     "$commun.selection",
+     0
+    ],
+    "skip_first_images": {
+     "$calc": "(((cadence * multiplicateur // fps) - 1 - (images_nouvelles_par_bloc * multiplicateur * bloc_rang + 1 * 41 * multiplicateur) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1"
+    }
+   }
+  },
+  "206": {
+   "class_type": "ComfySwitchNode",
+   "inputs": {
+    "switch": [
+     "$commun.lisser",
+     0
+    ],
+    "on_true": [
+     "205",
+     0
+    ],
+    "on_false": [
+     "202",
+     1
+    ]
+   }
+  },
+  "207": {
+   "class_type": "ImageUpscaleWithModelBatched",
+   "inputs": {
+    "upscale_model": [
+     "$commun.agrandisseur",
+     0
+    ],
+    "images": [
+     "206",
+     0
+    ],
+    "per_batch": 8,
+    "precision": "float16"
+   }
+  },
+  "208": {
+   "class_type": "ComfySwitchNode",
+   "inputs": {
+    "switch": [
+     "$commun.agrandir",
+     0
+    ],
+    "on_true": [
+     "207",
+     0
+    ],
+    "on_false": [
+     "206",
+     0
+    ]
+   }
+  },
+  "209": {
+   "class_type": "ImageScale",
+   "inputs": {
+    "image": [
+     "208",
+     0
+    ],
+    "upscale_method": "lanczos",
+    "width": [
+     "$commun.largeur_livraison",
+     0
+    ],
+    "height": [
+     "$commun.hauteur_livraison",
+     0
+    ],
+    "crop": "center"
+   }
+  },
+  "210": {
+   "class_type": "VHS_VideoCombine",
+   "inputs": {
+    "images": [
+     "209",
+     0
+    ],
+    "frame_rate": [
+     "$commun.cadence_sortie",
+     0
+    ],
+    "loop_count": 0,
+    "filename_prefix": {
+     "$texte": "$const.prefixe_morceaux",
+     "$rang": "3 * bloc_rang + 1"
+    },
+    "format": "video/h264-mp4",
+    "pingpong": false,
+    "save_output": true
+   }
+  },
+  "300": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": 83,
+    "num_frames": 41,
+    "images": [
+     "$precedent.images",
+     0
+    ]
+   }
+  },
+  "301": {
+   "class_type": "GetImageRangeFromBatch",
+   "inputs": {
+    "start_index": 82,
+    "num_frames": 1,
+    "images": [
+     "$precedent.images",
+     0
+    ]
+   }
+  },
+  "302": {
+   "class_type": "VRAM_Debug",
+   "inputs": {
+    "empty_cache": true,
+    "gc_collect": true,
+    "unload_all_models": false,
+    "any_input": [
+     "210",
+     0
+    ],
+    "image_pass": [
+     "300",
+     0
+    ]
+   }
+  },
+  "303": {
+   "class_type": "ImageBatch",
+   "inputs": {
+    "image1": [
+     "301",
+     0
+    ],
+    "image2": [
+     "302",
+     1
+    ]
+   }
+  },
+  "304": {
+   "class_type": "FrameInterpolate",
+   "inputs": {
+    "interp_model": [
+     "$commun.lisseur",
+     0
+    ],
+    "images": [
+     "303",
+     0
+    ],
+    "multiplier": [
+     "$commun.multiplicateur",
+     0
+    ]
+   }
+  },
+  "305": {
+   "class_type": "VHS_SelectEveryNthImage",
+   "inputs": {
+    "images": [
+     "304",
+     0
+    ],
+    "select_every_nth": [
+     "$commun.selection",
+     0
+    ],
+    "skip_first_images": {
+     "$calc": "(((cadence * multiplicateur // fps) - 1 - (images_nouvelles_par_bloc * multiplicateur * bloc_rang + 2 * 41 * multiplicateur) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1"
+    }
+   }
+  },
+  "306": {
+   "class_type": "ComfySwitchNode",
+   "inputs": {
+    "switch": [
+     "$commun.lisser",
+     0
+    ],
+    "on_true": [
+     "305",
+     0
+    ],
+    "on_false": [
+     "302",
+     1
+    ]
+   }
+  },
+  "307": {
+   "class_type": "ImageUpscaleWithModelBatched",
+   "inputs": {
+    "upscale_model": [
+     "$commun.agrandisseur",
+     0
+    ],
+    "images": [
+     "306",
+     0
+    ],
+    "per_batch": 8,
+    "precision": "float16"
+   }
+  },
+  "308": {
+   "class_type": "ComfySwitchNode",
+   "inputs": {
+    "switch": [
+     "$commun.agrandir",
+     0
+    ],
+    "on_true": [
+     "307",
+     0
+    ],
+    "on_false": [
+     "306",
+     0
+    ]
+   }
+  },
+  "309": {
+   "class_type": "ImageScale",
+   "inputs": {
+    "image": [
+     "308",
+     0
+    ],
+    "upscale_method": "lanczos",
+    "width": [
+     "$commun.largeur_livraison",
+     0
+    ],
+    "height": [
+     "$commun.hauteur_livraison",
+     0
+    ],
+    "crop": "center"
+   }
+  },
+  "310": {
+   "class_type": "VHS_VideoCombine",
+   "inputs": {
+    "images": [
+     "309",
+     0
+    ],
+    "frame_rate": [
+     "$commun.cadence_sortie",
+     0
+    ],
+    "loop_count": 0,
+    "filename_prefix": {
+     "$texte": "$const.prefixe_morceaux",
+     "$rang": "3 * bloc_rang + 2"
+    },
+    "format": "video/h264-mp4",
+    "pingpong": false,
+    "save_output": true
    }
   }
  }
