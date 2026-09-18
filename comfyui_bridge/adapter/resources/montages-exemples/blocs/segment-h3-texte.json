@@ -1,26 +1,26 @@
 {
- "bloc": "segment-h3",
+ "bloc": "segment-h3-texte",
  "fragment": "segment",
  "_lisez_moi": [
-  "UN maillon de chaîne MiniMax H3, réutilisable par n'importe quelle recette.",
+  "UN maillon de RENDU MiniMax H3 dirigé, sans écriture : il rend son bloc et",
+  "tend au bloc « livrer » qui le suit ce qu'il faut pour livrer.",
   "",
-  "Sa fonction : prolonger la vidéo d'un bloc, sans que rien ne s'accumule.",
-  "Il prend l'ancre que lui tend le bloc précédent, produit ses images, écrit",
-  "son morceau sur le disque, et ne tend au suivant que sa dernière image.",
+  "La consigne du bloc vient de « DirectionDuBloc » : il relit le PLAN écrit par",
+  "« DirectionDeStyle » dans le fragment commun (le style graphique, les temps du",
+  "récit du style narratif, le sujet) et compose la consigne de CE bloc — le",
+  "temps narratif où il tombe d'après son rang (« tour » : l'amorce est le",
+  "tour 0 de la même boucle) et le nombre total de blocs (« blocs_total », calculé par le commun",
+  "d'après la durée). Un bloc ne rejoue donc jamais tout le récit ; il joue sa",
+  "part, et une accroche n'est jamais perdue.",
   "",
-  "Les trois rôles sont tenus par des nœuds natifs, pas par de la plomberie",
-  "recopiée dans chaque recette :",
-  "  - MiniMaxH3ImageToVideo(first_frame) : l'ancre dure, le bloc démarre",
-  "    exactement là où le précédent s'arrête ;",
-  "  - GetImageRangeFromBatch(start_index -1) : la dernière image, tendue au",
-  "    bloc suivant ;",
-  "  - VHS_VideoCombine : le morceau, nommé par le rang du bloc pour que",
-  "    l'ordre soit dans le NOM et non dans l'ordre où le moteur a fini.",
+  "Le raccord est celui de tous les maillons H3 : l'ancre est la dernière image",
+  "du bloc précédent (« $precedent.derniere_image », que le jalon tend), la",
+  "première image produite — la re-génération de l'ancre — n'est pas livrée.",
   "",
-  "La première image produite est jetée : c'est la re-génération de l'ancre,",
-  "déjà livrée par le bloc précédent. Aucun fondu — un fondu après coup",
-  "fabriquerait une surimpression au raccord.",
-  "Ce maillon offre « ecrit » (son VHS_VideoCombine, nœud 8) : c'est ce qu'attend le bloc « jalon » posé en tête du corps de la boucle, pour que le moteur écrive un tour avant de commencer le suivant (lire _data/blocs/jalon.json)."
+  "Ports offerts : « ancre » (l'image reçue, recopiée), « nouvelles » (les 123",
+  "images nouvelles), « derniere_image » (la dernière image native), « images »",
+  "(les 124). Il n'écrit rien : c'est « livrer » qui écrit, et « jalon » qui",
+  "tient l'ordre (lire _data/blocs/livrer.json et jalon.json)."
  ],
  "besoin": {
   "modele": "MODEL",
@@ -30,20 +30,37 @@
   "bruit": "NOISE",
   "echantillonneur": "SAMPLER",
   "sigmas": "SIGMAS",
-  "prompt": "STRING",
+  "style": "STRING",
   "longueur": "INT",
-  "cadence": "FLOAT",
-  "images_utiles": "INT"
+  "images_utiles": "INT",
+  "blocs_total": "INT"
  },
  "attend": {
   "derniere_image": "IMAGE"
  },
  "sorties": {
   "images": "5",
+  "nouvelles": "9",
   "derniere_image": "6",
-  "ecrit": "8"
+  "ancre": "10"
  },
  "contenu": {
+  "2": {
+   "class_type": "DirectionDuBloc",
+   "inputs": {
+    "plan_json": [
+     "$commun.style",
+     3
+    ],
+    "rang": {
+     "$calc": "tour"
+    },
+    "total": [
+     "$commun.blocs_total",
+     0
+    ]
+   }
+  },
   "3": {
    "class_type": "MiniMaxH3ImageToVideo",
    "inputs": {
@@ -56,7 +73,7 @@
      0
     ],
     "prompt": [
-     "$commun.prompt",
+     "2",
      0
     ],
     "width": [
@@ -153,25 +170,14 @@
     ]
    }
   },
-  "8": {
-   "class_type": "VHS_VideoCombine",
+  "10": {
+   "class_type": "RepeatImageBatch",
    "inputs": {
-    "images": [
-     "9",
+    "image": [
+     "$precedent.derniere_image",
      0
     ],
-    "frame_rate": [
-     "$commun.cadence",
-     0
-    ],
-    "loop_count": 0,
-    "filename_prefix": {
-     "$texte": "$const.prefixe_morceaux",
-     "$rang": "tour + 1"
-    },
-    "format": "video/h264-mp4",
-    "pingpong": false,
-    "save_output": true
+    "amount": 1
    }
   }
  }

@@ -33,6 +33,7 @@ from typing import Any
 
 import re
 
+from ..core import blocs
 from ..core.blocs import deplier
 from ..core.errors import IntentValidationError, WorkflowMappingError
 from ..core.workflow import WorkflowProfile
@@ -64,6 +65,39 @@ def _monter(brut: dict[str, Any], params: dict[str, Any] | None, nom: str
     — le montage est déplié sur son exemple. Sans exemple, une recette resterait
     indescriptible : on refuse plutôt que de rendre un graphe vide.
     """
+    montage, valeurs = _montage_et_valeurs(brut, params, nom)
+    prefixe_run = (params or {}).get("filename_prefix")
+    # Un run par tour : le tour demandé et les fichiers relayés PILOTENT le
+    # dépliage, ils ne sont pas des constantes du graphe — retirés des valeurs
+    # avant que « tour » n'entre dans la portée des calculs, où c'est le tour
+    # de chaque fragment qui s'appelle ainsi.
+    tour_seul = valeurs.pop(blocs.TOUR, None)
+    pour = blocs.boucle_par_run(montage)
+    relais_fichiers: dict[str, str] = {}
+    if pour is not None:
+        for port in (pour.get(blocs.RELAIS) or {}):
+            fichier = valeurs.pop(f"{blocs.RELAIS}_{port}", None)
+            if fichier:
+                relais_fichiers[port] = str(fichier)
+    elif tour_seul is not None:
+        raise WorkflowMappingError(
+            f"workflow {nom!r} : « tour » demandé, mais aucune boucle de ce montage "
+            f"ne déclare « un_run_par_tour »")
+    fragments = deplier(montage, valeurs)
+    # « blocs » : les fragments qui produisent un morceau — chacun connaît alors
+    # son rang et le total, pour dire au récit où il en est.
+    return (assembleur.assembler(fragments, valeurs, blocs=brut.get("blocs"),
+                                 tour_seul=int(tour_seul) if tour_seul is not None else None,
+                                 relais_fichiers=relais_fichiers,
+                                 prefixe_relais=str(prefixe_run) if prefixe_run else None),
+            assembleur.numeroter(fragments),
+            assembleur.sorties_nommees(fragments))
+
+
+def _montage_et_valeurs(brut: dict[str, Any], params: dict[str, Any] | None, nom: str
+                        ) -> tuple[list[Any], dict[str, Any]]:
+    """Le montage, ses blocs de bibliothèque résolus, et les valeurs qui le
+    déplient : constantes, exemple, puis les paramètres du demandeur."""
     montage = brut.get("montage")
     if not isinstance(montage, list):
         raise WorkflowMappingError(f"workflow {nom!r} : un montage a besoin de « montage »")
@@ -91,12 +125,7 @@ def _monter(brut: dict[str, Any], params: dict[str, Any] | None, nom: str
     # Les blocs reutilisables sont resolus AVANT le depliage : le reste de la
     # chaine ne voit que des fragments ordinaires.
     montage = bibliotheque.resoudre(montage, bibliotheque.charger(_racine_des_blocs()))
-    fragments = deplier(montage, valeurs)
-    # « blocs » : les fragments qui produisent un morceau — chacun connaît alors
-    # son rang et le total, pour dire au récit où il en est.
-    return (assembleur.assembler(fragments, valeurs, blocs=brut.get("blocs")),
-            assembleur.numeroter(fragments),
-            assembleur.sorties_nommees(fragments))
+    return montage, valeurs
 
 
 def _constante_des_morceaux(brut: dict[str, Any]) -> str | None:
@@ -394,7 +423,38 @@ class WorkflowCatalog:
                 if b.node.startswith(assembleur.PREFIXE) else b)
             for k, b in spec.bindings.items()
         }
+        if (params or {}).get(blocs.TOUR) is not None:
+            # Le run d'UN tour ne porte pas tout le montage : une liaison qui
+            # vise un fragment d'un autre run (l'amorce, au tour 2) a été
+            # appliquée dans le run qui le contient — ici elle n'a rien à viser.
+            liaisons = {k: b for k, b in liaisons.items() if b.node in graphe}
         return graphe, liaisons
+
+    def tours_separes(self, spec: WorkflowSpec, params: dict[str, Any] | None = None
+                      ) -> int | None:
+        """Combien de runs ce montage demande — un par tour, quand sa boucle le
+        déclare et que la demande fait plus d'un tour ; None sinon (un graphe
+        ordinaire, une chaîne, un montage d'un seul tenant)."""
+        if spec.est_chaine:
+            return None
+        brut = self._brut(spec)
+        if not est_montage(brut):
+            return None
+        montage, valeurs = _montage_et_valeurs(brut, params, spec.name)
+        return blocs.tours_separes(montage, valeurs)
+
+    def relais_de(self, spec: WorkflowSpec) -> dict[str, Any]:
+        """Ce qui passe d'un run au suivant dans ce montage, par port : la
+        déclaration « relais » de sa boucle à un run par tour, ou rien."""
+        if spec.est_chaine:
+            return {}
+        brut = self._brut(spec)
+        if not est_montage(brut):
+            return {}
+        montage = bibliotheque.resoudre(list(brut.get("montage") or []),
+                                        bibliotheque.charger(_racine_des_blocs()))
+        pour = blocs.boucle_par_run(montage)
+        return dict((pour or {}).get(blocs.RELAIS) or {})
 
     def livrable(self, spec: WorkflowSpec) -> dict[str, Any]:
         """Ce que la recette dit de son livrable — notamment qu'il est en morceaux.

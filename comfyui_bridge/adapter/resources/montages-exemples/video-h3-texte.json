@@ -1,0 +1,686 @@
+{
+ "assemblage": 1,
+ "_lisez_moi": [
+  "TEXTE → VIDÉO avec MiniMax H3, par blocs de boucle, DIRIGÉ (style graphique,",
+  "temps du récit), LIVRÉ à la cadence et à la taille demandées, agrandi ×2 —",
+  "UN RUN DU MOTEUR PAR TOUR.",
+  "",
+  "Deux actions par tour, un relais entre les tours :",
+  "  - le RENDU : au tour 0 l'amorce (ci-dessous, texte → vidéo :",
+  "    MiniMaxH3ImageToVideo sans « first_frame »), ensuite le maillon",
+  "    « segment-h3-texte » (_data/blocs/), qui reprend la DERNIÈRE IMAGE NATIVE",
+  "    du tour précédent ; chacun reçoit de « DirectionDuBloc » le temps du récit",
+  "    où il tombe (rang = tour) ;",
+  "  - la LIVRAISON : le bloc « livrer » — FILM puis une image sur N pour la",
+  "    cadence, RealESRGAN ×2 (commutable) puis lanczos pour la taille, écriture",
+  "    du morceau en trois tiers ; nommé dans « blocs » pour connaître son rang",
+  "    (phase de sélection, nom du morceau) ;",
+  "  - le RELAIS : « un_run_par_tour » fait de chaque tour un run du moteur à part",
+  "    (mesuré le 2026-09-18 : envoyé entier, le montage tenait ses modèles et",
+  "    tous ses blocs dans un seul prompt, sans aucun point de contrôle — le poste",
+  "    a atteint sa limite de commit et le moteur est mort au bloc 3). La",
+  "    passerelle attend la place avant chaque run ; « relais » dit ce qui passe",
+  "    d'un run au suivant : la dernière image, écrite par SaveImage en queue du",
+  "    run, déposée chez le moteur, relue par LoadImage au début du suivant —",
+  "    c'est elle que vise « $precedent.derniere_image » du segment. Le jalon",
+  "    n'a plus lieu d'être : l'ordre est celui des runs.",
+  "La passerelle recolle les tiers d'un run (copie de flux), puis les runs.",
+  "",
+  "LE STYLE est un catalogue à part (paquet comfyui-direction-de-style) : le",
+  "commun porte « DirectionDeStyle » (sujet, style graphique, style narratif,",
+  "négatif) qui écrit le plan ; rien du style n'est écrit ici — le montage est",
+  "neutre, le catalogue se réconcilie avec lui par les menus de la chaîne.",
+  "",
+  "COMBIEN DE BLOCS : la boucle compte des SECONDES NATIVES (124 images à 24 i/s =",
+  "5,1667 s par bloc, dont 123 nouvelles = 5,125 s ; « deja » est la première",
+  "image, 1/24 s) ; « blocs_total » est calculé par le commun d'après la durée",
+  "avec la même arithmétique (pour DirectionDuBloc). 124 est la borne basse de",
+  "la plage d'entraînement du modèle (124 à 362) et un point de sa grille",
+  "(17k + 5). La durée livrée est ronde au bloc supérieur — au plus ~5 s de",
+  "plus, jamais moins.",
+  "",
+  "LA TAILLE NATIVE : 0,6 mégapixel au plus (petit côté « petit_cote_natif », 576 :",
+  "576×1024 pour un 16:9, multiples de 32), dans la proportion demandée ; la",
+  "livraison est plafonnée à « plafond_livraison » (1080) de petit côté dans le",
+  "graphe, la chaîne finit au recollage au-delà.",
+  "",
+  "LE MODÈLE est chargé par chaque run (commun), LoRA turbo, 8 pas. Au-delà de",
+  "12 tours (≈ 61 s) la boucle s'arrête ; la chaîne borne la durée avant."
+ ],
+ "constantes": {
+  "images_par_bloc": 124,
+  "images_nouvelles_par_bloc": 123,
+  "secondes_par_bloc": 5.166667,
+  "secondes_nouvelles_par_bloc": 5.125,
+  "pas": 8,
+  "cadence": 24,
+  "multiplicateur": 5,
+  "petit_cote_natif": 576,
+  "plafond_livraison": 1080,
+  "prefixe_morceaux": "cortex/morceaux/bloc",
+  "agrandisseur": "RealESRGAN_x2plus.pth",
+  "agrandir": true,
+  "secondes_de_la_premiere_image": 0.041667
+ },
+ "exemple": {
+  "duration_s": 5,
+  "fps": 30,
+  "width": 720,
+  "height": 1280,
+  "style_graphique": "photoreal-cinema",
+  "style_narratif": "reseau-social"
+ },
+ "livrable": {
+  "morceaux": "$const.prefixe_morceaux"
+ },
+ "montage": [
+  {
+   "fragment": "commun",
+   "sorties": {
+    "modele": "2",
+    "texte": "3",
+    "vae": "4",
+    "bruit": "5",
+    "echantillonneur": "6",
+    "sigmas": "8",
+    "longueur": "10",
+    "cadence": "11",
+    "images_utiles": "12",
+    "largeur": "13",
+    "hauteur": "14",
+    "cadrage": "18",
+    "cadence_demandee": "19",
+    "lisseur": "23",
+    "lisser": "26",
+    "selection": "27",
+    "cadence_sortie": "28",
+    "multiplicateur": "31",
+    "largeur_livraison": "33",
+    "hauteur_livraison": "34",
+    "style": "9",
+    "blocs_total": "39",
+    "agrandir": "40",
+    "agrandisseur": "41"
+   },
+   "contenu": {
+    "1": {
+     "class_type": "UNETLoader",
+     "inputs": {
+      "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+     }
+    },
+    "2": {
+     "class_type": "LoraLoaderModelOnly",
+     "inputs": {
+      "lora_name": "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+       "1",
+       0
+      ]
+     }
+    },
+    "3": {
+     "class_type": "CLIPLoader",
+     "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "type": "minimax",
+      "device": "default"
+     }
+    },
+    "4": {
+     "class_type": "VAELoader",
+     "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+     }
+    },
+    "5": {
+     "class_type": "RandomNoise",
+     "inputs": {
+      "noise_seed": 71
+     }
+    },
+    "6": {
+     "class_type": "KSamplerSelect",
+     "inputs": {
+      "sampler_name": "res_multistep"
+     }
+    },
+    "7": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": "$const.pas"
+     }
+    },
+    "8": {
+     "class_type": "BasicScheduler",
+     "inputs": {
+      "scheduler": "simple",
+      "steps": [
+       "7",
+       0
+      ],
+      "denoise": 1,
+      "model": [
+       "2",
+       0
+      ]
+     }
+    },
+    "9": {
+     "class_type": "DirectionDeStyle",
+     "inputs": {
+      "style_graphique": "photoreal-cinema",
+      "style_narratif": "reseau-social",
+      "sujet": "a continuous cinematic shot",
+      "negatif_supplementaire": ""
+     }
+    },
+    "10": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": "$const.images_par_bloc"
+     }
+    },
+    "11": {
+     "class_type": "PrimitiveFloat",
+     "inputs": {
+      "value": "$const.cadence"
+     }
+    },
+    "12": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": "$const.images_nouvelles_par_bloc"
+     }
+    },
+    "13": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": {
+       "$calc": "width"
+      }
+     }
+    },
+    "14": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": {
+       "$calc": "height"
+      }
+     }
+    },
+    "30": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": "$const.petit_cote_natif"
+     }
+    },
+    "15": {
+     "class_type": "ComfyMathExpression",
+     "inputs": {
+      "expression": "floor(a * c / min(a, b) / 32) * 32",
+      "values.a": [
+       "13",
+       0
+      ],
+      "values.b": [
+       "14",
+       0
+      ],
+      "values.c": [
+       "30",
+       0
+      ]
+     }
+    },
+    "16": {
+     "class_type": "ComfyMathExpression",
+     "inputs": {
+      "expression": "floor(b * c / min(a, b) / 32) * 32",
+      "values.a": [
+       "13",
+       0
+      ],
+      "values.b": [
+       "14",
+       0
+      ],
+      "values.c": [
+       "30",
+       0
+      ]
+     }
+    },
+    "17": {
+     "class_type": "EmptyImage",
+     "inputs": {
+      "width": [
+       "15",
+       1
+      ],
+      "height": [
+       "16",
+       1
+      ],
+      "batch_size": 1,
+      "color": 0
+     }
+    },
+    "18": {
+     "class_type": "GetImageSize",
+     "inputs": {
+      "image": [
+       "17",
+       0
+      ]
+     }
+    },
+    "19": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": {
+       "$calc": "fps"
+      }
+     }
+    },
+    "31": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": "$const.multiplicateur"
+     }
+    },
+    "20": {
+     "class_type": "ComfyMathExpression",
+     "inputs": {
+      "expression": "a - 24",
+      "values.a": [
+       "19",
+       0
+      ]
+     }
+    },
+    "21": {
+     "class_type": "ComfyMathExpression",
+     "inputs": {
+      "expression": "floor(b * c / a)",
+      "values.a": [
+       "19",
+       0
+      ],
+      "values.b": [
+       "11",
+       0
+      ],
+      "values.c": [
+       "31",
+       0
+      ]
+     }
+    },
+    "22": {
+     "class_type": "ComfyMathExpression",
+     "inputs": {
+      "expression": "b * c / floor(b * c / a)",
+      "values.a": [
+       "19",
+       0
+      ],
+      "values.b": [
+       "11",
+       0
+      ],
+      "values.c": [
+       "31",
+       0
+      ]
+     }
+    },
+    "23": {
+     "class_type": "FrameInterpolationModelLoader",
+     "inputs": {
+      "model_name": "film_net_fp16.safetensors"
+     }
+    },
+    "26": {
+     "class_type": "PrimitiveBoolean",
+     "inputs": {
+      "value": [
+       "20",
+       2
+      ]
+     }
+    },
+    "27": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": [
+       "21",
+       1
+      ]
+     }
+    },
+    "28": {
+     "class_type": "PrimitiveFloat",
+     "inputs": {
+      "value": [
+       "22",
+       0
+      ]
+     }
+    },
+    "32": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": "$const.plafond_livraison"
+     }
+    },
+    "24": {
+     "class_type": "ComfyMathExpression",
+     "inputs": {
+      "expression": "floor(a * min(1, p / min(a, b)) / 2) * 2",
+      "values.a": [
+       "13",
+       0
+      ],
+      "values.b": [
+       "14",
+       0
+      ],
+      "values.p": [
+       "32",
+       0
+      ]
+     }
+    },
+    "25": {
+     "class_type": "ComfyMathExpression",
+     "inputs": {
+      "expression": "floor(b * min(1, p / min(a, b)) / 2) * 2",
+      "values.a": [
+       "13",
+       0
+      ],
+      "values.b": [
+       "14",
+       0
+      ],
+      "values.p": [
+       "32",
+       0
+      ]
+     }
+    },
+    "33": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": [
+       "24",
+       1
+      ]
+     }
+    },
+    "34": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": [
+       "25",
+       1
+      ]
+     }
+    },
+    "35": {
+     "class_type": "PrimitiveFloat",
+     "inputs": {
+      "value": {
+       "$calc": "duration_s"
+      }
+     }
+    },
+    "36": {
+     "class_type": "PrimitiveFloat",
+     "inputs": {
+      "value": "$const.secondes_par_bloc"
+     }
+    },
+    "37": {
+     "class_type": "PrimitiveFloat",
+     "inputs": {
+      "value": "$const.secondes_nouvelles_par_bloc"
+     }
+    },
+    "38": {
+     "class_type": "ComfyMathExpression",
+     "inputs": {
+      "expression": "max(0, ceil((a - b) / c - 0.000000001)) + 1",
+      "values.a": [
+       "35",
+       0
+      ],
+      "values.b": [
+       "36",
+       0
+      ],
+      "values.c": [
+       "37",
+       0
+      ]
+     }
+    },
+    "39": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": [
+       "38",
+       1
+      ]
+     }
+    },
+    "40": {
+     "class_type": "PrimitiveBoolean",
+     "inputs": {
+      "value": {
+       "$calc": "agrandir"
+      }
+     }
+    },
+    "41": {
+     "class_type": "UpscaleModelLoader",
+     "inputs": {
+      "model_name": "$const.agrandisseur"
+     }
+    }
+   }
+  },
+  {
+   "pour": {
+    "jusqu_a": "duration_s",
+    "chaque": "secondes_nouvelles_par_bloc",
+    "deja": "secondes_de_la_premiere_image",
+    "max": 12,
+    "un_run_par_tour": true,
+    "relais": {
+     "derniere_image": {
+      "ecrire": {
+       "class_type": "SaveImage",
+       "inputs": {
+        "images": "$relais.port",
+        "filename_prefix": "$relais.prefixe"
+       }
+      },
+      "lire": {
+       "class_type": "LoadImage",
+       "inputs": {
+        "image": "$relais.fichier"
+       }
+      }
+     }
+    }
+   },
+   "faire": [
+    {
+     "si": {
+      "parametre": "tour",
+      "op": "eq",
+      "valeur": 0
+     },
+     "alors": [
+      {
+       "fragment": "amorce",
+       "sorties": {
+        "images": "4",
+        "nouvelles": "9",
+        "derniere_image": "5",
+        "ancre": "10"
+       },
+       "contenu": {
+        "2": {
+         "class_type": "DirectionDuBloc",
+         "inputs": {
+          "plan_json": [
+           "$commun.style",
+           3
+          ],
+          "rang": 0,
+          "total": [
+           "$commun.blocs_total",
+           0
+          ]
+         }
+        },
+        "1": {
+         "class_type": "MiniMaxH3ImageToVideo",
+         "inputs": {
+          "clip": [
+           "$commun.texte",
+           0
+          ],
+          "vae": [
+           "$commun.vae",
+           0
+          ],
+          "prompt": [
+           "2",
+           0
+          ],
+          "width": [
+           "$commun.cadrage",
+           0
+          ],
+          "height": [
+           "$commun.cadrage",
+           1
+          ],
+          "length": [
+           "$commun.longueur",
+           0
+          ]
+         }
+        },
+        "6": {
+         "class_type": "BasicGuider",
+         "inputs": {
+          "model": [
+           "$commun.modele",
+           0
+          ],
+          "conditioning": [
+           "1",
+           0
+          ]
+         }
+        },
+        "3": {
+         "class_type": "SamplerCustomAdvanced",
+         "inputs": {
+          "noise": [
+           "$commun.bruit",
+           0
+          ],
+          "guider": [
+           "6",
+           0
+          ],
+          "sampler": [
+           "$commun.echantillonneur",
+           0
+          ],
+          "sigmas": [
+           "$commun.sigmas",
+           0
+          ],
+          "latent_image": [
+           "1",
+           1
+          ]
+         }
+        },
+        "4": {
+         "class_type": "VAEDecode",
+         "inputs": {
+          "samples": [
+           "3",
+           0
+          ],
+          "vae": [
+           "$commun.vae",
+           0
+          ]
+         }
+        },
+        "5": {
+         "class_type": "GetImageRangeFromBatch",
+         "inputs": {
+          "start_index": -1,
+          "num_frames": 1,
+          "images": [
+           "4",
+           0
+          ]
+         }
+        },
+        "9": {
+         "class_type": "GetImageRangeFromBatch",
+         "inputs": {
+          "start_index": 1,
+          "num_frames": [
+           "$commun.images_utiles",
+           0
+          ],
+          "images": [
+           "4",
+           0
+          ]
+         }
+        },
+        "10": {
+         "class_type": "GetImageRangeFromBatch",
+         "inputs": {
+          "start_index": 0,
+          "num_frames": 1,
+          "images": [
+           "4",
+           0
+          ]
+         }
+        }
+       }
+      }
+     ],
+     "sinon": [
+      {
+       "utiliser": "segment-h3-texte"
+      }
+     ]
+    },
+    {
+     "utiliser": "livrer"
+    }
+   ]
+  }
+ ],
+ "blocs": [
+  "livrer"
+ ]
+}

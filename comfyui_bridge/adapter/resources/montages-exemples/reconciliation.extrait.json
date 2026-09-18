@@ -206,6 +206,122 @@
    "aides": {
     "prompt": "décor | temps un | temps deux … — la première part vaut pour toute la vidéo, les suivantes se répartissent sur les temps du récit"
    }
+  },
+  "video-h3-texte": {
+   "kind": "video",
+   "workflow": "E:\\Projets Cortex\\Banc socles\\comfyui-bridge\\_data\\workflows\\video-h3-texte.json",
+   "description": "MiniMax H3 SANS image de départ, DIRIGÉ : le premier bloc naît de la seule consigne, chaque bloc reçoit le temps du récit où il tombe (catalogue de styles du paquet comfyui-direction-de-style), et le bloc « livrer » porte chaque morceau à la cadence (FILM), à la netteté (RealESRGAN ×2) et à la taille demandées ; le jalon tient l'ordre ; la passerelle recolle. Entrée TECHNIQUE, sans catégorie : c'est la chaîne « video-depuis-un-texte » qui la publie.",
+   "defaults": {
+    "duration_s": 5,
+    "fps": 30,
+    "width": 720,
+    "height": 1280,
+    "style_graphique": "photoreal-cinema",
+    "style_narratif": "reseau-social"
+   },
+   "bindings": {
+    "prompt": {
+     "node": "$commun.style",
+     "input": "sujet"
+    },
+    "style_graphique": {
+     "node": "$commun.style",
+     "input": "style_graphique"
+    },
+    "style_narratif": {
+     "node": "$commun.style",
+     "input": "style_narratif"
+    },
+    "seed": {
+     "node": "$commun.bruit",
+     "input": "noise_seed"
+    },
+    "width": {
+     "node": "$commun.largeur",
+     "input": "value"
+    },
+    "height": {
+     "node": "$commun.hauteur",
+     "input": "value"
+    },
+    "fps": {
+     "node": "$commun.cadence_demandee",
+     "input": "value"
+    },
+    "negative_prompt": {
+     "node": "$commun.style",
+     "input": "negatif_supplementaire"
+    }
+   }
+  },
+  "video-depuis-un-texte": {
+   "kind": "video",
+   "chaine": "E:\\Projets Cortex\\Banc socles\\comfyui-bridge\\_data\\chaines\\video-depuis-un-texte.json",
+   "titre": "Écrire une vidéo",
+   "description": "Une consigne, un style graphique, une structure de récit, une durée, un format — et, si on veut, une accroche et un appel écrits dans la police choisie. Un seul plan continu se fabrique bloc après bloc (chaque bloc joue son temps du récit), agrandi et livré net à la cadence et à la résolution demandées. Durée arrondie au bloc supérieur, au plus cinq secondes de plus.",
+   "categorie": "texte-vers-video",
+   "ordre": 1
+  }
+ },
+ "_lire_moi_categories_de_champs": "La RUBRIQUE que « video-depuis-un-texte » ajoute au vocabulaire déclaré sur l'hôte (clé « categories_de_champs » du fichier de réconciliation) : ses deux premiers champs s'y rangent, les autres emploient « format » et « avance », déjà là. Un formulaire range dans l'ordre de ce vocabulaire, et une rubrique sans champ ne s'affiche pas.",
+ "categories_de_champs": [
+  {
+   "valeur": "plan",
+   "titre": "Le plan",
+   "resume": "Ce que la vidéo montre, et combien de temps elle dure."
+  },
+  {
+   "valeur": "oeuvre",
+   "titre": "L'œuvre",
+   "resume": "Ce qui est révélé."
+  },
+  {
+   "valeur": "recit",
+   "titre": "Récit",
+   "resume": "La structure, l'approche, les durées, l'appel final."
+  },
+  {
+   "valeur": "texte",
+   "titre": "Textes",
+   "resume": "L'accroche, l'appel, leur police et leur place."
+  },
+  {
+   "valeur": "format",
+   "titre": "Format",
+   "resume": "Orientation, résolution, cadence."
+  },
+  {
+   "valeur": "technique",
+   "titre": "Technique",
+   "resume": "La façon dont l'image se révèle."
+  },
+  {
+   "valeur": "matiere",
+   "titre": "Matière",
+   "resume": "Les réglages propres à la technique : papier, tracé, brume."
+  },
+  {
+   "valeur": "lumiere",
+   "titre": "Lumière",
+   "resume": "Sous quelle lumière la page se dessine."
+  },
+  {
+   "valeur": "avance",
+   "titre": "Réglages avancés",
+   "resume": "Utiles, jamais le sujet.",
+   "repliee": true
+  }
+ ],
+ "menus": {
+  "police": {
+   "libelle": "Police",
+   "source_fichier": {
+    "chemin": "E:/Projets Cortex/Banc socles/comfyui-bridge/_data/polices.json",
+    "table": "polices",
+    "libelle": "libelle",
+    "resume": "resume",
+    "groupe": "famille"
+   }
   }
  }
 }

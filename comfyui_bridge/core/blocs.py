@@ -47,6 +47,12 @@ class Fragment:
     # Sans ça, le bloc suivant devrait viser un numéro de nœud convenu — une
     # convention tacite qui casse en silence le jour où le fragment change.
     sorties: Any = None
+    # La déclaration « pour » de la boucle qui englobe ce fragment, telle
+    # qu'elle est écrite (None hors boucle). C'est elle qui dit si chaque tour
+    # est un RUN à part (« un_run_par_tour ») et ce qui passe d'un run au
+    # suivant (« relais ») : l'assembleur le lit sur le fragment lui-même, sans
+    # qu'une seconde déclaration ait à redire où la boucle commence.
+    boucle: Any = None
 
 
 # -- lecture des valeurs ------------------------------------------------------
@@ -143,6 +149,24 @@ def tours_de(pour: dict[str, Any], params: dict[str, Any]) -> int:
     return tours
 
 
+# -- un run par tour ----------------------------------------------------------
+#
+# Un montage qui rend plusieurs blocs dans UN SEUL prompt du moteur les tient
+# tous dans la même exécution : mesuré le 2026-09-18, les modèles y restent en
+# mémoire jusqu'au dernier nœud (le moteur retient chaque modèle tant que le
+# prompt court) et la passerelle n'a aucun point de contrôle entre deux blocs —
+# le poste a fini par tuer le moteur. Une boucle qui déclare
+# « un_run_par_tour » demande un run PAR TOUR : la passerelle attend la place
+# avant chacun, et ce qui passe d'un tour au suivant est déclaré dans
+# « relais » — un port du dernier fragment du tour, écrit par un nœud à la fin
+# du run, relu par un nœud au début du suivant.
+
+UN_RUN_PAR_TOUR = "un_run_par_tour"
+RELAIS = "relais"
+TOUR = "tour"
+TOURS_TOTAL = "tours_total"
+
+
 # -- dépliage -----------------------------------------------------------------
 
 def parametres_pilotes(plan: list[dict[str, Any]]) -> set[str]:
@@ -164,6 +188,13 @@ def parametres_pilotes(plan: list[dict[str, Any]]) -> set[str]:
                 v = pour.get(champ)
                 if isinstance(v, str):
                     noms.add(v)
+            if pour.get(UN_RUN_PAR_TOUR):
+                # Le tour à rendre seul, et le fichier que chaque relais relit :
+                # la passerelle les envoie run après run, ils pilotent le
+                # dépliage sans viser aucun nœud — comme la durée.
+                noms.add(TOUR)
+                for port in (pour.get(RELAIS) or {}):
+                    noms.add(f"{RELAIS}_{port}")
             noms |= parametres_pilotes(bloc.get("faire") or [])
         elif "si" in bloc:
             condition = bloc["si"] if isinstance(bloc["si"], dict) else {}
@@ -181,14 +212,21 @@ def deplier(plan: list[dict[str, Any]], params: dict[str, Any]) -> list[Fragment
         if not isinstance(bloc, dict):
             raise IntentValidationError("montage : un bloc doit être un objet nommé")
         if "pour" in bloc:
-            n = tours_de(bloc["pour"], params)
+            pour = bloc["pour"] or {}
+            n = tours_de(pour, params)
             corps = bloc.get("faire") or []
             for tour in range(n):
-                for f in deplier(corps, params):
+                # Dans le corps, un « si » voit le tour : c'est ce qui permet
+                # d'écrire « au premier tour, l'amorce ; ensuite, le segment »
+                # sans sortir l'amorce de la boucle — et donc sans lui donner
+                # un run à part quand chaque tour est un run.
+                portee = dict(params, **{TOUR: tour, TOURS_TOTAL: n})
+                for f in deplier(corps, portee):
                     # Le tour du fragment est celui de la boucle qui l'englobe ;
                     # une boucle imbriquée garderait sinon le tour de l'intérieur
                     # et deux tours différents porteraient le même numéro.
-                    sortie.append(Fragment(f.nom, tour, f.contenu, n, f.sorties))
+                    sortie.append(Fragment(f.nom, tour, f.contenu, n, f.sorties,
+                                           f.boucle if f.boucle is not None else pour))
         elif "si" in bloc:
             branche = bloc.get("alors") if evaluer(bloc["si"], params) else bloc.get("sinon")
             sortie.extend(deplier(branche or [], params))
@@ -200,3 +238,47 @@ def deplier(plan: list[dict[str, Any]], params: dict[str, Any]) -> list[Fragment
                 "montage : un bloc doit être « fragment », « pour » ou « si »",
                 available=["fragment", "pour", "si"])
     return sortie
+
+
+# -- un run par tour : ce que le montage demande ------------------------------
+
+def boucle_par_run(plan: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """La déclaration « pour » qui demande un run par tour, s'il y en a une.
+
+    Une seule : deux boucles qui demanderaient chacune leurs runs n'auraient
+    pas d'ordre entre elles, et une boucle imbriquée dans l'autre non plus.
+    """
+    trouvees: list[dict[str, Any]] = []
+
+    def parcourir(blocs: list[Any], dedans: bool) -> None:
+        for bloc in blocs or []:
+            if not isinstance(bloc, dict):
+                continue
+            if "pour" in bloc:
+                pour = bloc["pour"] or {}
+                if pour.get(UN_RUN_PAR_TOUR):
+                    if dedans:
+                        raise IntentValidationError(
+                            "montage : « un_run_par_tour » dans une boucle imbriquée — "
+                            "seule une boucle de premier niveau peut demander un run par tour")
+                    trouvees.append(pour)
+                parcourir(bloc.get("faire") or [], dedans or bool(pour.get(UN_RUN_PAR_TOUR)))
+            elif "si" in bloc:
+                parcourir(bloc.get("alors") or [], dedans)
+                parcourir(bloc.get("sinon") or [], dedans)
+
+    parcourir(plan, False)
+    if len(trouvees) > 1:
+        raise IntentValidationError(
+            "montage : deux boucles demandent un run par tour ; une seule le peut")
+    return trouvees[0] if trouvees else None
+
+
+def tours_separes(plan: list[dict[str, Any]], params: dict[str, Any]) -> int | None:
+    """Combien de runs ce montage demande — un par tour — ou None quand il
+    tient en un seul run (aucune boucle ne le demande, ou un seul tour)."""
+    pour = boucle_par_run(plan)
+    if pour is None:
+        return None
+    n = tours_de(pour, params)
+    return n if n > 1 else None

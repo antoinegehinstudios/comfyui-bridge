@@ -54,6 +54,13 @@ async def lifespan(app: FastAPI):
     # A run the engine finished while this service was down still has to be
     # delivered: ask ComfyUI what became of the runs left in flight.
     app.state.recovered = _recover_inflight(app.state.container)
+    # Une chaîne « en cours » au démarrage n'a plus de fil : elle est close,
+    # en le disant, et se reprend par « reprendre ».
+    try:
+        app.state.chaines_closes = app.state.container.store.clore_les_chaines_orphelines(
+            "la passerelle a redémarré pendant cette chaîne")
+    except Exception:
+        app.state.chaines_closes = []          # never keep the service from starting
     yield
 
 

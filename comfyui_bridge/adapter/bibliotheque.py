@@ -75,9 +75,15 @@ def _offert_par(montage: list[Any], nom_fragment: str) -> dict[str, Any]:
     return {}
 
 
-def _verifier(bloc: dict[str, Any], montage: list[Any], depuis: str | None,
+def _verifier(bloc: dict[str, Any], montage: list[Any], precedents: list[dict[str, Any]],
               se_suit: bool = False) -> None:
-    """Les ports du bloc sont-ils servis par ce montage ?"""
+    """Les ports du bloc sont-ils servis par ce montage ?
+
+    ``precedents`` : les fragments qui peuvent précéder ce bloc à l'exécution —
+    un seul d'ordinaire ; après un « si », le dernier de chaque branche. Ce que
+    le bloc attend doit être offert par CHACUN : lequel précède ne se sait
+    qu'au dépliage.
+    """
     nom = bloc.get("bloc", "?")
     besoin = dict(bloc.get("besoin") or {})
     if besoin:
@@ -89,8 +95,8 @@ def _verifier(bloc: dict[str, Any], montage: list[Any], depuis: str | None,
                 f"dans les sorties de « commun »",
                 available=sorted(commun))
     attend = dict(bloc.get("attend") or {})
-    if attend and depuis is not None:
-        offert = _offert_par(montage, depuis)
+    for precedent in (precedents if attend else []):
+        offert = dict(precedent.get("sorties") or {})
         if se_suit:
             # DANS une boucle seulement : au deuxième tour, le bloc se suit
             # lui-même. Hors boucle, se compter comme son propre fournisseur
@@ -98,6 +104,7 @@ def _verifier(bloc: dict[str, Any], montage: list[Any], depuis: str | None,
             offert.update(dict(bloc.get("sorties") or {}))
         manque = [r for r in attend if r not in offert]
         if manque:
+            depuis = precedent.get("fragment")
             raise WorkflowMappingError(
                 f"bloc {nom!r} : ce qui le précède ({depuis!r}) n'offre pas "
                 f"{', '.join(sorted(manque))}",
@@ -112,11 +119,18 @@ def resoudre(montage: list[Any], blocs: dict[str, dict[str, Any]],
     Le montage rendu ne contient plus que des fragments ordinaires : le reste de
     la chaîne — dépliage, assemblage — n'a pas à connaître la bibliothèque.
     """
+    precedents = [f for f in (amont or []) if isinstance(f, dict) and f.get("fragment") == dernier]
+    return _resoudre(montage, blocs, list(amont or []), precedents, dans_boucle)[0]
+
+
+def _resoudre(montage: list[Any], blocs: dict[str, dict[str, Any]], vus: list[Any],
+              precedents: list[dict[str, Any]], dans_boucle: bool
+              ) -> tuple[list[Any], list[dict[str, Any]]]:
+    """Le montage résolu, et les fragments par lesquels il FINIT (ceux qu'un
+    bloc posé juste après verra comme « précédent »)."""
     # Le contexte suit dans les boucles : un bloc repete se raccorde a ce qui
     # precede la boucle, et la verification de ses ports doit le savoir.
     sortie: list[Any] = []
-    vus: list[Any] = list(amont or [])
-    dernier_fragment: str | None = dernier
     for element in montage or []:
         if not isinstance(element, dict):
             sortie.append(element)
@@ -128,7 +142,7 @@ def resoudre(montage: list[Any], blocs: dict[str, dict[str, Any]],
                 raise WorkflowMappingError(
                     f"bloc réutilisable {nom!r} introuvable",
                     available=sorted(blocs))
-            _verifier(bloc, vus + sortie, dernier_fragment, dans_boucle)
+            _verifier(bloc, vus + sortie, precedents, dans_boucle)
             fragment = {"fragment": bloc.get("fragment") or nom,
                         "contenu": bloc.get("contenu"),
                         "sorties": bloc.get("sorties")}
@@ -138,19 +152,24 @@ def resoudre(montage: list[Any], blocs: dict[str, dict[str, Any]],
                 if champ in element:
                     fragment[champ] = element[champ]
             sortie.append(fragment)
-            dernier_fragment = fragment["fragment"]
+            precedents = [fragment]
             continue
         if "pour" in element:
             element = dict(element)
-            element["faire"] = resoudre(element.get("faire") or [], blocs,
-                                        vus + sortie, dernier_fragment, True)
+            element["faire"], fin = _resoudre(element.get("faire") or [], blocs,
+                                              vus + sortie, precedents, True)
+            precedents = fin or precedents
         elif "si" in element:
+            # Après un « si », le précédent est le dernier fragment de la branche
+            # prise — et laquelle ne se sait qu'au dépliage : les deux comptent.
             element = dict(element)
-            element["alors"] = resoudre(element.get("alors") or [], blocs,
-                                        vus + sortie, dernier_fragment, dans_boucle)
-            element["sinon"] = resoudre(element.get("sinon") or [], blocs,
-                                        vus + sortie, dernier_fragment, dans_boucle)
+            element["alors"], fin_alors = _resoudre(element.get("alors") or [], blocs,
+                                                    vus + sortie, precedents, dans_boucle)
+            element["sinon"], fin_sinon = _resoudre(element.get("sinon") or [], blocs,
+                                                    vus + sortie, precedents, dans_boucle)
+            precedents = (fin_alors or precedents) + [f for f in (fin_sinon or precedents)
+                                                       if f not in (fin_alors or precedents)]
         elif "fragment" in element:
-            dernier_fragment = str(element["fragment"])
+            precedents = [element]
         sortie.append(element)
-    return sortie
+    return sortie, precedents

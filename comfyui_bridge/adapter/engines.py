@@ -154,6 +154,11 @@ def _pid_path(profile: EngineProfile, lock_dir: Path) -> Path:
     return Path(lock_dir) / f"engine-{profile.name}.pid"
 
 
+def _journal_path(profile: EngineProfile, lock_dir: Path) -> Path:
+    """Où la sortie du moteur s'écrit (voir le lancement) : « moteur-<nom>.log »."""
+    return Path(lock_dir) / f"moteur-{profile.name}.log"
+
+
 def stop_engine(profile: EngineProfile, lock_dir: Path, timeout_s: float = 40.0) -> dict[str, Any]:
     """Stop the engine WE started. An 'attach' profile is never touched: that
     server belongs to someone else (ComfyUI Desktop)."""
@@ -216,12 +221,24 @@ def ensure_engine(profile: EngineProfile, startup_timeout_s: float = 180.0,
     flags = 0
     if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):        # Windows
         flags = subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, "DETACHED_PROCESS", 0)
-    proc = subprocess.Popen(
-        profile.command, cwd=profile.cwd,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
-        creationflags=flags, close_fds=True,
-        start_new_session=not hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"),  # POSIX
-    )
+    # La sortie du moteur est GARDÉE, en ajout, dans le dossier de données :
+    # jetée (DEVNULL), la mort du moteur du 2026-09-18 n'a laissé aucune ligne
+    # — ni l'allocation refusée, ni le dernier nœud, ni les mesures de mémoire
+    # que ses propres nœuds écrivent. Le fichier est refermé ici après le
+    # lancement : l'enfant garde le sien.
+    journal = open(_journal_path(profile, lock_dir), "ab") if lock_dir is not None else None
+    try:
+        proc = subprocess.Popen(
+            profile.command, cwd=profile.cwd,
+            stdout=journal if journal is not None else subprocess.DEVNULL,
+            stderr=subprocess.STDOUT if journal is not None else subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            creationflags=flags, close_fds=True,
+            start_new_session=not hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"),  # POSIX
+        )
+    finally:
+        if journal is not None:
+            journal.close()
     if lock_dir is not None:  # remember WHICH process we own, to stop it later
         _pid_path(profile, lock_dir).write_text(str(proc.pid), encoding="utf-8")
     deadline = time.monotonic() + startup_timeout_s

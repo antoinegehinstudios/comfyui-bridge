@@ -258,3 +258,29 @@ def test_un_bloc_declare_mais_absent_du_montage_se_lit():
     with pytest.raises(WorkflowMappingError) as e:
         assembler(deplier(plan, {}), {}, blocs=["segment"])
     assert "segment" in str(e.value)
+
+
+
+def test_un_bloc_de_boucle_absent_a_zero_tour_ne_casse_pas_les_rangs():
+    """« blocs » nomme le maillon répété ET le fragment posé hors boucle ; quand la
+    durée tient dans l'amorce (zéro tour), le maillon n'existe pas et les rangs
+    doivent quand même se compter sur ce qui est là."""
+    livrer_amorce = {"fragment": "livrer-amorce", "contenu": {
+        "1": {"class_type": "Consigne", "inputs": {"rang": {"$calc": "bloc_rang"},
+                                                    "total": {"$calc": "blocs_total"}}}}}
+    livrer = {"fragment": "livrer", "contenu": {
+        "1": {"class_type": "Consigne", "inputs": {"rang": {"$calc": "bloc_rang"},
+                                                    "total": {"$calc": "blocs_total"}}}}}
+    plan = [COMMUN, AMORCE, livrer_amorce,
+            {"pour": {"jusqu_a": "n", "chaque": 1, "deja": 1}, "faire": [livrer]}]
+    g = assembler(deplier(plan, {"n": 1}), {}, blocs=["livrer-amorce", "livrer"])
+    vus = [(v["inputs"]["rang"], v["inputs"]["total"]) for v in g.values() if v["class_type"] == "Consigne"]
+    assert vus == [(0, 1)]
+    g = assembler(deplier(plan, {"n": 3}), {}, blocs=["livrer-amorce", "livrer"])
+    vus = sorted((v["inputs"]["rang"], v["inputs"]["total"]) for v in g.values() if v["class_type"] == "Consigne")
+    assert vus == [(0, 3), (1, 3), (2, 3)]
+
+
+def test_des_blocs_tous_inconnus_restent_refuses():
+    with pytest.raises(WorkflowMappingError, match="n'est pas un fragment"):
+        assembler(deplier([COMMUN, AMORCE], {}), {}, blocs=["segment", "livrer"])

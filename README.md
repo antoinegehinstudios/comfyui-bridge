@@ -696,6 +696,89 @@ dans ses calculs (`{"$calc": "bloc_rang"}`), ce que le tour de boucle ne dit
 pas (l'amorce est hors boucle). Le nœud `DirectionDuBloc` de chaque bloc en
 déduit son temps.
 
+### Le jalon : un tour n'est pas commencé avant que le précédent soit écrit
+
+Un maillon de boucle ne dépend du tour précédent que par son ancre
+(`derniere_image`, disponible dès le décodage), jamais par son ÉCRITURE — et
+ComfyUI n'exécute pas un bloc après l'autre de lui-même. Lu dans
+`comfy_execution/graph.py` et rejoué hors moteur : il enregistre ses nœuds de
+sortie dans l'ordre d'un `set` (arbitraire), les commutateurs paresseux font
+enregistrer tôt les chaînes de tous les blocs, et son ordonnanceur prend « le
+premier nœud prêt enregistré ». Mesuré le 2026-09-18 sur deux blocs à 30 i/s :
+le bloc 2 échantillonné avant l'interpolation et l'écriture du bloc 1, 47 Go de
+mémoire de travail au moteur — les images de tous les blocs coexistaient. Une
+boucle qui concentre son pic au lieu de l'étaler ne répond plus à ce pour quoi
+elle existe.
+
+L'action qui manquait est un BLOC de la bibliothèque, `_data/blocs/jalon.json`
+(`jalon-guide` pour un maillon qui attend `queue`) : posé EN TÊTE du corps de la
+boucle — `"faire": [{"utiliser": "jalon"}, {"utiliser": "segment-h3"}]` —, il
+attend du fragment qui le précède l'ancre ET ses fichiers écrits (`ecrit`, la
+sortie Filenames de `VHS_VideoCombine`), et rend l'ancre inchangée sous le même
+nom : le maillon qui suit ne sait pas qu'un jalon s'est glissé avant lui. Tout
+maillon et toute amorce d'une boucle qui écrit des morceaux offrent donc
+`ecrit` ; la bibliothèque le vérifie à l'inclusion. Les quatre montages H3 du
+poste le portent.
+
+### Un run par tour : la mémoire ne tient plus tous les blocs
+
+Envoyé entier, un montage à blocs tient tous ses blocs dans UN prompt du
+moteur — et le moteur retient chaque modèle tant que le prompt court (mesuré le
+2026-09-18, lu dans son code : le traqueur de modèles du prompt garde une
+référence forte jusqu'au dernier nœud, quoi qu'on câble ; déplacer les chargeurs
+dans chaque bloc ne rendrait pas un octet, et « décharger tous les modèles »
+rapatrie les poids de la carte vers la RAM, l'inverse de ce qu'il faut). Il n'y
+a alors aucun point de contrôle entre deux blocs : la garde de place de la
+passerelle, qui mesure la RAM ET le commit avant chaque tranche, n'a jamais joué,
+et un rendu de trois blocs a conduit le poste au bout de sa limite de commit — le
+moteur est mort sans une ligne.
+
+Une boucle qui déclare **`"un_run_par_tour": true`** est rendue **un tour par
+run** : la passerelle déplie le montage tour par tour, attend la place avant
+chacun (le pic attendu : les images livrées d'un tour × leur poids × le facteur
+de crête), reprend après attente si un run échoue faute de place, et recolle les
+runs par copie de flux — exactement le mécanisme des tranches, pour une boucle.
+Chaque run ne reçoit que sa FENÊTRE : les fragments de son tour, ce qui est
+avant la boucle et que le tour cite par son nom (`$commun.x` — le modèle, posé
+dans chaque run), ce qui est avant sans être cité (une amorce hors boucle) au
+premier run seulement, ce qui est après au dernier. Les numéros de nœuds, les
+rangs (`bloc_rang`) et les totaux restent ceux du montage entier : chaque run dit
+la même chose que le montage d'un seul tenant, et `/io` décrit ce dernier.
+
+Ce qui traverse la frontière entre deux runs est un **relais**, déclaré sur la
+boucle :
+
+```jsonc
+"pour": {"jusqu_a": "duration_s", "chaque": 5.125, "un_run_par_tour": true,
+         "relais": {"derniere_image": {
+             "ecrire": {"class_type": "SaveImage",
+                        "inputs": {"images": "$relais.port", "filename_prefix": "$relais.prefixe"}},
+             "lire":   {"class_type": "LoadImage", "inputs": {"image": "$relais.fichier"}}}}}
+```
+
+Le nœud « ecrire » est posé en queue de chaque run sauf le dernier, branché sur
+ce port du dernier fragment du tour (`$relais.port`) et nommé d'après le run
+(`$relais.prefixe` → `cortex/<label>_relais_derniere_image`) ; la passerelle
+retrouve le fichier parmi les artefacts du run, le dépose chez le moteur, et le
+run suivant reçoit son nom (`relais_derniere_image`, un pilote du montage comme
+la durée) ; le nœud « lire » est posé au début de ce run, et c'est lui que vise
+`$precedent.derniere_image` quand le précédent est dans l'autre run. Les nœuds
+sont ceux de la recette : rien dans le code ne nomme un type de nœud. Dans le
+corps d'une boucle, un `si` voit `tour` et `tours_total` : « au premier tour
+l'amorce, ensuite le segment » s'écrit sans sortir l'amorce de la boucle — et
+donc sans lui donner un run à part. Un appelant peut demander UN tour
+(`"tour": 2` dans la demande, avec `relais_<port>` = un fichier déposé) pour le
+rejouer seul. Un seul tour = un run ordinaire ; le jalon n'a plus lieu d'être
+dans une boucle à un run par tour, l'ordre étant celui des runs.
+
+Ce qui reste dans un run : UN bloc et les modèles (39 Go ici). La sortie du
+moteur est gardée dans `_data/moteur-<nom>.log` — jetée, la mort du 2026-09-18
+n'avait laissé aucune trace. Un run que le moteur ne tient plus (moteur
+injoignable, ou qui a oublié le run) se ferme à l'arrêt en le disant, jamais par
+une erreur serveur ; une chaîne « en cours » au démarrage de la passerelle n'a
+plus de fil : elle est close, et `POST /v1/jobs/{id}/reprendre` repart de la
+première étape non faite.
+
 ## Chaînes (workflow of workflows)
 
 Beaucoup de livrables ne tiennent pas en un seul run : une révélation PUIS sa
@@ -1180,7 +1263,7 @@ recule vers l'œuvre entière, découverte par la dernière page) et `LivreClosi
 expose `papier` et porte SES contrôles (pages, couverture, contemplation). Le
 plan lu est celui de l'intention — `beats`, `temps`, `structure` — tel quel.
 
-Deux chaînes sont livrées.
+Trois chaînes sont livrées.
 
 `video-revelation` — « Révéler une image », le seul flux publié de sa
 catégorie, **onze étapes** qui portent les noms du travail :
@@ -1232,6 +1315,83 @@ la passerelle le DIT au journal.
 
 `video-prolongement` — 17 dernières images → prolongement → mesure du raccord
 → recollage sans le chevauchement.
+
+`video-depuis-un-texte` — « Écrire une vidéo », le mode par défaut de
+**texte → vidéo** : une consigne, un style graphique, une structure de récit,
+une durée, un format, et — si on veut — une accroche et un appel incrustés dans
+la police choisie. Trois étapes — `rendu` (le montage `video-h3-texte`),
+`livraison` (le recollage final, qui incruste les textes) puis `constat` — et
+un seul livrable, la vidéo montée. La base est NEUTRE : rien du style ne s'y
+écrit.
+
+Le STYLE est une entité à part, réconciliée par les menus : `style_graphique`
+et `style_narratif` sont les catalogues du paquet `comfyui-direction-de-style`
+(`styles/graphiques.json` — le médium, la matière, la palette, le mouvement ;
+`styles/narratifs.json` — les TEMPS du récit, leurs parts, la grammaire de
+caméra — dont les structures marketing `lancement-produit` et
+`demonstration-produit`), servis par `options_depuis: {"menu": …}` et appliqués
+dans le graphe par `DirectionDeStyle` (commun) et `DirectionDuBloc` : chaque
+bloc reçoit le temps du récit où il tombe, jamais la consigne entière. Une
+entrée de plus au catalogue est un choix de plus dans maestro, sans rien
+changer ici ; une entrée ne s'y écrit qu'après un rendu qui montre qu'elle
+tient (« des choix qui ne mentent pas »).
+
+La DURÉE ne tient pas dans un run : le montage emploie les **blocs de boucle**
+de la passerelle, **un run du moteur par tour** (voir « Un run par tour ») —
+au tour 0 l'amorce (la seule consigne, `MiniMaxH3ImageToVideo` sans
+`first_frame`), ensuite `segment-h3-texte` (le rendu, dirigé), qui reprend la
+DERNIÈRE IMAGE NATIVE du tour précédent par le relais `derniere_image`
+(écrite en PNG en queue du run, déposée chez le moteur, relue au début du
+suivant) ; puis `livrer` (la livraison du bloc). La passerelle attend la place
+avant chaque run et recolle les runs en copie de flux. Le nombre de blocs se
+déduit de la durée demandée, en secondes natives : `pour { jusqu_a:
+duration_s, chaque: 5,125 s, deja: 0,042 s }` — un bloc fait 124 images à
+24 i/s, la borne basse de la plage d'entraînement du modèle (124 à 362).
+
+La LIVRAISON d'un bloc (`_data/blocs/livrer.json`, réutilisable par tout
+maillon qui offre `images`, `ancre` et `derniere_image`) tient la cadence, la
+netteté et la taille demandées AVANT d'écrire, en TROIS TIERS de 41 images
+natives, chaque tier attendant l'écriture du précédent (mesuré le 2026-09-18 :
+d'un seul tenant, la sortie de l'agrandisseur — 154 images à 1152×2048 en
+float32, 4,36 Go — était refusée par-dessus les modèles gardés en RAM ; en
+tiers, le pic des étapes d'image est divisé par trois et le film est le même,
+les images sélectionnées étant celles de la grille globale) :
+
+* la **cadence** : le modèle rend 24 images par seconde ; pour une autre
+  cadence, `FrameInterpolate` (FILM) multiplie par cinq — une grille à
+  120 i/s — et `VHS_SelectEveryNthImage` en garde une sur N (4 → 30 i/s,
+  2 → 60 i/s), avec une phase calculée sur la grille GLOBALE de la vidéo (un
+  bloc apporte 615 images fines, qui n'est pas un multiple de 4). Le lot
+  interpolé commence par la VRAIE dernière image du bloc précédent : la
+  couture est interpolée comme toute autre paire. 24, 30, 40 et 60 sont
+  exacts ; une autre valeur est ramenée au recollage. À 24 i/s, un commutateur
+  paresseux fait que l'interpolation n'est jamais exécutée ;
+* la **netteté** : le modèle rend à 0,6 mégapixel dans la proportion demandée
+  (576×1024 pour un 16:9) ; `ImageUpscaleWithModelBatched` (RealESRGAN ×2,
+  téléchargé le 2026-09-18 avec l'accord d'Antoine, par lots de 8 en fp16)
+  agrandit les images sélectionnées AVANT le lanczos qui donne la taille :
+  net en 1080p au lieu d'un rééchantillonnage doux. La constante `agrandir` du
+  montage le commute (paresseux : faux, l'agrandisseur n'est pas chargé) ;
+* la **taille** : `ImageScale` (lanczos, recadrage centré) jusqu'à 1080 de
+  petit côté dans le rendu ; au-delà (1440p, 4K), l'étape `livraison` finit
+  l'agrandissement au recollage, en flux, par un facteur exact.
+
+Les TEXTES s'incrustent à la `livraison` : `recoller` accepte `textes` (une
+liste — texte, police, position, début et fin en secondes, un temps négatif se
+comptant depuis la fin —, module `adapter/textes.py`), posés par `drawtext` de
+l'outil d'encodage, en FLUX, avec fondu, ombre et bandeau ; la police est un
+fichier du poste résolu par son nom (`_data/polices.json` fait le menu
+`police`, une ligne par police présente dans `C:/Windows/Fonts`). Aucun nœud du
+moteur n'écrit une police du poste sans tenir toute la vidéo en mémoire — c'est
+pourquoi le texte est un service de la livraison, pas du rendu.
+
+Trois choses que ce mode DIT au lieu de les maquiller : la **durée** livrée est
+ronde au bloc supérieur — au plus ~5 s de plus que demandé, jamais moins, et le
+champ s'appelle « Durée (au moins) » ; la **cadence** livrée est la cadence
+exacte de la grille la plus proche au-dessus de la demande ; la **taille** est
+un agrandissement du rendu natif, pas un rendu à cette taille. L'étape `constat`
+écrit au récit ce qui a été livré face à ce qui a été demandé (durée, cadence,
+largeur, hauteur, poids) — un CONSTAT : il ne refuse rien.
 
 ### Le socle ink — ce qui est figé, ce qui se règle, où ajouter
 
@@ -1449,11 +1609,15 @@ modifier ça ? » a donc une réponse par nature de changement :
 | le GRAPHE d'un mode (ses nœuds, ses valeurs figées) | `_data/workflows/<nom>.json` + ses liaisons dans `_data/reconciliation.local.json` | `POST /v1/render` |
 | l'ORDRE des étapes, les durées, les contrôles d'un flux composé | `_data/chaines/<nom>.json` (et sa copie `resources/chaines-exemples/`) | le runner de chaînes |
 | un CONTRÔLE sur ce que le nœud a MESURÉ (hook vu, climax tenu, durée retenue) | l'étape `verifier` de la chaîne, sur `$etape.recit.<clé>` (le premier artefact `.json` d'un run est parsé sous `recit`) | le runner de chaînes |
-| une RÉPÉTITION (blocs de boucle, conditions) | le montage `_data/workflows/<montage>.json`, ses blocs `_data/blocs/` | le dépliage |
+| une RÉPÉTITION (blocs de boucle, conditions) — et l'ORDRE des tours (le bloc `jalon`, en tête du corps de la boucle) | le montage `_data/workflows/<montage>.json`, ses blocs `_data/blocs/` | le dépliage |
+| la MÉMOIRE d'un montage à blocs (un run du moteur par tour, ce qui passe d'un run au suivant) | la boucle du montage : `un_run_par_tour`, `relais` (les nœuds qui écrivent et relisent) | la fenêtre de chaque run, la garde de place, le recollage des runs |
 | les LIMITES du poste (RAM, VRAM, cœurs) — donc le BUDGET MÉMOIRE d'une tranche | `_data/materiel.local.json` (copie d'exemple `resources/materiel.exemple.json`) ; `COMFY_TRANCHE_GO` ne reste qu'une surcharge d'essai. C'est une propriété du POSTE, jamais de la chaîne ni du flux | le rendu par tranches, `GET /v1/materiel` |
 | la QUALITÉ d'un INTERMÉDIAIRE (ce qu'un graphe écrit avant le montage final) | le nœud `SaveVideo` du graphe, dans `_data/workflows/<nom>.json` : `codec`, `codec.encoding`, `codec.encoding.crf` (10 sur les graphes de la révélation) | le moteur, à l'écriture du fichier |
 | ce que l'utilisateur VOIT d'un MODE (titre, catégorie de la vitrine, résumé, libellés des valeurs) | `_data/reconciliation.local.json` : `titre`, `categorie`, `menus` ; `aides` sur l'entrée d'un GRAPHE seulement | `/v1/workflows`, `/io` |
 | ce que l'utilisateur VOIT d'un CHAMP (sa rubrique, son aide) et la liste qu'il offre | le champ lui-même, chez son propriétaire — `expose` de la chaîne pour les réglages du plan, `expose` de la technique pour les siens : `categorie` (une valeur de `categories_de_champs`, vocabulaire déclaré une fois dans `_data/reconciliation.local.json`, avec `titre` et `repliee`), `aide`, et pour une liste tirée d'un menu `options_depuis: {"menu": …, "requiert": {…}}` qui ne garde que les lignes qui portent ce que le plan exige | `/io` (`categorie`, `aide`, `options`), `/v1/workflows` (`categories_de_champs`) |
+| un TEXTE incrusté (accroche, appel : minutage, position, fondu) | l'étape `recoller` de la chaîne, clé `textes` | la livraison (`adapter/textes.py`) |
+| une POLICE proposée au menu | `_data/polices.json` (une ligne par police présente dans les polices du poste) | le menu `police`, `/io` |
+| le STYLE d'une vidéo écrite (médium, temps du récit, caméra) | les catalogues `styles/*.json` du paquet de direction de style — une entrée éprouvée de plus, jamais un mot de style dans la chaîne | `/io` (menus), `DirectionDeStyle` / `DirectionDuBloc` |
 | une TECHNIQUE (quel graphe tient chaque rôle, ses réglages, ses contrôles) | `_data/techniques/<nom>.json` (et sa copie `resources/techniques-exemples/`) — une technique de plus est un FICHIER de plus | le runner de chaînes, `/v1/workflows` (`techniques`), `/io` (`selon`) |
 | un RACCOURCI (un ensemble de réglages nommé, son aperçu) | `_data/raccourcis/<mode>/` — par l'API, jamais à la main | `/v1/workflows`, `…/raccourcis` |
 | le VOCABULAIRE des styles | `styles/*.json` du paquet de direction de style | `/io` (`options` + `choix`) |

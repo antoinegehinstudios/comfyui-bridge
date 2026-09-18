@@ -56,7 +56,7 @@ _CLES: dict[str, tuple[frozenset[str], frozenset[str]]] = {
                | frozenset(RenderIntent.__dataclass_fields__), frozenset()),
     "extraire_queue": (frozenset({"video", "images"}), frozenset({"video", "images"})),
     "extraire_image": (frozenset({"video", "position"}), frozenset({"video"})),
-    "recoller": (frozenset({"parts", "fps", "largeur", "hauteur", "chevauchement"}),
+    "recoller": (frozenset({"parts", "fps", "largeur", "hauteur", "chevauchement", "textes"}),
                  frozenset({"parts"})),
     "mesurer_raccords": (frozenset({"parts", "chevauchement"}), frozenset({"parts"})),
 }

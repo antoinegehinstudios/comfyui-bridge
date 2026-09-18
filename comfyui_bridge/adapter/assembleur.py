@@ -315,9 +315,170 @@ def _constante(valeur: Any, constantes: dict[str, Any], ou: str) -> Any:
     return constantes[nom]
 
 
+# -- un run par tour ----------------------------------------------------------
+#
+# Une boucle qui déclare « un_run_par_tour » (voir core.blocs) n'est pas
+# envoyée entière au moteur : chaque tour part dans son propre run, et
+# l'assembleur ne recoud alors que la FENÊTRE de ce run —
+#
+# * les fragments du tour demandé ;
+# * ce qui est AVANT la boucle et que le tour cite par son nom (« $commun.x »),
+#   de proche en proche : le modèle, l'encodeur, tout ce qui est posé une fois
+#   et que chaque run doit reposer ;
+# * ce qui est avant la boucle sans être cité par son nom, au premier run
+#   seulement (une amorce hors boucle) ; ce qui est après, au dernier.
+#
+# Ce qui traverse la frontière entre deux runs est un RELAIS, déclaré sur la
+# boucle : « relais »: { <port>: { "ecrire": <nœud>, "lire": <nœud> } }. Le
+# nœud « ecrire » est posé en queue de chaque run sauf le dernier, branché sur
+# ce port du dernier fragment du tour (marqueur « $relais.port ») et nommé
+# d'après le run (« $relais.prefixe ») ; le nœud « lire » est posé au début du
+# run suivant, sur le fichier que la passerelle lui a confié (« $relais.fichier »),
+# et c'est lui que vise « $precedent.<port> » quand le précédent est dans
+# l'autre run. Les nœuds eux-mêmes sont ceux de la recette : rien ici ne
+# nomme un type de nœud.
+
+RELAIS = "relais"
+RELAIS_PORT = "$relais.port"
+RELAIS_FICHIER = "$relais.fichier"
+RELAIS_PREFIXE = "$relais.prefixe"
+
+
+class _Fenetre:
+    """Ce que le run du tour demandé garde du montage, et ses relais."""
+
+    def __init__(self, fragments: list[Fragment], tour_seul: int,
+                 relais_fichiers: dict[str, str] | None, prefixe_relais: str | None) -> None:
+        from ..core.blocs import UN_RUN_PAR_TOUR
+        dedans = [i for i, f in enumerate(fragments)
+                  if isinstance(f.boucle, dict) and f.boucle.get(UN_RUN_PAR_TOUR)]
+        if not dedans:
+            raise WorkflowMappingError(
+                "montage : « tour » demandé alors qu'aucune boucle ne déclare « un_run_par_tour »")
+        self.pour = fragments[dedans[0]].boucle
+        self.total = fragments[dedans[0]].tours_total
+        if not 0 <= tour_seul < self.total:
+            raise WorkflowMappingError(
+                f"montage : tour {tour_seul} demandé, la boucle en compte {self.total} "
+                f"(0 à {self.total - 1})")
+        self.tour = tour_seul
+        self.declares: dict[str, Any] = dict(self.pour.get(RELAIS) or {})
+        self.fichiers = dict(relais_fichiers or {})
+        self.prefixe = prefixe_relais or "cortex/relais"
+        debut, fin = dedans[0], dedans[-1] + 1
+        avant = [(f.nom, f.tour) for f in fragments[:debut]]
+        apres = [(f.nom, f.tour) for f in fragments[fin:]]
+        du_tour = [(f.nom, f.tour) for f in fragments[debut:fin] if f.tour == tour_seul]
+        self.dernier = du_tour[-1]
+        garde = set(du_tour)
+        if tour_seul == 0:
+            garde |= set(avant)
+        if tour_seul == self.total - 1:
+            garde |= set(apres)
+        # Les fragments d'avant que le run cite par leur nom, de proche en
+        # proche : ils sont posés dans CHAQUE run.
+        par_nom = {f.nom: (f.nom, f.tour) for f in fragments[:debut]}
+        contenus = {(f.nom, f.tour): f.contenu for f in fragments}
+        a_voir = list(garde)
+        while a_voir:
+            for nom in _noms_cites(contenus.get(a_voir.pop()) or {}):
+                cible = par_nom.get(nom)
+                if cible is not None and cible not in garde:
+                    garde.add(cible)
+                    a_voir.append(cible)
+        self.garde = garde
+        self.lus: dict[str, tuple[str, int]] = {}      # port -> (numéro, sortie) du nœud « lire »
+        self.a_ecrire = tour_seul < self.total - 1
+        self.graphe: dict[str, Any] = {}               # le graphe du run, où les relais se posent
+
+    def franchit(self, moi: tuple[str, int], vise: tuple[str, int]) -> bool:
+        """« $precedent » qui, depuis le premier fragment du tour, vise le tour d'avant."""
+        return moi[1] == self.tour and vise[1] == self.tour - 1 and vise not in self.garde
+
+
+def _noms_cites(contenu: dict[str, Any]) -> set[str]:
+    """Les fragments qu'un contenu vise par leur NOM (« $commun.x »), hors « $precedent »."""
+    noms: set[str] = set()
+    for noeud in contenu.values():
+        for valeur in ((noeud or {}).get("inputs") or {}).values():
+            if _est_lien(valeur) and valeur[0].startswith(PREFIXE):
+                corps = valeur[0][len(PREFIXE):]
+                nom = corps.split(".", 1)[0].partition("#")[0]
+                if nom != PRECEDENT:
+                    noms.add(nom)
+    return noms
+
+
+def _recette_relais(fenetre: _Fenetre, port: str, role: str) -> dict[str, Any]:
+    declare = fenetre.declares.get(port)
+    if not isinstance(declare, dict) or not isinstance(declare.get(role), dict) \
+            or "class_type" not in declare[role]:
+        raise WorkflowMappingError(
+            f"montage : le relais {port!r} n'a pas de nœud « {role} » "
+            f"(attendu {{\"ecrire\": <nœud>, \"lire\": <nœud>}})",
+            available=sorted(fenetre.declares))
+    return declare[role]
+
+
+def _noeud_lire(fenetre: _Fenetre, port: str, suivant: list[int]) -> tuple[str, int]:
+    """Le nœud qui relit ce port au début du run — posé une fois par port."""
+    if port in fenetre.lus:
+        return fenetre.lus[port]
+    if port not in fenetre.declares:
+        raise WorkflowMappingError(
+            f"montage : « $precedent.{port} » traverse un run, mais aucun relais "
+            f"ne porte {port!r} — le déclarer dans « relais » de la boucle",
+            available=sorted(fenetre.declares))
+    recette = _recette_relais(fenetre, port, "lire")
+    fichier = fenetre.fichiers.get(port)
+    if not fichier:
+        raise WorkflowMappingError(
+            f"montage : le tour {fenetre.tour} relit le relais {port!r}, et aucun fichier "
+            f"ne lui a été confié (« relais_{port} »)")
+    entrees = {champ: (fichier if valeur == RELAIS_FICHIER else valeur)
+               for champ, valeur in (recette.get("inputs") or {}).items()}
+    numero = str(suivant[0])
+    suivant[0] += 1
+    fenetre.lus[port] = (numero, int(fenetre.declares[port].get("sortie", 0)))
+    fenetre.graphe[numero] = {**{k: v for k, v in recette.items() if k != "inputs"},
+                              "inputs": entrees}
+    return fenetre.lus[port]
+
+
+def _noeuds_ecrire(fenetre: _Fenetre, table: dict[tuple[str, int], dict[str, str]],
+                   sorties: dict[tuple[str, int], dict[str, str]], suivant: list[int]) -> None:
+    """Les nœuds qui écrivent les relais en queue du run, un par port déclaré."""
+    for port in fenetre.declares:
+        recette = _recette_relais(fenetre, port, "ecrire")
+        local = _resoudre_nom(port, fenetre.dernier, sorties)
+        if local not in table[fenetre.dernier]:
+            raise WorkflowMappingError(
+                f"montage : le relais {port!r} doit être écrit depuis {fenetre.dernier[0]!r} "
+                f"(tour {fenetre.dernier[1]}), qui n'offre pas ce port",
+                available=sorted(sorties.get(fenetre.dernier) or {}))
+        source = table[fenetre.dernier][local]
+        entrees: dict[str, Any] = {}
+        for champ, valeur in (recette.get("inputs") or {}).items():
+            if valeur == RELAIS_PORT:
+                entrees[champ] = [source, 0]
+            elif _est_lien(valeur) and valeur[0] == RELAIS_PORT:
+                entrees[champ] = [source, valeur[1]]
+            elif valeur == RELAIS_PREFIXE:
+                entrees[champ] = f"{fenetre.prefixe}_relais_{port}"
+            else:
+                entrees[champ] = valeur
+        numero = str(suivant[0])
+        suivant[0] += 1
+        fenetre.graphe[numero] = {**{k: v for k, v in recette.items() if k != "inputs"},
+                                  "inputs": entrees}
+
+
 def assembler(fragments: list[Fragment],
               constantes: dict[str, Any] | None = None,
-              blocs: list[str] | None = None) -> dict[str, Any]:
+              blocs: list[str] | None = None,
+              tour_seul: int | None = None,
+              relais_fichiers: dict[str, str] | None = None,
+              prefixe_relais: str | None = None) -> dict[str, Any]:
     """Le graphe API que le moteur recevra.
 
     ``blocs`` nomme les fragments qui PRODUISENT un morceau de la vidéo (l'amorce
@@ -327,6 +488,12 @@ def assembler(fragments: list[Fragment],
     de savoir où il en est dans le récit : le tour de boucle ne le dit pas
     (l'amorce est hors boucle, et le premier tour vaut 0 alors qu'il est le
     deuxième morceau).
+
+    ``tour_seul`` ne recoud que la fenêtre d'UN run d'une boucle à un run par
+    tour (voir en tête de section) ; les rangs, les totaux et les numéros de
+    nœuds restent ceux du montage entier, pour que chaque run dise la même
+    chose que le montage d'un seul tenant. ``relais_fichiers`` donne, par port,
+    le fichier que le run relit ; ``prefixe_relais`` nomme ceux qu'il écrit.
     """
     if not fragments:
         raise WorkflowMappingError("montage vide : aucun fragment à assembler")
@@ -336,11 +503,15 @@ def assembler(fragments: list[Fragment],
     for f in fragments:
         if f.nom in blocs:
             rangs[(f.nom, f.tour)] = len(rangs)
-    inconnus = [b for b in blocs if b not in {f.nom for f in fragments}]
-    if inconnus:
+    # Un nom absent n'est une faute que s'ils le sont TOUS : un bloc de boucle
+    # nommé ici n'existe pas quand la durée demandée tient dans l'amorce (zéro
+    # tour), et la recette n'a pas à s'écrire autrement pour ce cas-là.
+    presents = {f.nom for f in fragments}
+    inconnus = [b for b in blocs if b not in presents]
+    if blocs and len(inconnus) == len(blocs):
         raise WorkflowMappingError(
             f"montage : « blocs » nomme {inconnus[0]!r}, qui n'est pas un fragment du montage",
-            available=sorted({f.nom for f in fragments}))
+            available=sorted(presents))
 
     ordre = _instances(fragments)
     sorties = _sorties(fragments)
@@ -350,10 +521,17 @@ def assembler(fragments: list[Fragment],
             f"montage : {doublons[0][0]!r} apparaît deux fois au même tour ; "
             f"un fragment posé plusieurs fois doit l'être par une boucle")
     table = _numeroter(fragments)
+    fenetre = (_Fenetre(fragments, int(tour_seul), relais_fichiers, prefixe_relais)
+               if tour_seul is not None else None)
+    # Les numéros libres après ceux du montage entier : les nœuds de relais
+    # s'y posent sans jamais heurter un numéro d'un autre run.
+    suivant = [1 + sum(len(f.contenu or {}) for f in fragments)]
 
-    graphe: dict[str, Any] = {}
+    graphe: dict[str, Any] = fenetre.graphe if fenetre is not None else {}
     for f in fragments:
         moi = (f.nom, f.tour)
+        if fenetre is not None and moi not in fenetre.garde:
+            continue
         for local, noeud in (f.contenu or {}).items():
             if not isinstance(noeud, dict) or "class_type" not in noeud:
                 raise WorkflowMappingError(
@@ -362,7 +540,7 @@ def assembler(fragments: list[Fragment],
             entrees = {}
             for champ, valeur in (noeud.get("inputs") or {}).items():
                 if _est_lien(valeur):
-                    entrees[champ] = [_cible(valeur[0], moi, ordre, table, sorties), valeur[1]]
+                    entrees[champ] = _lien(valeur, moi, ordre, table, sorties, fenetre, suivant)
                 else:
                     # Le numéro de tour est dans la portée : un bloc répété doit
                     # pouvoir placer quelque chose plus loin à chaque répétition.
@@ -376,4 +554,35 @@ def assembler(fragments: list[Fragment],
                         f"fragment {f.nom!r} (tour {f.tour}), nœud {local!r}, entrée {champ!r}")
             copie["inputs"] = entrees
             graphe[table[moi][str(local)]] = copie
+    if fenetre is not None and fenetre.a_ecrire:
+        _noeuds_ecrire(fenetre, table, sorties, suivant)
     return graphe
+
+
+def _lien(valeur: list, moi: tuple[str, int], ordre: list[tuple[str, int]],
+          table: dict[tuple[str, int], dict[str, str]],
+          sorties: dict[tuple[str, int], dict[str, str]],
+          fenetre: _Fenetre | None, suivant: list[int]) -> list:
+    """Un lien recousu — vers le montage entier, ou, dans la fenêtre d'un run,
+    vers ce que le run garde, ou vers le relais quand il franchit un run."""
+    reference = valeur[0]
+    if fenetre is None or not reference.startswith(PREFIXE):
+        return [_cible(reference, moi, ordre, table, sorties), valeur[1]]
+    corps = reference[len(PREFIXE):]
+    nom, _, local = corps.partition(".")
+    if nom == PRECEDENT:
+        position = ordre.index(moi)
+        vise = ordre[position - 1] if position > 0 else None
+        if vise is not None and vise not in fenetre.garde:
+            if fenetre.franchit(moi, vise):
+                numero, sortie = _noeud_lire(fenetre, local, suivant)
+                return [numero, sortie]
+            raise WorkflowMappingError(
+                f"fragment {moi[0]!r} (tour {moi[1]}) : « $precedent » vise {vise[0]!r} "
+                f"(tour {vise[1]}), qui n'est pas dans le run du tour {fenetre.tour}")
+    elif (nom.partition("#")[0], 0) not in fenetre.garde and (nom, 0) in table:
+        raise WorkflowMappingError(
+            f"fragment {moi[0]!r} (tour {moi[1]}) : référence à {nom!r}, qui n'est pas "
+            f"dans le run du tour {fenetre.tour}",
+            available=sorted({n for n, _ in fenetre.garde}))
+    return [_cible(reference, moi, ordre, table, sorties), valeur[1]]

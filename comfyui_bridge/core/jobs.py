@@ -181,11 +181,48 @@ class JobStore:
     def get(self, job_id: str) -> Job:
         with self._lock:
             job = self._jobs.get(job_id)
-        if job is None:
-            job = self._relire(job_id)
+            if job is None:
+                # RÉADOPTION : un job relu du disque redevient un job pilotable.
+                # Rendu détaché, il se lisait (200) mais toute écriture — un
+                # arrêt, un statut — levait KeyError dans un magasin vidé par
+                # le redémarrage (mesuré le 2026-09-18 : cancel → 500).
+                job = self._relire(job_id)
+                if job is not None:
+                    self._jobs[job_id] = job
         if job is None:
             raise JobNotFoundError(f"no job with id {job_id!r}", job_id=job_id)
         return job
+
+    def clore_les_chaines_orphelines(self, raison: str) -> list[str]:
+        """Les CHAÎNES encore « en cours » sur le disque au démarrage sont mortes :
+        une chaîne s'exécute dans un fil de CE processus, et le fil n'a pas
+        survécu au redémarrage. Les fermer, en le disant, plutôt que de les
+        laisser « running » pour toujours (mesuré le 2026-09-18 : une chaîne
+        zombie que rien ne pouvait plus arrêter). Un run simple, lui, est aux
+        mains du moteur : c'est le rattrapage des runs en vol qui le suit."""
+        if self._dir is None:
+            return []
+        closes: list[str] = []
+        try:
+            fichiers = sorted(self._dir.glob("*.json"))
+        except OSError:
+            return []
+        for f in fichiers:
+            job = self.get(f.stem) if f.stem not in self._jobs else self._jobs[f.stem]
+            if not job.etapes or job.status not in (JobStatus.ACCEPTED, JobStatus.QUEUED,
+                                                       JobStatus.RUNNING):
+                continue
+            self.append_log(job.id, f"chaîne close au démarrage : {raison}")
+            self.mark_failed(job.id, {
+                "type": "https://cortex/problems/chaine-interrompue",
+                "title": "Chaîne interrompue par un redémarrage",
+                "status": 503,
+                "detail": f"{raison} ; les étapes faites restent faites — "
+                          f"POST /v1/jobs/{job.id}/reprendre repart de la première non faite",
+                "problem_kind": "chaine-interrompue",
+            })
+            closes.append(job.id)
+        return closes
 
     def list(self, limit: int = 50) -> list[Job]:
         """Les runs, du plus récent au plus ancien : mémoire ET fichiers.

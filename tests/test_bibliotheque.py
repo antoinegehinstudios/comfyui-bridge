@@ -71,6 +71,27 @@ def test_une_inclusion_peut_renommer_le_fragment_sans_toucher_au_bloc_partage():
     assert BLOC["fragment"] == "segment"           # le bloc partagé n'a pas bougé
 
 
+def test_apres_un_si_le_bloc_se_raccorde_au_dernier_fragment_de_chaque_branche():
+    """« Au premier tour l'amorce, ensuite le segment » : le bloc posé après le
+    « si » verra l'un OU l'autre — chacun doit offrir ce qu'il attend, et une
+    branche muette se dit par son nom."""
+    segment = {"fragment": "segment", "sorties": {"derniere_image": "5"},
+               "contenu": {"5": {"class_type": "Decode", "inputs": {}}}}
+    montage = [COMMUN, {"pour": {"jusqu_a": "n", "chaque": 1}, "faire": [
+        {"si": {"parametre": "tour", "op": "eq", "valeur": 0}, "alors": [AMORCE], "sinon": [segment]},
+        {"utiliser": "maillon"}]}]
+    rendu = bibliotheque.resoudre(montage, {"maillon": BLOC})
+    assert rendu[1]["faire"][1]["fragment"] == "segment"
+    # Hors boucle (où le bloc ne peut pas se suivre lui-même), une branche
+    # muette est refusée, et nommée.
+    muet = {"fragment": "segment", "contenu": {"5": {"class_type": "Decode", "inputs": {}}}}
+    hors_boucle = [COMMUN, {"si": {"parametre": "x", "op": "eq", "valeur": 0},
+                            "alors": [AMORCE], "sinon": [muet]}, {"utiliser": "maillon"}]
+    with pytest.raises(WorkflowMappingError) as e:
+        bibliotheque.resoudre(hors_boucle, {"maillon": BLOC})
+    assert "'segment'" in str(e.value) and "derniere_image" in str(e.value)
+
+
 def test_les_blocs_livres_avec_le_paquet_sont_trouvables():
     # Une machine neuve doit avoir de quoi monter une chaîne sans rien copier.
     assert bibliotheque.charger() != {}

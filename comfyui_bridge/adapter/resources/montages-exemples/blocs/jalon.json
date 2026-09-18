@@ -1,0 +1,73 @@
+{
+ "bloc": "jalon",
+ "fragment": "jalon",
+ "_lisez_moi": [
+  "JALON — l'action qui manquait aux boucles de blocs : « le tour suivant ne part",
+  "qu'une fois le tour précédent ÉCRIT ».",
+  "",
+  "Un maillon de boucle ne dépend du précédent que par son ancre (« derniere_image »,",
+  "disponible dès le décodage), jamais par son ÉCRITURE. Or ComfyUI n'exécute pas",
+  "un bloc après l'autre de lui-même : il enregistre ses nœuds de sortie dans",
+  "l'ordre d'un « set » (arbitraire), les commutateurs paresseux font enregistrer",
+  "tôt les chaînes de tous les blocs, et son ordonnanceur prend « le premier nœud",
+  "prêt enregistré » (comfy_execution/graph.py, ux_friendly_pick_node). Mesuré le",
+  "2026-09-18 : deux blocs à 30 i/s, le bloc 2 échantillonné avant l'interpolation",
+  "et l'écriture du bloc 1, 47 Go de mémoire de travail au moteur — les images de",
+  "tous les blocs coexistaient. Une boucle qui concentre son pic au lieu de",
+  "l'étaler ne sert à rien.",
+  "",
+  "Ce bloc pose la dépendance manquante. Il se place EN TÊTE du corps de la boucle,",
+  "avant le maillon : « faire » : [{ utiliser : jalon }, { utiliser : <maillon> }].",
+  "Il attend du fragment qui le précède (l'amorce, puis le maillon du tour",
+  "d'avant) son ancre « derniere_image » ET ses fichiers écrits « ecrit » (la",
+  "sortie Filenames de VHS_VideoCombine) ; il rend l'ancre, inchangée, sous le même",
+  "nom — le maillon qui suit lit « $precedent.derniere_image » comme avant, sans",
+  "savoir qu'un jalon s'est glissé entre les deux. Le moteur ne peut donc pas",
+  "commencer un tour avant d'avoir écrit le précédent, et, en cache nul, il libère",
+  "alors tout ce que le tour précédent a consommé.",
+  "",
+  "Deux nœuds : VRAM_Debug (KJNodes, déjà requis par les maillons H3) porte le",
+  "lien — « any_input » reçoit les fichiers écrits, « image_pass » l'ancre —, et",
+  "fait gc_collect + vidage du cache CUDA entre deux tours, sans décharger les",
+  "modèles ; RepeatImageBatch (cœur, amount 1) remet l'ancre en sortie 0, celle",
+  "que les maillons lisent. Tout maillon et toute amorce d'une boucle qui écrit",
+  "des morceaux doivent offrir « ecrit » (leur nœud VHS_VideoCombine) : la",
+  "bibliothèque le vérifie à l'inclusion. Pour un maillon qui attend « queue »",
+  "(guide de recouvrement) au lieu de « derniere_image », voir « jalon-guide »."
+ ],
+ "attend": {
+  "derniere_image": "IMAGE",
+  "ecrit": "VHS_FILENAMES"
+ },
+ "sorties": {
+  "derniere_image": "2"
+ },
+ "contenu": {
+  "1": {
+   "class_type": "VRAM_Debug",
+   "inputs": {
+    "empty_cache": true,
+    "gc_collect": true,
+    "unload_all_models": false,
+    "any_input": [
+     "$precedent.ecrit",
+     0
+    ],
+    "image_pass": [
+     "$precedent.derniere_image",
+     0
+    ]
+   }
+  },
+  "2": {
+   "class_type": "RepeatImageBatch",
+   "inputs": {
+    "image": [
+     "1",
+     1
+    ],
+    "amount": 1
+   }
+  }
+ }
+}

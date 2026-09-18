@@ -139,3 +139,77 @@ def test_le_depliage_ne_connait_aucun_terme_du_moteur():
 
 def test_tours_de_est_utilisable_seul():
     assert tours_de({"jusqu_a": 20, "chaque": 8}, {}) == 3
+
+
+# -- un run par tour ----------------------------------------------------------
+
+from comfyui_bridge.core.blocs import (boucle_par_run, parametres_pilotes,  # noqa: E402
+                                       tours_separes)
+
+RELAIS_IMAGE = {"derniere_image": {
+    "ecrire": {"class_type": "SaveImage", "inputs": {"images": "$relais.port"}},
+    "lire": {"class_type": "LoadImage", "inputs": {"image": "$relais.fichier"}}}}
+
+
+def _boucle_par_run(deja=0.0):
+    return {"jusqu_a": "duration_s", "chaque": 8.0, "deja": deja,
+            "un_run_par_tour": True, "relais": RELAIS_IMAGE}
+
+
+def test_dans_une_boucle_un_si_voit_le_tour():
+    # « Au premier tour, l'amorce ; ensuite, le segment » : l'amorce n'a plus à
+    # sortir de la boucle pour être posée une seule fois.
+    plan = [{"pour": {"jusqu_a": "duration_s", "chaque": 8.0},
+             "faire": [{"si": {"parametre": "tour", "op": "eq", "valeur": 0},
+                        "alors": [_segment("amorce")], "sinon": [_segment("segment")]}]}]
+    sortie = deplier(plan, {"duration_s": 24})
+    assert [(f.nom, f.tour) for f in sortie] == [("amorce", 0), ("segment", 1), ("segment", 2)]
+
+
+def test_dans_une_boucle_un_si_voit_aussi_le_total_des_tours():
+    plan = [{"pour": {"jusqu_a": "duration_s", "chaque": 8.0},
+             "faire": [{"si": {"parametre": "tours_total", "op": "gt", "valeur": 2},
+                        "alors": [_segment("long")], "sinon": [_segment("court")]}]}]
+    assert {f.nom for f in deplier(plan, {"duration_s": 24})} == {"long"}
+    assert {f.nom for f in deplier(plan, {"duration_s": 16})} == {"court"}
+
+
+def test_le_tour_vu_par_un_si_ne_sort_pas_de_la_boucle():
+    # Hors boucle, « tour » n'est pas un paramètre : la condition est fausse.
+    plan = [{"si": {"parametre": "tour", "op": "eq", "valeur": 0}, "alors": [_segment("a")]}]
+    assert deplier(plan, {"duration_s": 24}) == []
+
+
+def test_un_fragment_de_boucle_porte_la_declaration_de_sa_boucle():
+    pour = _boucle_par_run()
+    sortie = deplier([_segment("commun"), {"pour": pour, "faire": [_segment()]}], {"duration_s": 16})
+    assert sortie[0].boucle is None                          # hors boucle
+    assert all(f.boucle is pour for f in sortie[1:])         # la déclaration, pas une copie
+
+
+def test_les_pilotes_d_un_run_par_tour_sont_le_tour_et_les_relais():
+    plan = [{"pour": _boucle_par_run(), "faire": [_segment()]}]
+    assert parametres_pilotes(plan) == {"duration_s", "tour", "relais_derniere_image"}
+    # Sans « un_run_par_tour », rien de tout ça : la durée seule pilote.
+    plan = [{"pour": {"jusqu_a": "duration_s", "chaque": 8.0}, "faire": [_segment()]}]
+    assert parametres_pilotes(plan) == {"duration_s"}
+
+
+def test_tours_separes_compte_les_runs_ou_dit_qu_un_seul_suffit():
+    plan = [{"pour": _boucle_par_run(), "faire": [_segment()]}]
+    assert tours_separes(plan, {"duration_s": 24}) == 3
+    assert tours_separes(plan, {"duration_s": 8}) is None          # un tour : un run ordinaire
+    sans = [{"pour": {"jusqu_a": "duration_s", "chaque": 8.0}, "faire": [_segment()]}]
+    assert tours_separes(sans, {"duration_s": 24}) is None
+    assert boucle_par_run(sans) is None
+
+
+def test_un_run_par_tour_imbrique_ou_double_est_refuse():
+    imbrique = [{"pour": _boucle_par_run(),
+                 "faire": [{"pour": _boucle_par_run(), "faire": [_segment()]}]}]
+    with pytest.raises(IntentValidationError, match="imbriqu"):
+        boucle_par_run(imbrique)
+    double = [{"pour": _boucle_par_run(), "faire": [_segment("a")]},
+              {"pour": _boucle_par_run(), "faire": [_segment("b")]}]
+    with pytest.raises(IntentValidationError, match="deux boucles"):
+        boucle_par_run(double)

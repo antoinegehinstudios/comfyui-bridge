@@ -76,8 +76,16 @@ def arreter_au_moteur(container, job_id: str) -> dict[str, Any]:
     ref = getattr(job, "engine_ref", None)
     if not ref:
         return {"cancelled": False, "reason": "ce job n'a pas encore été pris par le moteur"}
-    file = container.comfyui.queue()
+    # L'intention d'arrêt est notée AVANT d'interroger le moteur : elle ne
+    # dépend pas de lui, et c'est quand il ne répond plus qu'on veut arrêter.
     container.store.request_cancel(job_id)
+    try:
+        file = container.comfyui.queue()
+    except Exception as exc:                        # noqa: BLE001
+        # Un moteur injoignable est un cas NORMAL de l'annulation, pas une
+        # erreur serveur (mesuré le 2026-09-18 : moteur mort, cancel → 500 ;
+        # le run, lui, restait « en cours » pour toujours).
+        return _clore_sans_moteur(container, job, f"le moteur ne répond plus ({exc})")
     if ref in file.get("pending", []):
         sortie = container.comfyui.cancel([ref])
         container.store.append_log(job_id, "annulé dans la file du moteur (il n'avait pas commencé)")
@@ -86,7 +94,26 @@ def arreter_au_moteur(container, job_id: str) -> dict[str, Any]:
         sortie = container.comfyui.interrupt()
         container.store.append_log(job_id, "interruption demandée au moteur (run en cours)")
         return {"cancelled": True, "how": "interrupt", **sortie}
+    if job.status in (JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.ACCEPTED):
+        # Le moteur ne connaît plus ce run alors qu'il est encore « en cours »
+        # ici : il est MORT (moteur relancé, run perdu), pas en cours.
+        return _clore_sans_moteur(container, job, "le moteur ne connaît plus ce run")
     return {"cancelled": False, "reason": "le moteur ne connaît plus ce run"}
+
+
+def _clore_sans_moteur(container, job, raison: str) -> dict[str, Any]:
+    """Clore un run que le moteur ne tient plus : l'arrêt est noté, le job est
+    fermé (« cancelled », l'arrêt étant demandé), et on dit pourquoi."""
+    if job.status in (JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.ACCEPTED):
+        container.store.append_log(job.id, f"arrêté sans le moteur : {raison}")
+        container.store.mark_failed(job.id, {
+            "type": "https://cortex/problems/cancelled",
+            "title": "Run arrêté",
+            "status": 499,
+            "detail": f"arrêté à la demande — {raison} ; rien n'est retenu contre ce workflow",
+            "problem_kind": "cancelled",
+        })
+    return {"cancelled": True, "how": "moteur-absent", "reason": raison}
 
 
 class RunnerDeChaines:
@@ -138,7 +165,7 @@ class RunnerDeChaines:
                 etapes[rang]["statut"] = statut
                 etapes[rang]["note"] = f"repris du job {reprise_de}"
                 etapes[rang]["resultat"] = _resume(resultat)
-                for cle in ("job_id", "job_ids", "tranches"):
+                for cle in ("job_id", "job_ids", "tranches", "tours"):
                     if cle in resultat:
                         etapes[rang][cle] = resultat[cle]
                 store.set_etapes(job_id, etapes)
@@ -454,7 +481,8 @@ class RunnerDeChaines:
                                           hauteur=int(params.get("hauteur") or 720),
                                           chevauchement=int(params.get("chevauchement") or 0),
                                           signaler=lambda dit: self._c.store.append_log(
-                                              job_id, f"étape {etape.id} : {dit}"))
+                                              job_id, f"étape {etape.id} : {dit}"),
+                                          textes=params.get("textes"))
         if etape.genre == "mesurer_raccords":
             parts = self._parts_locales(params["parts"], travail)
             return montage_video.mesurer_raccords(
@@ -565,12 +593,16 @@ class RunnerDeChaines:
         reglages.pop("constraints", None)
         genre = reglages.pop("kind", None)
         tranches = self._tranches_de(parent_id, etape, nom, reglages, media)
-        if tranches is None:
-            fini = self._executer_run(parent_id, etape, nom, media, genre, reglages,
-                                      f"{label}-{etape.id}"[:40], etapes, rang)
-            return self._resultat_du_run(parent_id, etape, nom, fini)
-        return self._rendre_par_tranches(parent_id, etape, nom, media, genre, reglages,
-                                         label, etapes, rang, tranches, travail, chaine_nom)
+        if tranches is not None:
+            return self._rendre_par_tranches(parent_id, etape, nom, media, genre, reglages,
+                                             label, etapes, rang, tranches, travail, chaine_nom)
+        tours = self._tours_separes(parent_id, etape, nom, reglages)
+        if tours is not None:
+            return self._rendre_par_tours(parent_id, etape, nom, media, genre, reglages,
+                                          label, etapes, rang, tours, travail, chaine_nom)
+        fini = self._executer_run(parent_id, etape, nom, media, genre, reglages,
+                                  f"{label}-{etape.id}"[:40], etapes, rang)
+        return self._resultat_du_run(parent_id, etape, nom, fini)
 
     def _executer_run(self, parent_id: str, etape: noyau.Etape, nom: str,
                       media: dict[str, str], genre: Any, reglages: dict[str, Any],
@@ -993,6 +1025,197 @@ class RunnerDeChaines:
                                  "tranches_au_recit": len(recits)}
         return resultat
 
+    # -- un run par tour --------------------------------------------------------
+    #
+    # Un montage à blocs de boucle envoyé ENTIER au moteur tient tous ses blocs
+    # dans un seul prompt : les modèles y restent en mémoire jusqu'au dernier
+    # nœud (le moteur retient chaque modèle tant que le prompt court), et la
+    # passerelle n'a aucun point de contrôle entre deux blocs — mesuré le
+    # 2026-09-18 : un rendu de trois blocs a conduit le poste au bout de sa
+    # limite de commit et le moteur est mort sans une ligne. Une boucle qui
+    # déclare « un_run_par_tour » (voir core.blocs) est rendue un tour par run :
+    # la garde de place joue avant chacun, comme pour une tranche, et ce qui
+    # passe d'un tour au suivant (le relais : la dernière image, le plus
+    # souvent) est écrit par le run, déposé chez le moteur, relu par le suivant.
+
+    def _tours_separes(self, parent_id: str, etape: noyau.Etape, nom: str,
+                       reglages: dict[str, Any]) -> int | None:
+        """Combien de runs ce montage demande (un par tour), ou None."""
+        c = self._c
+        try:
+            spec = c.catalog.get_spec(nom)
+            return c.catalog.tours_separes(spec, reglages)
+        except Exception as exc:                    # noqa: BLE001
+            # repli: un montage qui ne se lit pas ici sera refusé au run, qui le
+            # dira ; on ne découpe pas ce qu'on ne sait pas lire — et on le dit.
+            c.store.append_log(parent_id, f"étape {etape.id} : pas de runs par tour ({exc})")
+            return None
+
+    def _pic_d_un_tour(self, nom: str, reglages: dict[str, Any], n: int) -> dict[str, Any] | None:
+        """Ce qu'un tour pèse, pour la garde de place : les images livrées du
+        rendu entier réparties sur les tours, au poids d'une image de sortie
+        — la même mesure que pour une tranche. None quand la taille, la
+        cadence ou la durée ne se lisent pas avant le run (pas de garde)."""
+        c = self._c
+        try:
+            defauts = dict(c.catalog.get_spec(nom).defaults or {})
+        except Exception:                           # noqa: BLE001
+            defauts = {}
+
+        def nombre(cle: str) -> float:
+            try:
+                return float(reglages.get(cle, defauts.get(cle)) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        largeur, hauteur, fps, duree = (nombre("width"), nombre("height"), nombre("fps"),
+                                        nombre("duration_s"))
+        if largeur <= 0 or hauteur <= 0 or fps <= 0 or duree <= 0:
+            return None
+        images = int(math.ceil(duree * fps))
+        return {"nombre": n, "images": images, "largeur": int(largeur), "hauteur": int(hauteur),
+                "fps": int(fps), "poids": int(largeur) * int(hauteur) * OCTETS_PAR_IMAGE,
+                "facteur": self._facteur_de_crete()}
+
+    def _rendre_par_tours(self, parent_id: str, etape: noyau.Etape, nom: str,
+                          media: dict[str, str], genre: Any, reglages: dict[str, Any],
+                          label: str, etapes: list[dict[str, Any]], rang: int,
+                          n: int, travail: Path | None, chaine_nom: str) -> dict[str, Any]:
+        c = self._c
+        store = c.store
+        ports = sorted(c.catalog.relais_de(c.catalog.get_spec(nom)))
+        pic = self._pic_d_un_tour(nom, reglages, n)
+        if pic is not None:
+            besoin, par_tour, facteur = self._pic_attendu(pic, n, None)
+            store.append_log(
+                parent_id,
+                f"étape {etape.id} : rendu en {n} runs, un par tour de boucle — la place est "
+                f"attendue avant chacun (jusqu'à {par_tour} images de {pic['largeur']}×"
+                f"{pic['hauteur']} par tour, pic attendu {besoin / 2 ** 30:.1f} Gio à "
+                f"{facteur:g} de crête)"
+                + (f" ; relais entre les runs : {', '.join(ports)}" if ports else ""))
+        else:
+            store.append_log(
+                parent_id,
+                f"étape {etape.id} : rendu en {n} runs, un par tour de boucle — taille, cadence "
+                f"ou durée inconnues avant le run : aucune garde de place entre les tours")
+        parts: list[str] = []
+        recits: list[dict[str, Any]] = []
+        sous_ids: list[str] = []
+        artefacts: list[str] = []
+        duree = 0.0
+        relais: dict[str, str] = {}       # port -> le nom du fichier chez le moteur
+        for i in range(n):
+            if store.get(parent_id).cancel_requested:
+                raise MediaAssemblyError(
+                    f"étape {etape.id!r} : arrêt demandé avant le tour {i + 1}/{n}")
+            etapes[rang]["note"] = f"tour {i + 1}/{n}"
+            store.set_etapes(parent_id, etapes)
+            if pic is not None:
+                self._attendre_la_place(parent_id, etape, nom, i, n, pic)
+            media_i = dict(media)
+            media_i.update({f"relais_{port}": fichier for port, fichier in relais.items()})
+            reglages_i = {**reglages, "tour": i}
+            essais = 0
+            while True:
+                try:
+                    fini = self._executer_run(parent_id, etape, nom, media_i, genre, reglages_i,
+                                              f"{label}-{etape.id}-{i + 1}sur{n}"[:40],
+                                              etapes, rang)
+                    break
+                except MediaAssemblyError as exc:
+                    # Même règle que pour une tranche : un tour qui échoue ALORS
+                    # QUE la place manque a probablement échoué de ça ; on attend
+                    # la place et on reprend, en le disant, jamais plus de
+                    # REPRISES_MAX fois — et jamais quand la place ne manquait pas.
+                    essais += 1
+                    manque = self._manque_de_place(pic, n, None) if pic is not None else None
+                    if essais > REPRISES_MAX or manque is None:
+                        raise
+                    marge, besoin = manque
+                    store.append_log(
+                        parent_id,
+                        f"étape {etape.id} : le tour {i + 1}/{n} a échoué ({exc.detail}) alors "
+                        f"que le poste n'avait que {marge / 2 ** 30:.1f} Gio de marge pour un "
+                        f"pic attendu de {besoin / 2 ** 30:.1f} Gio — reprise après attente "
+                        f"(essai {essais}/{REPRISES_MAX})")
+                    self._attendre_la_place(parent_id, etape, nom, i, n, pic)
+            livrable = _principal(fini.artifacts)
+            if livrable is None or livrable.kind != "video":
+                raise MediaAssemblyError(
+                    f"étape {etape.id!r} ({nom}) : le tour {i + 1}/{n} n'a pas livré de vidéo",
+                    job_id=fini.id, workflow=nom)
+            parts.append(livrable.path)
+            sous_ids.append(fini.id)
+            if i < n - 1:
+                # Ce que le tour suivant relit : écrit par ce run, déposé chez le
+                # moteur sous un nom que le graphe du run suivant peut citer.
+                for port in ports:
+                    ecrit = _relais_ecrit(fini.artifacts, port)
+                    if ecrit is None:
+                        raise MediaAssemblyError(
+                            f"étape {etape.id!r} ({nom}) : le tour {i + 1}/{n} n'a pas écrit "
+                            f"le relais {port!r} (aucune image « _relais_{port} » parmi ses "
+                            f"{len(fini.artifacts)} fichiers)", job_id=fini.id, workflow=nom)
+                    relais[port] = self._deposer(Path(ecrit.path))
+                    store.append_log(
+                        parent_id,
+                        f"étape {etape.id} : relais « {port} » du tour {i + 1} "
+                        f"({Path(ecrit.path).name}) déposé chez le moteur sous « {relais[port]} »")
+            # Posés à CHAQUE tour, pas à la fin : une chaîne qui échoue au tour
+            # 2/3 doit encore dire quels tours sont rendus, et où.
+            etapes[rang]["job_ids"] = list(sous_ids)
+            etapes[rang]["tours"] = n
+            artefacts += [a.path for a in fini.artifacts]
+            duree += fini.duration_s or 0.0
+            recit = _recit(fini.artifacts, lambda raison, i=i: store.append_log(
+                parent_id, f"étape {etape.id} : récit du tour {i + 1} illisible : {raison}"))
+            if recit is not None:
+                recits.append(recit)
+        etapes[rang]["note"] = f"{n} tours"
+        store.set_etapes(parent_id, etapes)
+
+        sortie = self._sortie(parent_id, label, etape.id, ".mp4", chaine=chaine_nom)
+        try:
+            fait = montage_video.concatener(parts, sortie)
+        except MediaAssemblyError as exc:
+            # repli: des tours que la copie de flux ne sait pas joindre sont
+            # recollés en ré-encodant — une génération de perte de plus, jamais
+            # silencieuse.
+            store.append_log(parent_id, f"étape {etape.id} : copie de flux impossible "
+                                        f"({exc.detail}) — recollage ré-encodé")
+            fait = montage_video.recoller(parts, sortie, fps=(pic or {}).get("fps"),
+                                          largeur=(pic or {}).get("largeur"),
+                                          hauteur=(pic or {}).get("hauteur"))
+        jonctions: dict[str, Any] | None = None
+        if travail is not None:
+            try:
+                mesure = montage_video.mesurer_raccords(parts, Path(travail) / f"{etape.id}-jonctions")
+                jonctions = {"pire": mesure["pire"], "moyenne": mesure["moyenne"],
+                             "nombre": mesure["nombre"]}
+            except MediaAssemblyError as exc:
+                # repli: une jonction qui ne se mesure pas n'invalide pas le
+                # livrable — elle se dit au journal.
+                store.append_log(parent_id, f"étape {etape.id} : jonctions non mesurées "
+                                            f"({exc.detail})")
+        comment = "sans ré-encodage" if fait.get("reencode") is False else "en ré-encodant"
+        store.append_log(
+            parent_id,
+            f"étape {etape.id} : {n} tours recollés {comment}"
+            + (f" — jonctions mesurées : pire {jonctions['pire']:.4f}, "
+               f"moyenne {jonctions['moyenne']:.4f}" if jonctions else ""))
+        chemin = Path(fait["livrable"])
+        resultat: dict[str, Any] = {
+            "livrable": str(chemin), "job_id": sous_ids[-1], "job_ids": sous_ids, "tours": n,
+            "mesure": {**(fait.get("mesure") or {}), "bytes": chemin.stat().st_size},
+            "artefacts": artefacts, "_duree": duree}
+        if jonctions is not None:
+            resultat["jonctions"] = jonctions
+        if recits:
+            resultat["recit"] = {**fusionner_recits(recits), "tours": n,
+                                 "tours_au_recit": len(recits)}
+        return resultat
+
     def _veiller(self, parent_id: str, sous_id: str, etape_id: str, rang: int,
                  total: int, arret: threading.Event) -> None:
         """Relayer la progression du sous-job, et porter l'arrêt jusqu'à lui.
@@ -1275,6 +1498,18 @@ def fusionner_recits(recits: list[dict[str, Any]]) -> dict[str, Any]:
     return fusionne
 
 
+def _relais_ecrit(artefacts: list[Artifact], port: str) -> Artifact | None:
+    """Le fichier qu'un run a écrit pour ce relais : une image dont le nom
+    porte la marque « _relais_<port> » (le préfixe que l'assembleur donne au
+    nœud qui l'écrit). Plusieurs images sous la même marque : la dernière
+    écrite, celle qui compte pour une suite."""
+    vus = [a for a in artefacts
+           if a.kind == "image" and f"_relais_{port}" in Path(a.path).name]
+    if not vus:
+        return None
+    return sorted(vus, key=lambda a: Path(a.path).name)[-1]
+
+
 def _principal(artefacts: list[Artifact]) -> Artifact | None:
     """Ce qu'un run a livré de PRINCIPAL, parmi ce qu'il a écrit.
 
@@ -1329,7 +1564,7 @@ def _resume(resultat: dict[str, Any]) -> dict[str, Any]:
     pas la totalité (une mesure de raccords porte une ligne par frontière)."""
     garde = {}
     for cle in ("livrable", "fichier", "depot", "images", "job_id", "job_ids", "tranches",
-                "jonctions", "mesure", "pire", "moyenne", "nombre", "parts"):
+                "tours", "jonctions", "mesure", "pire", "moyenne", "nombre", "parts"):
         if cle in resultat:
             garde[cle] = resultat[cle]
     if "controles" in resultat:

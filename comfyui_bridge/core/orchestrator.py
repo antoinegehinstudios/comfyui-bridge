@@ -91,7 +91,7 @@ class Orchestrator:
 
         asked: dict[str, Any] = {}
         for field in ("negative_prompt", "width", "height", "steps", "cfg", "seed", "fps",
-                      "duration_s", "batch", "style_graphique", "style_narratif"):
+                      "duration_s", "batch", "style_graphique", "style_narratif", "tour"):
             v = getattr(intent, field, None)
             if v is None:
                 v = declared.get(field)
@@ -112,7 +112,8 @@ class Orchestrator:
         for field, cast in (("negative_prompt", str), ("width", int), ("height", int),
                             ("steps", int), ("cfg", float), ("seed", int), ("fps", int),
                             ("duration_s", float),
-                            ("style_graphique", str), ("style_narratif", str)):
+                            ("style_graphique", str), ("style_narratif", str),
+                            ("tour", int)):
             if field in asked:
                 params[field] = cast(asked[field])
 

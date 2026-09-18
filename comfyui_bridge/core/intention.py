@@ -91,6 +91,10 @@ class RenderIntent:
     # numéro de nœud.
     style_graphique: str | None = None
     style_narratif: str | None = None
+    # Pour un montage dont la boucle déclare « un_run_par_tour » : le tour à
+    # rendre SEUL dans ce run (0, 1, 2…). La passerelle l'envoie run après
+    # run ; un appelant peut aussi demander un tour précis, pour le rejouer.
+    tour: int | None = None
     # Direct overrides on the workflow's OWN inputs, keyed "node.input".
     # The neutral params above are conveniences; this is the full surface the
     # workflow declares (discovered from ComfyUI's node schemas).
