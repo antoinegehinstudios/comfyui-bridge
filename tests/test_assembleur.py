@@ -165,6 +165,81 @@ def test_un_calcul_qui_nomme_l_inconnu_se_lit():
     assert "duree" in str(e.value)
 
 
+# -- une entrée décidée au montage ($si) ---------------------------------------
+
+def _si(condition, alors, sinon):
+    return {"$si": condition, "alors": alors, "sinon": sinon}
+
+
+def test_une_entree_se_decide_au_montage_sur_un_reglage():
+    # La branche retenue est un lien ordinaire ; l'autre n'est reliée à rien.
+    plan = [{"fragment": "b", "contenu": {
+        "1": {"class_type": "Lent", "inputs": {}},
+        "2": {"class_type": "Rapide", "inputs": {}},
+        "3": {"class_type": "Ecrit", "inputs": {"images": _si(
+            {"parametre": "fps", "op": "ne", "valeur": 24}, ["1", 0], ["2", 0])}}}}]
+    lisse = assembler(deplier(plan, {}), {"fps": 30})
+    assert lisse["3"]["inputs"]["images"] == ["1", 0]
+    natif = assembler(deplier(plan, {}), {"fps": 24})
+    assert natif["3"]["inputs"]["images"] == ["2", 0]
+
+
+def test_la_branche_retenue_peut_etre_une_valeur_une_constante_ou_un_calcul():
+    plan = [{"fragment": "b", "contenu": {
+        "1": {"class_type": "X", "inputs": {
+            "n": _si({"parametre": "agrandir", "op": "eq", "valeur": True}, "$const.grand", {"$calc": "petit * 2"})}}}}]
+    g = assembler(deplier(plan, {}), {"agrandir": True, "grand": 8, "petit": 3})
+    assert g["1"]["inputs"]["n"] == 8
+    g = assembler(deplier(plan, {}), {"agrandir": False, "grand": 8, "petit": 3})
+    assert g["1"]["inputs"]["n"] == 6
+
+
+def test_un_si_peut_en_contenir_un_autre():
+    plan = [{"fragment": "b", "contenu": {
+        "1": {"class_type": "A", "inputs": {}}, "2": {"class_type": "B", "inputs": {}},
+        "3": {"class_type": "C", "inputs": {}},
+        "4": {"class_type": "Ecrit", "inputs": {"image": _si(
+            {"parametre": "agrandir", "op": "eq", "valeur": True}, ["1", 0],
+            _si({"parametre": "fps", "op": "ne", "valeur": 24}, ["2", 0], ["3", 0]))}}}}]
+    assert assembler(deplier(plan, {}), {"agrandir": True, "fps": 24})["4"]["inputs"]["image"] == ["1", 0]
+    assert assembler(deplier(plan, {}), {"agrandir": False, "fps": 30})["4"]["inputs"]["image"] == ["2", 0]
+    assert assembler(deplier(plan, {}), {"agrandir": False, "fps": 24})["4"]["inputs"]["image"] == ["3", 0]
+
+
+def test_un_si_voit_le_tour_et_le_rang_du_bloc():
+    plan = [{"pour": {"jusqu_a": "n", "chaque": 1},
+             "faire": [{"fragment": "b", "contenu": {
+                 "1": {"class_type": "X", "inputs": {
+                     "premier": _si({"parametre": "tour", "op": "eq", "valeur": 0}, "oui", "non")}}}}]}]
+    g = assembler(deplier(plan, {"n": 3}))
+    assert sorted(v["inputs"]["premier"] for v in g.values()) == ["non", "non", "oui"]
+
+
+def test_un_si_qui_vise_un_fragment_nomme_le_garde_dans_le_run():
+    # Un « $commun.x » cité seulement dans une branche compte : le run doit le garder.
+    from comfyui_bridge.adapter.assembleur import _noms_cites
+    contenu = {"1": {"class_type": "X", "inputs": {"m": _si(
+        {"parametre": "fps", "op": "ne", "valeur": 24}, ["$lisseur.1", 0], ["$brut.1", 0])}}}
+    assert _noms_cites(contenu) == {"lisseur", "brut"}
+
+
+def test_un_si_sans_branche_se_lit():
+    plan = [{"fragment": "b", "contenu": {
+        "1": {"class_type": "X", "inputs": {"n": {"$si": {"parametre": "fps", "op": "ne", "valeur": 24},
+                                                  "alors": 1}}}}}]
+    with pytest.raises(WorkflowMappingError) as e:
+        assembler(deplier(plan, {}), {"fps": 30})
+    assert "sinon" in str(e.value)
+
+
+def test_un_si_a_l_operateur_inconnu_se_lit():
+    plan = [{"fragment": "b", "contenu": {
+        "1": {"class_type": "X", "inputs": {"n": _si({"parametre": "fps", "op": "environ", "valeur": 24}, 1, 2)}}}}]
+    with pytest.raises(WorkflowMappingError) as e:
+        assembler(deplier(plan, {}), {"fps": 30})
+    assert "environ" in str(e.value) and "nœud '1'" in str(e.value)
+
+
 def test_une_constante_manquante_se_lit():
     plan = [{"fragment": "b", "contenu": {
         "1": {"class_type": "X", "inputs": {"n": "$const.absente"}}}}]
@@ -258,3 +333,29 @@ def test_un_bloc_declare_mais_absent_du_montage_se_lit():
     with pytest.raises(WorkflowMappingError) as e:
         assembler(deplier(plan, {}), {}, blocs=["segment"])
     assert "segment" in str(e.value)
+
+
+
+def test_un_bloc_de_boucle_absent_a_zero_tour_ne_casse_pas_les_rangs():
+    """« blocs » nomme le maillon répété ET le fragment posé hors boucle ; quand la
+    durée tient dans l'amorce (zéro tour), le maillon n'existe pas et les rangs
+    doivent quand même se compter sur ce qui est là."""
+    livrer_amorce = {"fragment": "livrer-amorce", "contenu": {
+        "1": {"class_type": "Consigne", "inputs": {"rang": {"$calc": "bloc_rang"},
+                                                    "total": {"$calc": "blocs_total"}}}}}
+    livrer = {"fragment": "livrer", "contenu": {
+        "1": {"class_type": "Consigne", "inputs": {"rang": {"$calc": "bloc_rang"},
+                                                    "total": {"$calc": "blocs_total"}}}}}
+    plan = [COMMUN, AMORCE, livrer_amorce,
+            {"pour": {"jusqu_a": "n", "chaque": 1, "deja": 1}, "faire": [livrer]}]
+    g = assembler(deplier(plan, {"n": 1}), {}, blocs=["livrer-amorce", "livrer"])
+    vus = [(v["inputs"]["rang"], v["inputs"]["total"]) for v in g.values() if v["class_type"] == "Consigne"]
+    assert vus == [(0, 1)]
+    g = assembler(deplier(plan, {"n": 3}), {}, blocs=["livrer-amorce", "livrer"])
+    vus = sorted((v["inputs"]["rang"], v["inputs"]["total"]) for v in g.values() if v["class_type"] == "Consigne")
+    assert vus == [(0, 3), (1, 3), (2, 3)]
+
+
+def test_des_blocs_tous_inconnus_restent_refuses():
+    with pytest.raises(WorkflowMappingError, match="n'est pas un fragment"):
+        assembler(deplier([COMMUN, AMORCE], {}), {}, blocs=["segment", "livrer"])
