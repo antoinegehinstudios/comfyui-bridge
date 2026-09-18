@@ -135,6 +135,48 @@ def test_the_pieces_of_a_montage_carry_the_run_name_and_the_label_pilots_it(tmp_
     assert cat.livrable(spec) == {"morceaux": "cortex/morceaux/bloc"}
 
 
+def test_a_template_modified_on_disk_between_two_monter_is_seen(tmp_path):
+    """Un gabarit de montage n'est pas figé en mémoire au premier assemblage :
+    modifié sur disque, il est relu au `monter()` suivant, comme ses blocs le
+    sont à chaque assemblage — sans redémarrer la passerelle. Vu le 2026-09-18 :
+    un montage et l'un de ses blocs modifiés ensemble pendant une chaîne, et le
+    tour suivant assemblé avec l'ancien montage et les nouveaux blocs."""
+    import json
+    import os
+
+    from comfyui_bridge.adapter.catalog import load_catalog
+    rec, wf = _montage_en_morceaux(tmp_path)
+    cat = load_catalog(rec, workflows_dir=wf)
+    spec = cat.get_spec("m")
+    demande = {"n": 2, "filename_prefix": "cortex/essai"}
+    g, _ = cat.monter(spec, demande)
+    assert sorted(v["inputs"]["filename_prefix"] for v in g.values()) == [
+        "cortex/essai_bloc_000", "cortex/essai_bloc_001"]
+
+    chemin = wf / "m.json"
+
+    def reecrire(marque: str, plus_tard_de_s: int) -> None:
+        brut = json.loads(chemin.read_text(encoding="utf-8"))
+        brut["constantes"]["prefixe_morceaux"] = f"cortex/morceaux/{marque}"
+        chemin.write_text(json.dumps(brut), encoding="utf-8")
+        # Deux écritures dans le même tic d'horloge partagent leur date : la
+        # date est posée ici, comme l'aurait fait un enregistrement plus tard.
+        st = chemin.stat()
+        os.utime(chemin, ns=(st.st_atime_ns, st.st_mtime_ns + plus_tard_de_s * 10 ** 9))
+
+    # Un contenu d'une autre taille…
+    reecrire("segment", 1)
+    g, _ = cat.monter(spec, demande)
+    assert sorted(v["inputs"]["filename_prefix"] for v in g.values()) == [
+        "cortex/essai_segment_000", "cortex/essai_segment_001"]
+    # …puis de la même taille, enregistré plus tard : la date suffit.
+    reecrire("morceau", 2)
+    g, _ = cat.monter(spec, demande)
+    assert sorted(v["inputs"]["filename_prefix"] for v in g.values()) == [
+        "cortex/essai_morceau_000", "cortex/essai_morceau_001"]
+    assert cat.livrable(spec) == {"morceaux": "cortex/morceaux/morceau"}
+
+
 def test_a_converted_duration_is_not_reported_ignored(tmp_path):
     """Une durée convertie en nombre d'images a atteint le graphe par ce nombre."""
     import json

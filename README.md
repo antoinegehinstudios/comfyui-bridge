@@ -840,6 +840,25 @@ vocabulaire est lu chez la passerelle de ce poste. Un cas particulier écrit
 « pour ce flux-là » dans le code ne passe donc plus le commit ; et la copie de
 référence d'une chaîne qui diverge de `_data/` est refusée par les tests.
 
+**Quand une modification est vue.** Ce qui est écrit dans `_data/` est lu au
+moment où on s'en sert, sans relancer la passerelle : les blocs
+(`_data/blocs/`) à chaque assemblage, et le montage
+(`_data/workflows/<montage>.json`) est relu dès que son fichier change (date
+d'écriture ou taille). Montage et blocs sont donc lus au même instant, celui
+de l'assemblage. Une chaîne en cours assemble ses tours SUIVANTS sur ce qui
+est sur disque à cet instant, les tours déjà rendus gardant l'ancien — et le
+job ne le dit pas : modifier une recette pendant qu'une chaîne la joue, c'est
+la changer pour les tours qui restent. Mesuré le 2026-09-18 à 21:06 : un
+montage et l'un de ses blocs modifiés ensemble pendant une chaîne ; le tour
+suivant était assemblé avec le montage gardé en mémoire depuis le démarrage et
+les blocs frais, et refusé pour un port que le montage sur disque servait.
+Depuis, le montage est relu (témoin dans `tests/test_catalog.py`) ; la règle
+retenue est « ce qui est sur disque à l'assemblage », plutôt que refuser un
+montage changé en route. Ce que la RÉCONCILIATION dit d'une entrée (liaisons,
+champs pilotes, exemple), les chaînes et les techniques sont lus une fois —
+au démarrage ou au premier usage — et jamais relus : les changer demande de
+relancer la passerelle, file vide.
+
 ## Configuration (variables d'environnement)
 
 | Variable            | Défaut                    | Rôle                                   |

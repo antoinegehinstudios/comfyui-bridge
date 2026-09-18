@@ -34,3 +34,9 @@ livrable final (`<nom>_<chaine>-final_<id>`), et chaque étape rendue porte
 Ne jamais relancer la passerelle (8077) pendant qu'un run tourne
 (`GET /v1/engine/queue` : `running` et `pending` vides d'abord) ; relancer par
 `start-bridge-silent.vbs`, prouver le changement de PID par le port.
+Un montage (`_data/workflows/`) et ses blocs (`_data/blocs/`) sont lus SUR
+DISQUE à chaque assemblage, sans relance : modifiés pendant qu'une chaîne
+tourne, ses tours SUIVANTS les prennent, et le job ne le dit pas (depuis le
+2026-09-18 ; avant, le montage restait figé en mémoire à côté de blocs
+frais). Réconciliation, chaînes et techniques, eux, sont lus une fois — au
+démarrage ou au premier usage — et jamais relus : relancer, file vide.
