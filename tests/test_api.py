@@ -476,3 +476,34 @@ def test_les_moteurs_annonces_sont_ceux_du_poste_pas_seulement_ceux_du_paquet():
     assert d["engines"]["local"]["manage"] is True
     assert d["engines"]["local"]["description"] == "d'essai"
     assert "attach" in d["engines"]          # le profil livré reste : la surcharge s'ajoute
+
+
+def test_la_vitrine_demande_au_portail_l_adresse_d_une_app_vue_depuis_l_hote_de_l_appelant(client, monkeypatch):
+    """La console encadre maestro : l'adresse vient du portail de l'hôte, avec
+    l'hôte d'où la page est regardée — jamais écrite dans la console."""
+    import io
+    import urllib.request as _ur
+    vus = {}
+
+    class Reponse(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def faux_urlopen(req, timeout=0):
+        vus["url"] = req.full_url
+        vus["host"] = req.get_header("Host")
+        lien = "https://birdesk01.example:8446" if vus["host"] == "birdesk01.example" else "http://127.0.0.1:7895"
+        return Reponse(json.dumps({"nom": "maestro", "lien": lien, "vivante": True}).encode("utf-8"))
+    monkeypatch.setattr(_ur, "urlopen", faux_urlopen)
+    r = client.get("/v1/vitrine/maestro", headers={"host": "birdesk01.example:8444"})
+    assert r.status_code == 200, r.text
+    assert r.json()["lien"] == "https://birdesk01.example:8446" and r.json()["vu_depuis"] == "birdesk01.example"
+    assert vus["url"] == "http://127.0.0.1:7900/etat/maestro" and vus["host"] == "birdesk01.example"
+    r = client.get("/v1/vitrine/maestro", headers={"host": "127.0.0.1:8077"})
+    assert r.json()["lien"] == "http://127.0.0.1:7895"
+
+    def muet(req, timeout=0):
+        raise OSError("personne")
+    monkeypatch.setattr(_ur, "urlopen", muet)
+    r = client.get("/v1/vitrine/maestro")
+    assert r.status_code == 502 and "portail" in json.dumps(r.json(), ensure_ascii=False)

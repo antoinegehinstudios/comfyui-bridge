@@ -31,7 +31,7 @@ from ..core.jobs import JobStatus
 from ..core.intention import RenderIntent, intent_fields, is_media_param
 from ..core.orchestrator import Orchestrator, derivable_params
 from .problems import install_problem_handlers
-from .schemas import (ArtifactOut, IntentIn, JobOut, RaccourciIn, RejeuIn,
+from .schemas import (ArtifactOut, EssaiIn, IntentIn, JobOut, RaccourciIn, RejeuIn,
                       WorkflowImportIn)
 
 _DESCRIPTION = """
@@ -97,6 +97,17 @@ def _queue_snapshot(container) -> dict | None:
         value = None
     _QUEUE_CACHE["at"], _QUEUE_CACHE["value"] = now, value
     return value
+
+
+def _avec_la_file(container, out: dict) -> dict:
+    """La place de cette demande dans la file des demandes, quand elle y est :
+    `file: {rang, devant}` — rang 0 = elle tourne, rang n = n demandes avant
+    elle. Sans cela, une demande qui attend son tour ressemblait à une demande
+    perdue (« acceptée », puis rien pendant une heure)."""
+    place = container.file.place_de(out.get("id", "")) if getattr(container, "file", None) else None
+    if place is not None:
+        out["file"] = place
+    return out
 
 
 def _with_engine_state(container, out: dict) -> dict:
@@ -1136,9 +1147,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         f"extraction ({state.get('source_change_reason')}) — c'est "
                         "l'analyse précédente qui tourne ; ré-extrais pour prendre "
                         "les nouveautés")
-        background.add_task(orch.execute, job.id, plan)
+        c.file.deposer(job.id, orch.execute, job.id, plan)
         response.headers["Location"] = f"/v1/jobs/{job.id}"
-        return JobOut.of(job)
+        return JobOut.of(c.store.get(job.id))
 
     def _lancer_par_tranches(c, spec, intent_in: IntentIn, corps: dict,
                              background: BackgroundTasks, force: bool = False):
@@ -1212,7 +1223,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # alors que le job lui-même est créé sous « 160x120 » juste au-dessus :
         # un OOM rencontré en tranches n'aurait pas refusé le même run ensuite.
         # La chaîne synthétique n'expose aucun champ : rien d'autre ne les lit.
-        background.add_task(runner.executer, job.id, chaine, reglages, etiquette, force)
+        c.file.deposer(job.id, runner.executer, job.id, chaine, reglages, etiquette, force)
         return c.store.get(job.id)
 
     def _lancer_chaine(c, spec, corps: dict, background: BackgroundTasks,
@@ -1243,8 +1254,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         f"{', '.join(non_appliques)}")
         if reprise_de:
             c.store.append_log(job.id, f"reprise demandée du job {reprise_de}")
-        background.add_task(runner.executer, job.id, chaine, valeurs, etiquette, force,
-                            reprise_de)
+        c.file.deposer(job.id, runner.executer, job.id, chaine, valeurs, etiquette, force,
+                       reprise_de)
         return c.store.get(job.id)
 
     @app.post("/v1/render", status_code=202, response_model=JobOut, tags=["render"])
@@ -1942,7 +1953,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/v1/jobs/{job_id}", tags=["render"])
     async def get_job(job_id: str, request: Request) -> dict:
         c = request.app.state.container
-        return _with_engine_state(c, JobOut.of(c.store.get(job_id)).model_dump())
+        return _avec_la_file(c, _with_engine_state(c, JobOut.of(c.store.get(job_id)).model_dump()))
 
     @app.get("/v1/jobs/{job_id}/artifacts", response_model=list[ArtifactOut], tags=["render"])
     async def get_artifacts(job_id: str, request: Request) -> list[ArtifactOut]:
@@ -1967,8 +1978,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 if await request.is_disconnected():
                     break
                 job = store.get(job_id)
-                snap = json.dumps(_with_engine_state(
-                    request.app.state.container, JobOut.of(job).model_dump()))
+                snap = json.dumps(_avec_la_file(request.app.state.container, _with_engine_state(
+                    request.app.state.container, JobOut.of(job).model_dump())))
                 if snap != last:
                     yield f"data: {snap}\n\n"
                     last = snap
@@ -2010,6 +2021,70 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             upload_image, c.settings.comfyui_base_url, file.filename or "image.png", payload,
             True, 60.0, subfolder)
         return {"name": name, "bytes": len(payload), "subfolder": subfolder}
+
+    @app.get("/v1/vitrine/{slug}", tags=["meta"])
+    async def vitrine(slug: str, request: Request) -> dict:
+        """L'adresse d'une AUTRE app de l'hôte, telle que le PORTAIL la publie
+        pour celui qui regarde : en local son port, sur le tailnet son adresse
+        https. La console s'en sert pour encadrer maestro ; demandé au portail
+        avec l'hôte de l'appelant, pour que la réponse soit la sienne. Mesuré le
+        2026-09-18 : la console ouverte par le portail (https) sondait
+        « http://127.0.0.1:7895 » et le navigateur refusait (contenu mixte)."""
+        import urllib.error
+        import urllib.parse
+        import urllib.request as _ur
+        from fastapi import HTTPException
+        c = request.app.state.container
+        base = str(getattr(c.settings, "portail_url", "") or "").rstrip("/")
+        hote = str(request.headers.get("host") or "").split(":")[0]
+        if not base:
+            raise HTTPException(status_code=503, detail="aucun portail déclaré (COMFY_PORTAIL_URL)")
+        req = _ur.Request(f"{base}/etat/{urllib.parse.quote(slug)}", headers={"Host": hote} if hote else {})
+        try:
+            with _ur.urlopen(req, timeout=5) as r:
+                etat = json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            raise HTTPException(status_code=exc.code, detail=f"le portail a répondu {exc.code} pour {slug!r}") from exc
+        except Exception as exc:                          # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"le portail de l'hôte ({base}) n'a pas répondu : {exc}") from exc
+        return {"slug": slug, "lien": etat.get("lien"), "vivante": etat.get("vivante"),
+                "nom": etat.get("nom"), "portail": base, "vu_depuis": hote}
+
+    @app.get("/v1/file", tags=["render"])
+    async def file_des_demandes(request: Request) -> dict:
+        """La file des DEMANDES : celle qui tourne, celles qui attendent, dans
+        l'ordre — et la voie des ESSAIS, qui ne tournent que quand aucune
+        demande n'attend et cèdent la place. Une seule entrée à la fois ; ce
+        que chacune fait tourner chez le moteur (ses runs) se lit sur
+        `/v1/engine/queue`, où un travail entré sans passer par ici est marqué
+        ÉTRANGER — et retiré dès qu'une demande attend derrière lui."""
+        c = request.app.state.container
+        etat = c.file.etat()
+        return {"une_a_la_fois": True, **etat,
+                "note": "une seule entrée à la fois ; les demandes d'abord, dans l'ordre ; un essai "
+                        "ne tourne que quand aucune demande n'attend, et cède la place"}
+
+    @app.post("/v1/essais", status_code=202, response_model=JobOut, tags=["render"])
+    async def essai(corps: EssaiIn, request: Request, response: Response) -> JobOut:
+        """Faire tourner un graphe API TEL QUEL — un ESSAI : une enquête, un
+        banc, un agent. La seule porte vers le moteur pour ce qui n'est pas une
+        demande de l'utilisateur : l'essai entre dans la file, sur sa voie, ne
+        tourne que quand aucune demande n'attend, et cède la place à une
+        demande qui arrive (interrompu, il repart de zéro après elle). Envoyé
+        directement au moteur, le même graphe serait ÉTRANGER : retiré de sa
+        file dès qu'une demande attend derrière lui."""
+        from ..adapter.essais import executer_essai
+        c = request.app.state.container
+        label = "".join(ch for ch in str(corps.label or "") if ch.isalnum() or ch in "-_")[:40] or "essai"
+        if not isinstance(corps.graphe, dict) or not corps.graphe:
+            raise InputValueRefusedError("essai : « graphe » doit être un graphe API non vide")
+        job = c.store.create(kind="essai", workflow=f"essai:{label}", config="essai",
+                             params={"label": label}, demande={"label": label})
+        c.store.append_log(job.id, f"accepted: essai « {label} » ({len(corps.graphe)} nœuds) — "
+                                   f"sortie « cortex/essais/{label} »")
+        c.file.deposer(job.id, executer_essai, c, job.id, corps.graphe, label, essai=True)
+        response.headers["Location"] = f"/v1/jobs/{job.id}"
+        return JobOut.of(c.store.get(job.id))
 
     @app.get("/v1/recovered", tags=["render"])
     async def recovered(request: Request) -> dict:
@@ -2169,6 +2244,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from ..adapter.chaines import arreter_au_moteur
         c = request.app.state.container
         job = c.store.get(job_id)                     # raises if unknown
+        if c.file.retirer(job_id):
+            # Elle attendait son tour : elle ne tournera jamais — rien à
+            # arrêter chez le moteur, rien retenu contre le workflow.
+            c.store.request_cancel(job_id)
+            c.store.append_log(job_id, "retirée de la file d'attente avant son tour")
+            c.store.mark_failed(job_id, {
+                "type": "https://cortex/problems/cancelled", "title": "Demande retirée",
+                "status": 499, "detail": "retirée de la file d'attente avant d'avoir commencé ; "
+                                         "rien n'est retenu contre ce workflow",
+                "problem_kind": "cancelled"})
+            return {"cancelled": True, "how": "file-d-attente"}
         if job.etapes:
             c.store.request_cancel(job_id)
             courante = next((e for e in job.etapes
@@ -2256,11 +2342,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not probe.get("available"):
             return {"engine": probe, "running": [], "pending": []}
         q = c.comfyui.queue()
+        # Ce qui est dans la file du moteur SANS être passé par la passerelle
+        # est ÉTRANGER : marqué ici, et retiré dès qu'une demande attend
+        # derrière lui. Le moteur n'a qu'un guichet.
+        connus = set((c.inflight.entries() if getattr(c, "inflight", None) else {}).keys())
+        for item in q.get("items") or []:
+            item["etranger"] = item.get("prompt_id") not in connus
+        etrangers = [i["prompt_id"] for i in (q.get("items") or []) if i.get("etranger")]
         # ComfyUI executes ONE prompt at a time; the rest wait. Say it, so the
         # concurrency model is never a guess.
         return {"engine": probe, "concurrency": 1,
-                "note": "le moteur exécute un run à la fois, les autres attendent",
-                **q}
+                "note": "le moteur exécute un run à la fois, les autres attendent ; un prompt "
+                        "étranger (entré sans la passerelle) est retiré dès qu'une demande attend",
+                "etrangers": etrangers, **q}
 
     @app.get("/v1/hermes/runs", tags=["hermes"])
     async def hermes_runs(request: Request, limit: int = 20) -> dict:

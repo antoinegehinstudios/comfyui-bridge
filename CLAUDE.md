@@ -157,3 +157,21 @@ livrable final (`<nom>_<chaine>-final_<id>`), et chaque étape rendue porte
 Ne jamais relancer la passerelle (8077) pendant qu'un run tourne
 (`GET /v1/engine/queue` : `running` et `pending` vides d'abord) ; relancer par
 `start-bridge-silent.vbs`, prouver le changement de PID par le port.
+
+**Le moteur n'a qu'un guichet : la passerelle.** Une DEMANDE de l'utilisateur
+(rendu, chaîne, rejeu, reprise) entre dans la file des demandes et tourne seule,
+dans l'ordre (`GET /v1/file`, `file: {rang, devant}` sur le job). Tout ce qui
+n'est pas une demande — une enquête, un banc, un agent qui veut faire tourner
+un graphe — passe par `POST /v1/essais {"graphe": <graphe API>, "label": …}` :
+l'essai attend que la voie des demandes soit vide, et CÈDE la place à une
+demande qui arrive (interrompu, il repart de zéro après elle). Ne JAMAIS
+envoyer un prompt directement au moteur (`:8188/prompt`) : ce qui atteint le
+moteur sans la passerelle est ÉTRANGER — marqué sur `GET /v1/engine/queue`, et
+RETIRÉ de la file du moteur (annulé s'il attend, interrompu s'il tourne) dès
+qu'une demande attend derrière lui, en le disant sur le job qui passe. Mesuré
+le 2026-09-18 : une enquête avait envoyé ses expériences au moteur, et le rendu
+d'Antoine a attendu vingt minutes derrière elles — « ne corrige pas ce cas
+unique, ajuste l'outillage pour que ce type de problème n'apparaisse plus, by
+design ». Une analyse lourde (extraire des centaines d'images, du flux optique)
+pendant un rendu prend la mémoire du poste : la garde de place du rendu attend,
+et le dit ; la faire APRÈS.

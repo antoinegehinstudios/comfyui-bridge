@@ -133,6 +133,67 @@ class ComfyUIHttpBackend:
         # paramètres, donc les liaisons ne sont connues qu'après le dépliage.
         gabarit, liaisons = self._catalog.monter(spec, params)
         graph = apply_overrides(inject(gabarit, liaisons, params), plan.overrides)
+        # UNE DEMANDE N'ATTEND JAMAIS DERRIÈRE UN TRAVAIL ÉTRANGER : ce qui est
+        # dans la file du moteur sans être passé par la passerelle en est
+        # retiré avant qu'elle n'y entre (voir _evincer_les_etrangers).
+        self._evincer_les_etrangers(on_note)
+        return self._courir(graph, plan, spec, on_enqueued, on_progress, on_note, on_started)
+
+    def soumettre_graphe(self, graph: dict, label: str = "essai", on_enqueued=None,
+                         on_progress=None, on_note=None, on_started=None) -> BackendResult:
+        """Faire tourner un graphe API TEL QUEL — un ESSAI (une enquête, un banc,
+        un agent), par la porte de la passerelle et sa file, jamais à côté. Il
+        n'évince personne : il est ce qui passe en dernier."""
+        graph = json.loads(json.dumps(graph))
+        for node in graph.values():
+            inputs = node.get("inputs") if isinstance(node, dict) else None
+            if isinstance(inputs, dict) and isinstance(inputs.get("filename_prefix"), str)                     and not inputs["filename_prefix"].startswith("cortex/"):
+                # Les fichiers d'un essai vivent sous le nom de l'essai, dans le
+                # dossier de la passerelle : retrouvables, jamais mêlés au reste.
+                inputs["filename_prefix"] = f"cortex/essais/{label}/" + inputs["filename_prefix"].rsplit("/", 1)[-1]
+        plan = ExecutionPlan(intent=None, params={"filename_prefix": f"cortex/essais/{label}"},
+                             kind="essai", workflow=f"essai:{label}", overrides={}, ignored=())
+        return self._courir(graph, plan, None, on_enqueued, on_progress, on_note, on_started)
+
+    def _evincer_les_etrangers(self, on_note=None) -> None:
+        """Retirer de la file du moteur ce qui n'y est pas entré par ici.
+
+        Mesuré le 2026-09-18 : une enquête avait envoyé ses expériences
+        directement au moteur, et le rendu d'Antoine a attendu vingt minutes
+        derrière elles. Le moteur n'a qu'un guichet, la passerelle ; ce qui
+        entre à côté est ÉTRANGER — retiré s'il attend, interrompu s'il tourne
+        — et c'est DIT sur le job qui passe. Un essai qui veut le moteur passe
+        par ``POST /v1/essais`` : il attend son tour et cède la place.
+        """
+        if self._inflight is None:
+            return
+        try:
+            client = ComfyUIClient(self._base, request_timeout_s=min(10.0, self._settings.comfyui_request_timeout_s))
+            file = client.queue()
+        except Exception:                                # noqa: BLE001
+            return                                       # un moteur muet se dira au run
+        connus = set(self._inflight.entries().keys())
+        pending = [p for p in file.get("pending", []) if p not in connus]
+        running = [p for p in file.get("running", []) if p not in connus]
+        if not pending and not running:
+            return
+        try:
+            if pending:
+                client.cancel(pending)
+            if running:
+                client.interrupt()
+        except Exception as exc:                          # noqa: BLE001
+            if on_note:
+                on_note(f"travail étranger dans la file du moteur ({len(running)} en cours, "
+                        f"{len(pending)} en attente) — le moteur n'a pas voulu le retirer : {exc}")
+            return
+        if on_note:
+            on_note(f"travail ÉTRANGER retiré de la file du moteur avant ce run : {len(running)} interrompu, "
+                    f"{len(pending)} retiré(s) ({', '.join(p[:8] for p in running + pending)}) — le moteur "
+                    f"n'a qu'un guichet, la passerelle ; un essai passe par POST /v1/essais")
+
+    def _courir(self, graph: dict, plan: ExecutionPlan, spec, on_enqueued=None,
+                on_progress=None, on_note=None, on_started=None) -> BackendResult:
         out_dir = self._settings.comfy_output_dir.resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
         req_t = self._settings.comfyui_request_timeout_s
@@ -175,7 +236,8 @@ class ComfyUIHttpBackend:
                 except Exception:
                     pass
         artifacts = self._download(entry, out_dir, req_t, plan)
-        artifacts = self._recoller(artifacts, spec, out_dir, plan, on_note)
+        if spec is not None:
+            artifacts = self._recoller(artifacts, spec, out_dir, plan, on_note)
         self._forget_inflight(prompt_id)
         if not artifacts:
             raise BackendExecutionError("ComfyUI finished but produced no media", prompt_id=prompt_id)

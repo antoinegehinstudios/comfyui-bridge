@@ -102,6 +102,10 @@ class Settings:
     # Mesuré le 2026-09-16 : un voisin qui charge un modèle de 26 Go au milieu
     # d'un rendu de cinq heures faisait échouer la tranche 15/31 d'un 4K.
     attente_place_s: float = float(os.getenv("COMFY_ATTENTE_PLACE_S", "1800"))
+    # Le PORTAIL de l'hôte (E:/Claude Code/Programmes/portail-hote) : il publie
+    # l'adresse de chaque app selon d'où on la regarde. La console lui demande
+    # celle de maestro, par la passerelle, au lieu de l'écrire chez elle.
+    portail_url: str = os.getenv("COMFY_PORTAIL_URL", "http://127.0.0.1:7900")
     attente_place_pas_s: float = float(os.getenv("COMFY_ATTENTE_PLACE_PAS_S", "30"))
 
     # --- Hermes (hardware reconciliation) ------------------------------------

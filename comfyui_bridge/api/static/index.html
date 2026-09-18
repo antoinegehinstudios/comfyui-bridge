@@ -220,10 +220,10 @@
 <section id="view-meta" style="display:none">
   <div class="metaTop">
     <span>maestro — orchestrateur de méta-workflows (port 7895)</span>
-    <a href="http://127.0.0.1:7895/" target="_blank" rel="noopener">ouvrir dans une fenêtre ↗</a>
+    <a id="metaOpen" href="http://127.0.0.1:7895/" target="_blank" rel="noopener">ouvrir dans une fenêtre ↗</a>
   </div>
   <div class="loc" id="metaDown" style="display:none;border-color:var(--err)">
-    <span>maestro n'est pas lancé — démarrer : <code>node E:/Claude Code/Programmes/maestro/server.js</code> (port 7895)</span>
+    <span id="metaDownText">maestro n'est pas lancé — démarrer : <code>node E:/Claude Code/Programmes/maestro/server.js</code> (port 7895)</span>
     <button class="ghost" id="metaRetry" type="button">Réessayer</button>
   </div>
   <!-- L'iframe reste sans src jusqu'à la première activation de l'onglet :
@@ -1046,19 +1046,44 @@ document.querySelectorAll("nav.tabs button").forEach(b=>{
 });
 
 // ---- Onglet Méta-workflows : maestro (orchestrateur, port 7895) en iframe ----
+// D'OÙ la console est regardée décide de l'adresse de maestro : en local, son
+// port ; sur le tailnet, l'adresse que le PORTAIL de l'hôte lui a publiée
+// (https, un port à part) — demandée au portail (`/etat/maestro`, à la racine
+// de l'hôte), jamais écrite ici. Mesuré le 2026-09-18 : la console ouverte par
+// le portail (https) sondait `http://127.0.0.1:7895` et le navigateur refusait
+// (contenu mixte) — « maestro n'est pas lancé » alors qu'il tournait.
+const MAESTRO_LOCAL = "http://127.0.0.1:7895/";
+let maestroUrl = null;
+async function maestroAdresse(){
+  if(maestroUrl) return maestroUrl;
+  const h = location.hostname;
+  if(h === "127.0.0.1" || h === "localhost" || h === "[::1]"){ maestroUrl = MAESTRO_LOCAL; return maestroUrl; }
+  // Par la passerelle (même origine), qui le demande au portail avec l'hôte
+  // d'où cette page est regardée : aucune requête d'un site vers un autre.
+  const r = await fetch("/v1/vitrine/maestro", {signal: AbortSignal.timeout(6000)});
+  if(!r.ok) throw new Error(`la passerelle n'a pas obtenu l'adresse de maestro du portail (${r.status})`);
+  const etat = await r.json();
+  if(!etat.lien) throw new Error("le portail ne publie pas de lien pour maestro");
+  maestroUrl = etat.lien.replace(/\/?$/, "/");
+  return maestroUrl;
+}
 // Sonde de vie avant d'afficher l'iframe : une iframe sur un serveur mort est
 // une page blanche qui n'explique rien. `no-cors` : on ne lit pas la réponse,
-// on veut juste savoir si quelque chose répond sur le port.
-const MAESTRO_URL = "http://127.0.0.1:7895/";
+// on veut juste savoir si quelque chose répond à cette adresse.
 async function loadMeta(){
   const frame=$("metaFrame"), down=$("metaDown");
   try{
-    await fetch(MAESTRO_URL+"api/v1/health", {mode:"no-cors", signal: AbortSignal.timeout(1500)});
+    const url = await maestroAdresse();
+    $("metaOpen").href = url;
+    await fetch(url+"api/v1/health", {mode:"no-cors", signal: AbortSignal.timeout(1500)});
     down.style.display="none";
-    if(!frame.src) frame.src = MAESTRO_URL;   // chargée à la première activation seulement
+    if(!frame.src) frame.src = url;   // chargée à la première activation seulement
     frame.style.display="";
   }catch(e){
     frame.style.display="none";
+    const txt=$("metaDownText");
+    if(txt) txt.innerHTML = (maestroUrl ? `maestro ne répond pas à <code>${escapeHtml(maestroUrl)}</code>` : `adresse de maestro inconnue (${escapeHtml(String(e && e.message || e))})`)
+      + ` — démarrer : <code>node E:/Claude Code/Programmes/maestro/server.js</code> (port 7895)`;
     down.style.display="flex";
   }
 }

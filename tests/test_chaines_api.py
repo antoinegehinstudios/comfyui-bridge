@@ -284,8 +284,18 @@ def atelier():
         yield client
 
 
-def _job(client, reponse):
-    return client.get(f"/v1/jobs/{reponse.json()['id']}").json()
+def _job(client, reponse, tours: int = 1200):
+    """La fiche du job, une fois qu'il a FINI : la file des demandes exécute
+    dans un fil à elle (une seule demande à la fois), la réponse revient avant.
+    Un job qui ne finit pas en une minute est rendu tel quel, et le test le dira."""
+    import time as _time
+    ident = reponse.json()["id"]
+    for _ in range(tours):
+        job = client.get(f"/v1/jobs/{ident}").json()
+        if job.get("status") in ("succeeded", "failed", "cancelled"):
+            return job
+        _time.sleep(0.05)
+    return client.get(f"/v1/jobs/{ident}").json()
 
 
 def test_le_catalogue_publie_ses_categories_et_ses_titres(atelier):
@@ -539,8 +549,8 @@ def test_annuler_une_chaine_saute_les_etapes_restantes(atelier):
 
 
 def test_les_jobs_se_listent_du_plus_recent_au_plus_ancien(atelier):
-    atelier.post("/v1/render", json={"workflow": "chaine-simple", "label": "un"})
-    atelier.post("/v1/render", json={"workflow": "chaine-simple", "label": "deux"})
+    _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-simple", "label": "un"}))
+    _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-simple", "label": "deux"}))
     jobs = atelier.get("/v1/jobs?limit=50").json()["jobs"]
     chaines = [j for j in jobs if j["workflow"] == "chaine-simple"]
     assert len(chaines) == 2

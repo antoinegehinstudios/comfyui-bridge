@@ -17,7 +17,8 @@ from .adapter.engines import EngineProfile, ensure_engine, load_engines
 from .adapter.inflight import InflightLog
 from .adapter.sidecar import WithOrigin
 from .config import Settings
-from .core.jobs import JobStore
+from .core.file_des_demandes import FileDesDemandes
+from .core.jobs import JobStatus, JobStore
 from .core.orchestrator import Orchestrator
 from .core.ports import RenderBackend
 from .hermes.reconciler import HermesReconciler
@@ -37,6 +38,9 @@ class Container:
     store: JobStore
     orchestrator: Orchestrator
     inflight: InflightLog
+    # Une seule demande de l'utilisateur à la fois : les autres attendent leur
+    # tour ici, dans l'ordre (voir core.file_des_demandes).
+    file: FileDesDemandes
     # Les limites MATÉRIELLES déclarées de ce poste (ou None si rien n'est
     # déclaré) : c'est sur elles que le découpage d'un rendu se calcule.
     materiel: dict | None = None
@@ -78,6 +82,12 @@ def build_container(settings: Settings | None = None) -> Container:
     # laissait sinon des livrables dans le dossier de sortie dont plus rien ne
     # disait ce qui les avait produits, ni avec quelle demande.
     store = JobStore(persist_dir=data_dir / "jobs")
+    from .adapter import essais as _essais
+    conteneur: list = []          # rempli juste avant le retour : les crochets le lisent alors
+    file = FileDesDemandes(dire=store.append_log,
+                           sur_erreur=lambda job_id, exc: _demande_cassee(store, job_id, exc),
+                           ceder=lambda job_id: _essais.ceder_le_moteur(conteneur[0], job_id),
+                           sur_cession=lambda job_id, fois: _essais.sur_cession(conteneur[0], job_id, fois))
     orchestrator = Orchestrator(
         backend=backend,
         reconciler=reconciler,
@@ -88,7 +98,7 @@ def build_container(settings: Settings | None = None) -> Container:
     )
     budget, provenance = _materiel.budget_et_provenance(limites, settings.tranche_octets)
     print(f"[comfyui-bridge] {_materiel.dire(budget, provenance)}")
-    return Container(
+    conteneur.append(Container(
         settings=settings,
         registry=registry,
         engine=engine,
@@ -100,5 +110,26 @@ def build_container(settings: Settings | None = None) -> Container:
         store=store,
         orchestrator=orchestrator,
         inflight=inflight,
+        file=file,
         materiel=limites,
-    )
+    ))
+    return conteneur[0]
+
+
+def _demande_cassee(store: JobStore, job_id: str, exc: BaseException) -> None:
+    """Une demande dont l'exécution a levé hors de tout rattrapage : le job le
+    dit et se ferme, pour que la file passe à la suivante sans laisser un
+    « en cours » éternel."""
+    try:
+        job = store.get(job_id)
+        store.append_log(job_id, f"la demande a cassé hors de tout rattrapage : {exc!r}")
+        if job.status in (JobStatus.ACCEPTED, JobStatus.QUEUED, JobStatus.RUNNING):
+            store.mark_failed(job_id, {
+                "type": "https://cortex/problems/demande-cassee",
+                "title": "Demande interrompue",
+                "status": 500,
+                "detail": f"{type(exc).__name__}: {exc}",
+                "problem_kind": "unknown",
+            })
+    except Exception:                                    # noqa: BLE001
+        pass

@@ -797,6 +797,46 @@ une erreur serveur ; une chaîne « en cours » au démarrage de la passerelle n
 plus de fil : elle est close, et `POST /v1/jobs/{id}/reprendre` repart de la
 première étape non faite.
 
+### Une seule demande à la fois
+
+Deux demandes acceptées ensemble (mesuré le 2026-09-18 : deux chaînes à 350 ms
+d'intervalle) se disputaient le moteur run après run — leurs blocs alternaient
+dans sa file, chacune attendait l'autre, et le poste tenait les deux à la fois.
+Antoine : « ne permets pas que deux requêtes formulées par l'utilisateur se
+fassent en même temps ; une seule à la fois, avec une file d'attente ».
+
+Tout ce que `POST /v1/render` crée — un rendu direct, une chaîne, un rendu par
+tranches, un rejeu, une reprise — entre dans **la file des demandes**
+(`core/file_des_demandes.py`), dans l'ordre d'acceptation, et UN SEUL fil les
+exécute l'une après l'autre. Ce qu'une demande fait tourner à l'intérieur (les
+sous-jobs d'une chaîne, les tours d'un montage) n'entre pas dans la file : c'est
+SA place qu'elle occupe, le temps qu'elle dure. Une demande qui attend le dit,
+sur sa fiche (`file: {rang, devant}` — rang 0 = elle tourne) et dans son journal
+(« en file d'attente : 2 demande(s) avant celle-ci ») ; `GET /v1/file` montre la
+demande en cours et celles qui attendent ; `POST /v1/jobs/{id}/cancel` sur une
+demande qui attend la retire avant son tour (`how: "file-d-attente"`, jamais
+lancée, rien retenu contre le workflow). Une demande qui casse hors de tout
+rattrapage est fermée par la file, qui passe à la suivante. Maestro montre le
+rang sur la carte de la livraison (« en attente, 1 demande avant »).
+
+**Le moteur n'a qu'un guichet.** Le même jour, une enquête (un agent) a envoyé
+ses expériences directement au moteur : ses prompts passaient avant le rendu
+d'Antoine, qui a attendu vingt minutes derrière elles sans que rien ne le dise.
+« Ne corrige pas ce cas unique, ajuste l'outillage pour que ce type de problème
+n'apparaisse plus, by design. » La file a donc DEUX voies : les demandes, et
+les **essais** — ce qu'une enquête, un banc, un agent veut faire tourner :
+`POST /v1/essais {"graphe": <graphe API>, "label": …}` crée un job de genre
+`essai` (ses fichiers sous `cortex/essais/<label>/`) qui ne tourne que quand
+AUCUNE demande n'attend, et qui **cède la place** à une demande qui arrive :
+interrompu chez le moteur (l'opération officielle), remis en tête de sa voie,
+reparti de zéro quand la voie des demandes est vide — dit dans son journal à
+chaque cession. Et ce qui atteint le moteur SANS passer par la passerelle est
+**étranger** : `GET /v1/engine/queue` le marque (`etranger: true`, liste
+`etrangers`), et avant chaque run d'une demande la passerelle le retire de la
+file du moteur — annulé s'il attend, interrompu s'il tourne — en le disant sur
+le job qui passe. Une demande de l'utilisateur n'attend jamais derrière un
+travail qui n'est pas entré par la porte.
+
 ## Chaînes (workflow of workflows)
 
 Beaucoup de livrables ne tiennent pas en un seul run : une révélation PUIS sa

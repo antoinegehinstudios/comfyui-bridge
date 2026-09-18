@@ -130,6 +130,13 @@ class IntentIn(BaseModel):
         )
 
 
+class EssaiIn(BaseModel):
+    """Un graphe API à faire tourner tel quel, par la file — la porte des
+    enquêtes, des bancs et des agents (voir POST /v1/essais)."""
+    graphe: dict[str, Any] = Field(..., description="Le graphe au format API de ComfyUI")
+    label: str | None = Field(None, max_length=40, description="Le nom de l'essai (ses fichiers : cortex/essais/<label>/)")
+
+
 class WorkflowImportIn(BaseModel):
     name: str = Field(..., min_length=1, examples=["mon-workflow-video"])
     workflow: dict[str, Any] = Field(..., description="A ComfyUI API-format graph (Export (API) in ComfyUI).")
