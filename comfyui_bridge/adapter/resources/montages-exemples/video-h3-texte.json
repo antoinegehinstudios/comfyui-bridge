@@ -1,55 +1,43 @@
 {
  "assemblage": 1,
  "_lisez_moi": [
-  "TEXTE → VIDÉO avec MiniMax H3, par blocs de boucle, LIVRÉ à la cadence et à",
-  "la taille demandées.",
+  "TEXTE → VIDÉO avec MiniMax H3, par blocs de boucle, DIRIGÉ (style graphique,",
+  "temps du récit), LIVRÉ à la cadence et à la taille demandées, agrandi ×2.",
   "",
-  "Le premier bloc (« amorce ») part de la seule consigne écrite : le nœud",
-  "MiniMaxH3ImageToVideo sans « first_frame » est un texte → vidéo, et c'est",
-  "exactement ce que le graphe « video_minimax_h3_t2v » fait ici depuis le",
-  "26 août. Les blocs suivants sont le maillon « segment-h3-texte » de",
-  "_data/blocs/ : chacun reprend la DERNIÈRE IMAGE NATIVE du précédent comme",
-  "ancre, produit son morceau, et ne tend au suivant que sa dernière image. La",
-  "durée n'est donc plus bornée par la mémoire ; la passerelle recolle les",
-  "morceaux en un seul fichier, en copie de flux.",
+  "Trois actions, trois blocs, un jalon :",
+  "  - le RENDU : l'amorce (ci-dessous, texte → vidéo : MiniMaxH3ImageToVideo sans",
+  "    « first_frame ») puis le maillon « segment-h3-texte » (_data/blocs/), qui",
+  "    reprend la dernière image native du bloc précédent ; chacun reçoit de",
+  "    « DirectionDuBloc » le temps du récit où il tombe ;",
+  "  - la LIVRAISON : le bloc « livrer » — FILM ×5 puis une image sur N pour la",
+  "    cadence, RealESRGAN ×2 (commutable) puis lanczos pour la taille, écriture",
+  "    du morceau ; posé après l'amorce sous le nom « livrer-amorce » (un même nom",
+  "    ne peut pas être posé deux fois au tour 0) puis dans la boucle, et nommé",
+  "    dans « blocs » pour connaître son rang (phase de sélection, nom du morceau) ;",
+  "  - l'ORDRE : le bloc « jalon », en tête du corps de la boucle, oblige chaque",
+  "    tour à attendre l'écriture du précédent (mesuré sans lui le 2026-09-18 :",
+  "    47 Go, le bloc 2 échantillonné avant l'écriture du bloc 1).",
+  "La passerelle recolle les morceaux en copie de flux.",
   "",
-  "Le moteur est lancé en « --cache-none » (déclaré dans _data/engines.local.json)",
-  "et libère ce qu'un nœud a consommé. Mais il n'exécute pas un bloc après l'autre",
-  "de lui-même (mesuré le 2026-09-18 : 47 Go pour deux blocs à 30 i/s, le bloc 2",
-  "échantillonné avant l'écriture du bloc 1) : le bloc « jalon » de _data/blocs/,",
-  "posé en tête du corps de la boucle, oblige chaque tour à attendre l'ÉCRITURE",
-  "du précédent — un bloc à la fois, la mémoire d'un seul bloc à la fois.",
+  "LE STYLE est un catalogue à part (paquet comfyui-direction-de-style) : le",
+  "commun porte « DirectionDeStyle » (sujet, style graphique, style narratif,",
+  "négatif) qui écrit le plan ; rien du style n'est écrit ici — le montage est",
+  "neutre, le catalogue se réconcilie avec lui par les menus de la chaîne.",
   "",
-  "COMBIEN DE BLOCS : la boucle compte des SECONDES NATIVES — « duration_s »",
-  "contre la durée d'un bloc (124 images à 24 i/s = 5,1667 s, dont 123",
-  "nouvelles = 5,125 s). Elle ne compte pas « latent_batch » : la passerelle le",
-  "déduit de la durée ET de la cadence demandée, et une cadence de 30 ou 60 i/s",
-  "aurait fait compter des blocs de trop. 124 est la borne basse de la plage",
-  "d'entraînement du modèle (124 à 362) et un point de sa grille (17k + 5). La",
-  "durée livrée est ronde au bloc supérieur — au plus ~5 s de plus que",
-  "demandé, jamais moins.",
+  "COMBIEN DE BLOCS : la boucle compte des SECONDES NATIVES (124 images à 24 i/s =",
+  "5,1667 s par bloc, dont 123 nouvelles = 5,125 s) ; « blocs_total » est calculé",
+  "par le commun d'après la durée avec la même arithmétique (pour",
+  "DirectionDuBloc). 124 est la borne basse de la plage d'entraînement du modèle",
+  "(124 à 362) et un point de sa grille (17k + 5). La durée livrée est ronde au",
+  "bloc supérieur — au plus ~5 s de plus, jamais moins.",
   "",
-  "LA TAILLE NATIVE : le modèle rend à 0,6 mégapixel au plus sur cette carte",
-  "(les runs mesurés vont de 0,4 à 0,6 MP). Le fragment commun calcule donc,",
-  "d'après la largeur et la hauteur demandées, une taille native de même",
-  "proportion dont le petit côté vaut « petit_cote_natif » (576 : un 16:9 fait",
-  "576×1024, multiples de 32 comme le modèle l'exige). Elle passe par",
-  "EmptyImage → GetImageSize parce que le maillon attend UN nœud à deux sorties",
-  "entières pour son cadrage.",
+  "LA TAILLE NATIVE : 0,6 mégapixel au plus (petit côté « petit_cote_natif », 576 :",
+  "576×1024 pour un 16:9, multiples de 32), dans la proportion demandée ; la",
+  "livraison est plafonnée à « plafond_livraison » (1080) de petit côté dans le",
+  "graphe, la chaîne finit au recollage au-delà.",
   "",
-  "LA LIVRAISON : chaque bloc porte ses images à la cadence et à la taille",
-  "demandées AVANT de les écrire (voir le maillon) : FILM ×5 puis une image sur",
-  "« selection » pour la cadence (24 natif ; 30, 40, 60 exacts sur la grille",
-  "120 ; une autre valeur est ramenée à la cadence exacte suivante, ce que le",
-  "constat de la chaîne écrit), lanczos pour la taille, plafonnée au petit côté",
-  "« plafond_livraison » (1080) pour ne pas tenir des images 4K en mémoire —",
-  "au-delà, la chaîne finit l'agrandissement au recollage, en flux. Le tout",
-  "est paresseux : à 24 i/s l'interpolation n'est jamais exécutée.",
-  "",
-  "LE MODÈLE est chargé une seule fois (fragment « commun ») et le LoRA turbo",
-  "le ramène à 8 pas d'échantillonnage, comme les montages longs déjà",
-  "mesurés sur ce poste. Au-delà de 12 tours (≈ 66 s), la boucle s'arrête ; le",
-  "mode publié « video-depuis-un-texte » borne la durée avant d'en arriver là."
+  "LE MODÈLE est chargé une seule fois (commun), LoRA turbo, 8 pas. Au-delà de",
+  "12 tours (≈ 66 s) la boucle s'arrête ; la chaîne borne la durée avant."
  ],
  "constantes": {
   "images_par_bloc": 124,
@@ -61,13 +49,17 @@
   "multiplicateur": 5,
   "petit_cote_natif": 576,
   "plafond_livraison": 1080,
-  "prefixe_morceaux": "cortex/morceaux/bloc"
+  "prefixe_morceaux": "cortex/morceaux/bloc",
+  "agrandisseur": "RealESRGAN_x2plus.pth",
+  "agrandir": true
  },
  "exemple": {
   "duration_s": 5,
   "fps": 30,
   "width": 720,
-  "height": 1280
+  "height": 1280,
+  "style_graphique": "photoreal-cinema",
+  "style_narratif": "reseau-social"
  },
  "livrable": {
   "morceaux": "$const.prefixe_morceaux"
@@ -82,7 +74,6 @@
     "bruit": "5",
     "echantillonneur": "6",
     "sigmas": "8",
-    "prompt": "9",
     "longueur": "10",
     "cadence": "11",
     "images_utiles": "12",
@@ -96,7 +87,11 @@
     "cadence_sortie": "28",
     "multiplicateur": "31",
     "largeur_livraison": "33",
-    "hauteur_livraison": "34"
+    "hauteur_livraison": "34",
+    "style": "9",
+    "blocs_total": "39",
+    "agrandir": "40",
+    "agrandisseur": "41"
    },
    "contenu": {
     "1": {
@@ -165,9 +160,12 @@
      }
     },
     "9": {
-     "class_type": "PrimitiveStringMultiline",
+     "class_type": "DirectionDeStyle",
      "inputs": {
-      "value": "a continuous cinematic shot"
+      "style_graphique": "photoreal-cinema",
+      "style_narratif": "reseau-social",
+      "sujet": "a continuous cinematic shot",
+      "negatif_supplementaire": ""
      }
     },
     "10": {
@@ -422,6 +420,67 @@
        1
       ]
      }
+    },
+    "35": {
+     "class_type": "PrimitiveFloat",
+     "inputs": {
+      "value": {
+       "$calc": "duration_s"
+      }
+     }
+    },
+    "36": {
+     "class_type": "PrimitiveFloat",
+     "inputs": {
+      "value": "$const.secondes_par_bloc"
+     }
+    },
+    "37": {
+     "class_type": "PrimitiveFloat",
+     "inputs": {
+      "value": "$const.secondes_nouvelles_par_bloc"
+     }
+    },
+    "38": {
+     "class_type": "ComfyMathExpression",
+     "inputs": {
+      "expression": "max(0, ceil((a - b) / c - 0.000000001)) + 1",
+      "values.a": [
+       "35",
+       0
+      ],
+      "values.b": [
+       "36",
+       0
+      ],
+      "values.c": [
+       "37",
+       0
+      ]
+     }
+    },
+    "39": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": [
+       "38",
+       1
+      ]
+     }
+    },
+    "40": {
+     "class_type": "PrimitiveBoolean",
+     "inputs": {
+      "value": {
+       "$calc": "agrandir"
+      }
+     }
+    },
+    "41": {
+     "class_type": "UpscaleModelLoader",
+     "inputs": {
+      "model_name": "$const.agrandisseur"
+     }
     }
    }
   },
@@ -429,10 +488,25 @@
    "fragment": "amorce",
    "sorties": {
     "images": "4",
+    "nouvelles": "9",
     "derniere_image": "5",
-    "ecrit": "6"
+    "ancre": "10"
    },
    "contenu": {
+    "2": {
+     "class_type": "DirectionDuBloc",
+     "inputs": {
+      "plan_json": [
+       "$commun.style",
+       3
+      ],
+      "rang": 0,
+      "total": [
+       "$commun.blocs_total",
+       0
+      ]
+     }
+    },
     "1": {
      "class_type": "MiniMaxH3ImageToVideo",
      "inputs": {
@@ -445,7 +519,7 @@
        0
       ],
       "prompt": [
-       "$commun.prompt",
+       "2",
        0
       ],
       "width": [
@@ -462,7 +536,7 @@
       ]
      }
     },
-    "2": {
+    "6": {
      "class_type": "BasicGuider",
      "inputs": {
       "model": [
@@ -483,7 +557,7 @@
        0
       ],
       "guider": [
-       "2",
+       "6",
        0
       ],
       "sampler": [
@@ -524,95 +598,36 @@
       ]
      }
     },
-    "20": {
-     "class_type": "FrameInterpolate",
+    "9": {
+     "class_type": "GetImageRangeFromBatch",
      "inputs": {
-      "interp_model": [
-       "$commun.lisseur",
+      "start_index": 1,
+      "num_frames": [
+       "$commun.images_utiles",
        0
       ],
       "images": [
        "4",
        0
-      ],
-      "multiplier": [
-       "$commun.multiplicateur",
-       0
       ]
      }
     },
-    "21": {
-     "class_type": "VHS_SelectEveryNthImage",
+    "10": {
+     "class_type": "GetImageRangeFromBatch",
      "inputs": {
+      "start_index": 0,
+      "num_frames": 1,
       "images": [
-       "20",
-       0
-      ],
-      "select_every_nth": [
-       "$commun.selection",
-       0
-      ],
-      "skip_first_images": 0
-     }
-    },
-    "22": {
-     "class_type": "ComfySwitchNode",
-     "inputs": {
-      "switch": [
-       "$commun.lisser",
-       0
-      ],
-      "on_true": [
-       "21",
-       0
-      ],
-      "on_false": [
        "4",
        0
       ]
-     }
-    },
-    "23": {
-     "class_type": "ImageScale",
-     "inputs": {
-      "image": [
-       "22",
-       0
-      ],
-      "upscale_method": "lanczos",
-      "width": [
-       "$commun.largeur_livraison",
-       0
-      ],
-      "height": [
-       "$commun.hauteur_livraison",
-       0
-      ],
-      "crop": "center"
-     }
-    },
-    "6": {
-     "class_type": "VHS_VideoCombine",
-     "inputs": {
-      "images": [
-       "23",
-       0
-      ],
-      "frame_rate": [
-       "$commun.cadence_sortie",
-       0
-      ],
-      "loop_count": 0,
-      "filename_prefix": {
-       "$texte": "$const.prefixe_morceaux",
-       "$rang": "0"
-      },
-      "format": "video/h264-mp4",
-      "pingpong": false,
-      "save_output": true
      }
     }
    }
+  },
+  {
+   "utiliser": "livrer",
+   "fragment": "livrer-amorce"
   },
   {
    "pour": {
@@ -627,8 +642,15 @@
     },
     {
      "utiliser": "segment-h3-texte"
+    },
+    {
+     "utiliser": "livrer"
     }
    ]
   }
+ ],
+ "blocs": [
+  "livrer-amorce",
+  "livrer"
  ]
 }

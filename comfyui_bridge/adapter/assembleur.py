@@ -336,11 +336,15 @@ def assembler(fragments: list[Fragment],
     for f in fragments:
         if f.nom in blocs:
             rangs[(f.nom, f.tour)] = len(rangs)
-    inconnus = [b for b in blocs if b not in {f.nom for f in fragments}]
-    if inconnus:
+    # Un nom absent n'est une faute que s'ils le sont TOUS : un bloc de boucle
+    # nommé ici n'existe pas quand la durée demandée tient dans l'amorce (zéro
+    # tour), et la recette n'a pas à s'écrire autrement pour ce cas-là.
+    presents = {f.nom for f in fragments}
+    inconnus = [b for b in blocs if b not in presents]
+    if blocs and len(inconnus) == len(blocs):
         raise WorkflowMappingError(
             f"montage : « blocs » nomme {inconnus[0]!r}, qui n'est pas un fragment du montage",
-            available=sorted({f.nom for f in fragments}))
+            available=sorted(presents))
 
     ordre = _instances(fragments)
     sorties = _sorties(fragments)

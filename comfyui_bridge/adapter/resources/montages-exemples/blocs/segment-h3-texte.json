@@ -2,46 +2,25 @@
  "bloc": "segment-h3-texte",
  "fragment": "segment",
  "_lisez_moi": [
-  "UN maillon de chaîne MiniMax H3 qui LIVRE à la cadence et à la taille demandées.",
+  "UN maillon de RENDU MiniMax H3 dirigé, sans écriture : il rend son bloc et",
+  "tend au bloc « livrer » qui le suit ce qu'il faut pour livrer.",
   "",
-  "Le raccord est celui de « segment-h3 » (même ancre : la dernière image du bloc",
-  "précédent ; même première image jetée ; même morceau nommé par son rang). Ce",
-  "maillon ajoute la LIVRAISON, parce que le modèle ne sait rendre qu'à 24 images",
-  "par seconde et à une taille bornée par la carte, alors que la demande dit une",
-  "cadence et une résolution du vocabulaire des formats :",
-  "  - FrameInterpolate (FILM) reçoit un lot de 124 images dont la PREMIÈRE est la",
-  "    vraie dernière image du bloc précédent (ImageBatch : $precedent.derniere_image",
-  "    puis les 123 images nouvelles), pas la re-génération de l'ancre par le modèle :",
-  "    la couture est ainsi interpolée comme n'importe quelle autre paire (mesuré le",
-  "    2026-09-17 : sans cela, la paire de couture à 30 i/s était le minimum de",
-  "    ressemblance de tout le plan, 0,890 pour une bande à 0,942). FILM multiplie le",
-  "    lot par « multiplicateur »",
-  "    (5 : une grille à 120 images par seconde), puis VHS_SelectEveryNthImage en",
-  "    garde une sur « selection » (4 → 30 i/s, 2 → 60 i/s). La phase de cette",
-  "    sélection se calcule sur la GRILLE GLOBALE de la vidéo, pas sur le bloc :",
-  "    un bloc apporte 123 images natives, soit 615 images fines, et 615 n'est pas",
-  "    un multiple de 4 — sans ce calcul, chaque couture sauterait une image.",
-  "    « skip_first_images » vaut donc, pour le bloc de rang k = tour + 1, le plus",
-  "    petit f ≥ 1 tel que (615·k + f) soit multiple de « selection » ; f ≥ 1 jette",
-  "    l'image 0, re-génération de l'ancre déjà livrée, mais garde les images fines",
-  "    entre l'ancre et la première image nouvelle : elles sont dans le temps de",
-  "    ce bloc.",
-  "  - ComfySwitchNode (paresseux) ne fait tourner l'interpolation que si « lisser »",
-  "    est vrai (cadence demandée autre que 24) ; à 24 i/s, les 123 images natives",
-  "    partent telles quelles et le lisseur n'est jamais exécuté.",
-  "  - ImageScale (lanczos, recadrage centré) porte chaque image à la taille de",
-  "    livraison que le fragment commun a calculée (la demande, plafonnée : au-delà",
-  "    du plafond, c'est la chaîne qui finit l'agrandissement au recollage, en",
-  "    flux, sans tenir les images en mémoire).",
-  "Le bloc suivant reçoit toujours la dernière image NATIVE (avant lissage et",
-  "mise à l'échelle) : le modèle reprend sur ce qu'il a lui-même produit.",
+  "La consigne du bloc vient de « DirectionDuBloc » : il relit le PLAN écrit par",
+  "« DirectionDeStyle » dans le fragment commun (le style graphique, les temps du",
+  "récit du style narratif, le sujet) et compose la consigne de CE bloc — le",
+  "temps narratif où il tombe d'après son rang (« tour + 1 » : l'amorce est le",
+  "rang 0) et le nombre total de blocs (« blocs_total », calculé par le commun",
+  "d'après la durée). Un bloc ne rejoue donc jamais tout le récit ; il joue sa",
+  "part, et une accroche n'est jamais perdue.",
   "",
-  "ORDRE D'EXÉCUTION : ce maillon n'attend que l'ancre du tour précédent, pas son",
-  "écriture — comme tout maillon. C'est le bloc « jalon », posé en tête du corps",
-  "de la boucle par le montage, qui oblige le moteur à écrire un tour avant de",
-  "commencer le suivant (lire _data/blocs/jalon.json : la cause et la mesure y",
-  "sont). Ce maillon offre « ecrit » (son VHS_VideoCombine) pour que le jalon",
-  "du tour suivant ait de quoi attendre."
+  "Le raccord est celui de tous les maillons H3 : l'ancre est la dernière image",
+  "du bloc précédent (« $precedent.derniere_image », que le jalon tend), la",
+  "première image produite — la re-génération de l'ancre — n'est pas livrée.",
+  "",
+  "Ports offerts : « ancre » (l'image reçue, recopiée), « nouvelles » (les 123",
+  "images nouvelles), « derniere_image » (la dernière image native), « images »",
+  "(les 124). Il n'écrit rien : c'est « livrer » qui écrit, et « jalon » qui",
+  "tient l'ordre (lire _data/blocs/livrer.json et jalon.json)."
  ],
  "besoin": {
   "modele": "MODEL",
@@ -51,26 +30,37 @@
   "bruit": "NOISE",
   "echantillonneur": "SAMPLER",
   "sigmas": "SIGMAS",
-  "prompt": "STRING",
+  "style": "STRING",
   "longueur": "INT",
   "images_utiles": "INT",
-  "lisseur": "INTERP_MODEL",
-  "multiplicateur": "INT",
-  "lisser": "BOOLEAN",
-  "selection": "INT",
-  "cadence_sortie": "FLOAT",
-  "largeur_livraison": "INT",
-  "hauteur_livraison": "INT"
+  "blocs_total": "INT"
  },
  "attend": {
   "derniere_image": "IMAGE"
  },
  "sorties": {
   "images": "5",
+  "nouvelles": "9",
   "derniere_image": "6",
-  "ecrit": "8"
+  "ancre": "10"
  },
  "contenu": {
+  "2": {
+   "class_type": "DirectionDuBloc",
+   "inputs": {
+    "plan_json": [
+     "$commun.style",
+     3
+    ],
+    "rang": {
+     "$calc": "tour + 1"
+    },
+    "total": [
+     "$commun.blocs_total",
+     0
+    ]
+   }
+  },
   "3": {
    "class_type": "MiniMaxH3ImageToVideo",
    "inputs": {
@@ -83,7 +73,7 @@
      0
     ],
     "prompt": [
-     "$commun.prompt",
+     "2",
      0
     ],
     "width": [
@@ -180,107 +170,14 @@
     ]
    }
   },
-  "20": {
-   "class_type": "FrameInterpolate",
-   "inputs": {
-    "interp_model": [
-     "$commun.lisseur",
-     0
-    ],
-    "images": [
-     "24",
-     0
-    ],
-    "multiplier": [
-     "$commun.multiplicateur",
-     0
-    ]
-   }
-  },
-  "21": {
-   "class_type": "VHS_SelectEveryNthImage",
-   "inputs": {
-    "images": [
-     "20",
-     0
-    ],
-    "select_every_nth": [
-     "$commun.selection",
-     0
-    ],
-    "skip_first_images": {
-     "$calc": "((cadence * multiplicateur // fps - 1 - (images_nouvelles_par_bloc * multiplicateur * (tour + 1)) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1"
-    }
-   }
-  },
-  "22": {
-   "class_type": "ComfySwitchNode",
-   "inputs": {
-    "switch": [
-     "$commun.lisser",
-     0
-    ],
-    "on_true": [
-     "21",
-     0
-    ],
-    "on_false": [
-     "9",
-     0
-    ]
-   }
-  },
-  "23": {
-   "class_type": "ImageScale",
+  "10": {
+   "class_type": "RepeatImageBatch",
    "inputs": {
     "image": [
-     "22",
-     0
-    ],
-    "upscale_method": "lanczos",
-    "width": [
-     "$commun.largeur_livraison",
-     0
-    ],
-    "height": [
-     "$commun.hauteur_livraison",
-     0
-    ],
-    "crop": "center"
-   }
-  },
-  "8": {
-   "class_type": "VHS_VideoCombine",
-   "inputs": {
-    "images": [
-     "23",
-     0
-    ],
-    "frame_rate": [
-     "$commun.cadence_sortie",
-     0
-    ],
-    "loop_count": 0,
-    "filename_prefix": {
-     "$texte": "$const.prefixe_morceaux",
-     "$rang": "tour + 1"
-    },
-    "format": "video/h264-mp4",
-    "pingpong": false,
-    "save_output": true
-   }
-  },
-  "24": {
-   "class_type": "ImageBatch",
-   "inputs": {
-    "image1": [
      "$precedent.derniere_image",
      0
     ],
-    "image2": [
-     "9",
-     0
-    ]
+    "amount": 1
    }
   }
  }

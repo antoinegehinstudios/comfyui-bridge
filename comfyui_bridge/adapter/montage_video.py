@@ -253,8 +253,10 @@ def parts_normalisees(parts: Any, chevauchement: int = 0) -> list[dict[str, Any]
 
 
 def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
-             hauteur: int = 720, chevauchement: int = 0) -> dict[str, Any]:
-    """Joindre des parts en UN livrable, ré-encodé uniformément."""
+             hauteur: int = 720, chevauchement: int = 0,
+             textes: Any = None) -> dict[str, Any]:
+    """Joindre des parts en UN livrable, ré-encodé uniformément — et y incruster
+    des textes (voir `textes.py`), en flux, au même passage."""
     pieces = parts_normalisees(parts, chevauchement)
     cible = Path(sortie)
     cible.parent.mkdir(parents=True, exist_ok=True)
@@ -311,8 +313,16 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
                           f"aformat=sample_fmts=fltp:channel_layouts=stereo[a{i}]")
     entrelace = "".join(f"[v{i}][a{i}]" for i in range(len(pieces)))
     filtre.append(f"{entrelace}concat=n={len(pieces)}:v=1:a=1[vout][aout]")
+    sortie_video = "[vout]"
+    if textes:
+        from . import textes as _textes
+        duree_totale = sum(max(0.0, s["duree"] - s["saute"] - s["rogne"]) for s in sons)
+        incrustations, _vides = _textes.filtres(textes, largeur, hauteur, duree_totale)
+        if incrustations:
+            filtre.append("[vout]" + ",".join(incrustations) + "[vtxt]")
+            sortie_video = "[vtxt]"
 
-    args += ["-filter_complex", ";".join(filtre), "-map", "[vout]", "-map", "[aout]",
+    args += ["-filter_complex", ";".join(filtre), "-map", sortie_video, "-map", "[aout]",
              "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "aac",
              "-movflags", "+faststart", str(cible)]
     _lancer(outil(), args, f"recollage de {len(pieces)} parts")

@@ -238,7 +238,8 @@ class RunnerDeChaines:
             return montage_video.recoller(parts, sortie, fps=int(params.get("fps") or 25),
                                           largeur=int(params.get("largeur") or 1280),
                                           hauteur=int(params.get("hauteur") or 720),
-                                          chevauchement=int(params.get("chevauchement") or 0))
+                                          chevauchement=int(params.get("chevauchement") or 0),
+                                          textes=params.get("textes"))
         if etape.genre == "mesurer_raccords":
             parts = self._parts_locales(params["parts"], travail)
             return montage_video.mesurer_raccords(

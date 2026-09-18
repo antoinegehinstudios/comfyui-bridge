@@ -1,0 +1,213 @@
+{
+ "bloc": "livrer",
+ "fragment": "livrer",
+ "_lisez_moi": [
+  "LIVRER un bloc rendu : le porter à la cadence et à la taille demandées, puis",
+  "l'écrire — l'action de livraison, séparée du rendu pour que n'importe quel",
+  "maillon de rendu puisse la réutiliser. Il se place juste APRÈS le fragment",
+  "de rendu (l'amorce, puis chaque maillon de la boucle) et attend de lui :",
+  "  - « ancre » : l'image sur laquelle ce bloc a démarré (la dernière du bloc",
+  "    précédent, ou la première image de l'amorce) ;",
+  "  - « nouvelles » : les images nouvelles du bloc (l'ancre re-générée en",
+  "    moins) ;",
+  "  - « derniere_image » : la dernière image native, rendue telle quelle au",
+  "    suivant (le jalon la lit ici).",
+  "",
+  "LA CADENCE : ImageBatch met l'ancre en tête du lot (la couture est ainsi",
+  "interpolée comme n'importe quelle paire — mesuré le 2026-09-17 : sans cela",
+  "la couture était le minimum de ressemblance du plan), FrameInterpolate (FILM)",
+  "multiplie par « multiplicateur » (5 : une grille à 120 i/s), puis",
+  "VHS_SelectEveryNthImage en garde une sur « selection » (4 → 30 i/s, 2 → 60).",
+  "La PHASE se calcule sur la grille globale de la vidéo : un bloc apporte 123",
+  "images natives = 615 images fines, qui n'est pas un multiple de 4 ; pour le",
+  "bloc de rang r (« bloc_rang », le montage nomme « livrer » dans « blocs »),",
+  "skip = ((d − 1 − (615·r) mod d) mod d + 1) × (1 − 0^r) : 0 pour l'amorce",
+  "(sa première image est à elle), sinon ≥ 1 (l'image 0 du lot est l'ancre,",
+  "déjà livrée). Un commutateur paresseux saute tout cela à 24 i/s.",
+  "",
+  "L'AGRANDISSEMENT : quand « agrandir » est vrai, ImageUpscaleWithModelBatched",
+  "(KJNodes) passe les images sélectionnées par l'agrandisseur ×2",
+  "(« agrandisseur » : RealESRGAN_x2plus, téléchargé le 2026-09-18 avec l'accord",
+  "d'Antoine — sha256 49fafd45…), par lots de 8 en fp16 pour borner la mémoire,",
+  "AVANT le lanczos qui donne la taille de livraison : net en 1080p au lieu",
+  "d'un rééchantillonnage doux du rendu natif 576×1024. Paresseux aussi :",
+  "faux, l'agrandisseur n'est jamais chargé.",
+  "",
+  "LA TAILLE : ImageScale (lanczos, recadrage centré) vers",
+  "« largeur_livraison » × « hauteur_livraison » (la demande, plafonnée par le",
+  "montage — au-delà, la chaîne finit au recollage, en flux).",
+  "",
+  "L'ÉCRITURE : VHS_VideoCombine, morceau nommé par le rang du bloc",
+  "(« bloc_rang »), cadence « cadence_sortie ». Le bloc offre « ecrit » (les",
+  "fichiers écrits) et « derniere_image » : c'est ce que le jalon du tour",
+  "suivant attend (lire _data/blocs/jalon.json)."
+ ],
+ "besoin": {
+  "lisseur": "INTERP_MODEL",
+  "multiplicateur": "INT",
+  "lisser": "BOOLEAN",
+  "selection": "INT",
+  "cadence_sortie": "FLOAT",
+  "agrandir": "BOOLEAN",
+  "agrandisseur": "UPSCALE_MODEL",
+  "largeur_livraison": "INT",
+  "hauteur_livraison": "INT"
+ },
+ "attend": {
+  "ancre": "IMAGE",
+  "nouvelles": "IMAGE",
+  "derniere_image": "IMAGE"
+ },
+ "sorties": {
+  "derniere_image": "9",
+  "ecrit": "8",
+  "images": "7"
+ },
+ "contenu": {
+  "1": {
+   "class_type": "ImageBatch",
+   "inputs": {
+    "image1": [
+     "$precedent.ancre",
+     0
+    ],
+    "image2": [
+     "$precedent.nouvelles",
+     0
+    ]
+   }
+  },
+  "2": {
+   "class_type": "FrameInterpolate",
+   "inputs": {
+    "interp_model": [
+     "$commun.lisseur",
+     0
+    ],
+    "images": [
+     "1",
+     0
+    ],
+    "multiplier": [
+     "$commun.multiplicateur",
+     0
+    ]
+   }
+  },
+  "3": {
+   "class_type": "VHS_SelectEveryNthImage",
+   "inputs": {
+    "images": [
+     "2",
+     0
+    ],
+    "select_every_nth": [
+     "$commun.selection",
+     0
+    ],
+    "skip_first_images": {
+     "$calc": "(((cadence * multiplicateur // fps - 1 - (images_nouvelles_par_bloc * multiplicateur * bloc_rang) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1) * (1 - 0 ** bloc_rang)"
+    }
+   }
+  },
+  "4": {
+   "class_type": "ComfySwitchNode",
+   "inputs": {
+    "switch": [
+     "$commun.lisser",
+     0
+    ],
+    "on_true": [
+     "3",
+     0
+    ],
+    "on_false": [
+     "$precedent.nouvelles",
+     0
+    ]
+   }
+  },
+  "5": {
+   "class_type": "ImageUpscaleWithModelBatched",
+   "inputs": {
+    "upscale_model": [
+     "$commun.agrandisseur",
+     0
+    ],
+    "images": [
+     "4",
+     0
+    ],
+    "per_batch": 8,
+    "precision": "float16"
+   }
+  },
+  "6": {
+   "class_type": "ComfySwitchNode",
+   "inputs": {
+    "switch": [
+     "$commun.agrandir",
+     0
+    ],
+    "on_true": [
+     "5",
+     0
+    ],
+    "on_false": [
+     "4",
+     0
+    ]
+   }
+  },
+  "7": {
+   "class_type": "ImageScale",
+   "inputs": {
+    "image": [
+     "6",
+     0
+    ],
+    "upscale_method": "lanczos",
+    "width": [
+     "$commun.largeur_livraison",
+     0
+    ],
+    "height": [
+     "$commun.hauteur_livraison",
+     0
+    ],
+    "crop": "center"
+   }
+  },
+  "8": {
+   "class_type": "VHS_VideoCombine",
+   "inputs": {
+    "images": [
+     "7",
+     0
+    ],
+    "frame_rate": [
+     "$commun.cadence_sortie",
+     0
+    ],
+    "loop_count": 0,
+    "filename_prefix": {
+     "$texte": "$const.prefixe_morceaux",
+     "$rang": "bloc_rang"
+    },
+    "format": "video/h264-mp4",
+    "pingpong": false,
+    "save_output": true
+   }
+  },
+  "9": {
+   "class_type": "RepeatImageBatch",
+   "inputs": {
+    "image": [
+     "$precedent.derniere_image",
+     0
+    ],
+    "amount": 1
+   }
+  }
+ }
+}
