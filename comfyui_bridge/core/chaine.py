@@ -11,8 +11,10 @@ ni ffmpeg, ni HTTP. Il sait lire une définition, refuser ce qui ne tient pas,
 résoudre les renvois d'une étape à l'autre, et dire si un contrôle passe. Ce
 qui EXÉCUTE vit dans l'adaptateur.
 
-Les renvois s'écrivent ``$champ`` (une valeur exposée) ou ``$etape.cle`` (un
-résultat d'étape PRÉCÉDENTE). Un renvoi vers l'aval, ou vers un nom qui
+Les renvois s'écrivent ``$champ`` (une valeur exposée), ``$etape.cle`` (un
+résultat d'étape PRÉCÉDENTE) ou ``$<champ de technique>.<chemin>`` (une
+section du fichier de la technique CHOISIE — ce que son nœud fait, déclaré
+là où elle déclare ses entrées). Un renvoi vers l'aval, ou vers un nom qui
 n'existe pas, est refusé À LA LECTURE, avec le nom : découvert à l'exécution,
 il faisait échouer la chaîne après avoir dépensé les étapes d'avant.
 """
@@ -52,7 +54,9 @@ _CLES: dict[str, tuple[frozenset[str], frozenset[str]]] = {
     # « rendre » nomme SOIT un workflow, SOIT un rôle + la technique qui le
     # tient : le couple exact est vérifié à part (voir `_etape`), parce que
     # « l'un ou l'autre » ne s'écrit pas dans une liste de clés requises.
-    "rendre": (frozenset({"workflow", "media", "role", "technique"})
+    # « memoire » : la CLÉ sous laquelle le résultat de l'étape est gardé, et
+    # repris sans run quand elle revient (voir `_memoire`).
+    "rendre": (frozenset({"workflow", "media", "role", "technique", "memoire"})
                | frozenset(RenderIntent.__dataclass_fields__), frozenset()),
     "extraire_queue": (frozenset({"video", "images"}), frozenset({"video", "images"})),
     "extraire_image": (frozenset({"video", "position"}), frozenset({"video"})),
@@ -161,6 +165,21 @@ class Etape:
         return None
 
     @property
+    def memoire(self) -> tuple[str, ...] | None:
+        """Les renvois qui font la CLÉ de mémoire d'un « rendre » — None quand
+        l'étape ne se souvient de rien.
+
+        Même image, mêmes réglages, même graine : le même résultat, repris sans
+        run. C'est la définition qui dit de quoi la clé est faite ; ce module
+        ne sait pas ce qu'elle nomme.
+        """
+        if self.genre == "rendre" and isinstance(self.params, dict):
+            memoire = self.params.get("memoire")
+            if isinstance(memoire, dict):
+                return tuple(str(r) for r in memoire.get("cle") or ())
+        return None
+
+    @property
     def controles_nommes(self) -> str | None:
         """Le NOM de la liste de contrôles à prendre chez la technique : ce que
         « controles » porte quand l'étape n'écrit rien elle-même, ou
@@ -218,6 +237,11 @@ class Technique:
     # refuse (Antoine, 2026-09-16 : les techniques ne vivent pas dans le
     # workflow, elles s'y réconcilient quand le paramètre les appelle).
     par_defaut: bool = False
+    # LE FICHIER TEL QUEL : ce qu'un renvoi « $<technique>.<chemin> » lit
+    # (« $technique.budget.queue_s » : la fin fixe que le nœud de cette
+    # technique impose, déclarée là où elle déclare ses entrées). Une section
+    # de plus est une clé de plus dans le fichier, jamais un attribut ici.
+    donnees: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -407,6 +431,7 @@ def _rendre_nomme_sa_cible(params: dict[str, Any], ident: str, chaine: str) -> N
     Jamais les deux : lequel l'emporterait ? Et jamais un rôle sans technique —
     un rôle seul ne désigne aucun graphe, et l'étape n'aurait rien à lancer.
     """
+    contexte = f"chaîne {chaine!r}"
     par_role = {"role", "technique"} & set(params)
     if "workflow" in params and par_role:
         raise WorkflowMappingError(
@@ -431,6 +456,34 @@ def _rendre_nomme_sa_cible(params: dict[str, Any], ident: str, chaine: str) -> N
             f"{contexte} : étape {ident!r} (rendre) — « technique » attend un renvoi "
             f"(« $technique »), pas {params.get('technique')!r} : la technique est CHOISIE "
             f"à l'appel, jamais écrite dans le plan")
+
+
+def _memoire(params: dict[str, Any], ident: str, chaine: str) -> None:
+    """« memoire » : ``{"cle": ["$…", …]}`` — une liste NON VIDE de renvois.
+
+    La clé dit de quoi dépend le résultat (l'image, les réglages, la graine) :
+    une clé vide dirait « toujours le même », et une valeur écrite en dur n'y
+    changerait rien d'un appel à l'autre. Les renvois eux-mêmes sont vérifiés
+    comme les autres (`_verifier_renvois`) : vers l'amont ou un champ exposé.
+    """
+    memoire = params.get("memoire")
+    if memoire is None:
+        return
+    contexte = f"chaîne {chaine!r} : étape {ident!r} (rendre)"
+    if not isinstance(memoire, dict) or set(memoire) != {"cle"}:
+        raise WorkflowMappingError(
+            f"{contexte} — « memoire » attend un objet {{\"cle\": [\"$…\", …]}}, "
+            f"pas {memoire!r}")
+    cle = memoire.get("cle")
+    if not isinstance(cle, list) or not cle:
+        raise WorkflowMappingError(
+            f"{contexte} — « memoire.cle » attend une liste non vide de renvois")
+    for renvoi in cle:
+        if not _renvoi(renvoi):
+            raise WorkflowMappingError(
+                f"{contexte} — « memoire.cle » ne prend que des renvois "
+                f"(« $champ », « $etape.cle »), pas {renvoi!r} : une valeur écrite "
+                f"en dur ne distingue rien d'un appel à l'autre")
 
 
 def _etape(brut: Any, rang: int, chaine: str) -> Etape:
@@ -489,6 +542,7 @@ def _etape(brut: Any, rang: int, chaine: str) -> Etape:
             f"chaîne {chaine!r} : « {genre} » de {ident!r} attend un objet de paramètres")
     if genre == "rendre":
         _rendre_nomme_sa_cible(params, ident, chaine)
+        _memoire(params, ident, chaine)
     admises, requises = _CLES[genre]
     inconnues = sorted(set(params) - admises)
     if inconnues:
@@ -628,7 +682,7 @@ def lire_technique(brut: Any, nom_declare: str | None = None) -> Technique:
                      libelle=str(brut.get("libelle") or nom),
                      resume=str(brut.get("resume") or ""),
                      champs=champs, roles=roles, controles=controles,
-                     par_defaut=par_defaut)
+                     par_defaut=par_defaut, donnees=dict(brut))
 
 
 def verifier_techniques(chaine: Chaine, techniques: dict[str, Technique]) -> None:
@@ -649,6 +703,12 @@ def verifier_techniques(chaine: Chaine, techniques: dict[str, Technique]) -> Non
     for etape in chaine.etapes:
         for nom, technique in (techniques or {}).items():
             connus = set(chaine.champs) | set(technique.champs) | amont
+            # Ce que le PLAN lit dans le fichier de la technique
+            # (« $technique.budget.queue_s ») doit s'y trouver, chez CHACUNE :
+            # la technique est choisie à l'appel, et celle qui ne porterait pas
+            # la section ferait échouer l'étape sous elle seule.
+            _chemins_tiennent(list(renvois(etape.params)) + list(renvois(etape.quand)),
+                              chaine, technique, f"technique {nom!r}", etape)
             if etape.role is not None:
                 role = technique.roles.get(etape.role)
                 if role is None:
@@ -658,6 +718,8 @@ def verifier_techniques(chaine: Chaine, techniques: dict[str, Technique]) -> Non
                         f"(elle tient : {', '.join(sorted(technique.roles)) or 'rien'})")
                 _renvois_tiennent(role.inputs, connus,
                                   f"technique {nom!r}, rôle {etape.role!r}", chaine, etape)
+                _chemins_tiennent(list(renvois(role.inputs)), chaine, technique,
+                                  f"technique {nom!r}, rôle {etape.role!r}", etape)
             nommes = etape.controles_nommes
             if nommes is not None:
                 liste = technique.controles.get(nommes)
@@ -668,6 +730,8 @@ def verifier_techniques(chaine: Chaine, techniques: dict[str, Technique]) -> Non
                         f"(elle porte : {', '.join(sorted(technique.controles)) or 'rien'})")
                 _renvois_tiennent(liste, connus,
                                   f"technique {nom!r}, contrôles {nommes!r}", chaine, etape)
+                _chemins_tiennent(list(renvois(liste)), chaine, technique,
+                                  f"technique {nom!r}, contrôles {nommes!r}", etape)
         amont.add(etape.id)
 
 
@@ -686,6 +750,25 @@ def _renvois_tiennent(valeur: Any, connus: set[str], contexte: str,
             f"{chaine.nom!r} (connus ici : {', '.join(sorted(connus)) or 'rien'})")
 
 
+def _chemins_tiennent(renvois_lus: list[str], chaine: Chaine, technique: Technique,
+                      contexte: str, etape: Etape) -> None:
+    """Un renvoi « $<champ de technique>.<chemin> » lit le FICHIER de la
+    technique choisie : refusé à la lecture si cette technique-ci ne porte pas
+    le chemin — sous elle, l'étape n'aurait rien à désigner."""
+    champ = chaine.champ_de_technique
+    if champ is None:
+        return
+    for renvoi in renvois_lus:
+        tete, _, reste = renvoi.partition(".")
+        if tete != champ or not reste:
+            continue
+        if _lire_chemin(technique.donnees, reste.split(".")) is _ABSENT:
+            raise WorkflowMappingError(
+                f"{contexte} : « ${renvoi} » à l'étape {etape.id!r} de {chaine.nom!r} — "
+                f"le fichier de la technique ne porte pas « {reste} » (sections : "
+                f"{', '.join(sorted(technique.donnees)) or 'aucune'})")
+
+
 def champs_admis(chaine: Chaine, techniques: dict[str, Technique] | None = None
                  ) -> dict[str, Champ]:
     """Tous les champs qu'un appelant peut nommer : ceux de la chaîne, plus ceux
@@ -695,8 +778,15 @@ def champs_admis(chaine: Chaine, techniques: dict[str, Technique] | None = None
     sous une technique doit pouvoir se rejouer sous une autre sans être refusé
     champ par champ. Ce qui n'appartient pas à la technique choisie est ÉCARTÉ et dit,
     jamais refusé (voir `valeurs`).
+
+    Une chaîne qui ne CHOISIT aucune technique n'en admet aucun champ : les
+    réglages des techniques d'un autre mode n'ont rien à faire dans son
+    contrat (mesuré le 2026-09-19 : un mode sans technique publiait les
+    papiers et les encres d'un autre parmi ce qu'il accepte).
     """
     tous = dict(chaine.champs)
+    if chaine.champ_de_technique is None:
+        return tous
     for technique in (techniques or {}).values():
         for nom, champ in technique.champs.items():
             tous.setdefault(nom, champ)
@@ -784,6 +874,10 @@ def resoudre(valeur: Any, valeurs: dict[str, Any], resultats: dict[str, Any],
     qu'il faut pour DÉCRIRE une chaîne avant de la lancer (aperçu, estimation),
     où les résultats d'étapes n'existent pas encore. Inventer une valeur là
     ferait mentir l'aperçu.
+
+    ``$<champ>.<chemin>`` lit dans ``resultats`` comme ``$etape.cle`` : c'est
+    là que `resultats_initiaux` pose le fichier de la technique choisie, sous
+    le nom du champ qui la choisit — ce module n'a rien d'autre à savoir.
     """
     if isinstance(valeur, str) and valeur.startswith("$"):
         renvoi = valeur[1:]
@@ -805,6 +899,81 @@ def resoudre(valeur: Any, valeurs: dict[str, Any], resultats: dict[str, Any],
     if isinstance(valeur, list):
         return [resoudre(v, valeurs, resultats, strict) for v in valeur]
     return valeur
+
+
+def resultats_initiaux(chaine: Chaine, technique: Technique | None) -> dict[str, Any]:
+    """Ce que les renvois trouvent AVANT la première étape : le fichier de la
+    technique choisie, sous le nom du champ qui la choisit.
+
+    « $technique » (sans chemin) reste le NOM de la technique — il est dans
+    les valeurs, lues d'abord ; « $technique.budget.queue_s » descend dans son
+    fichier, comme « $etape.recit.cle » descend dans un résultat. Une étape ne
+    peut pas porter le nom d'un champ (refusé à la lecture) : la place est
+    libre, et rien d'autre n'a à connaître cette convention.
+    """
+    champ = chaine.champ_de_technique
+    if champ is None or technique is None:
+        return {}
+    return {champ: dict(technique.donnees)}
+
+
+def entrees_du_role(role: Role, params: dict[str, Any], valeurs: dict[str, Any],
+                    resultats: dict[str, Any], strict: bool = True) -> dict[str, Any]:
+    """Les entrées de nœud qu'une étape à rôle envoie : celles du rôle, écrites
+    chez la technique et résolues ici, SOUS celles de l'étape — le plan garde
+    le dernier mot sur ce qu'il a lui-même écrit, et une technique ne recouvre
+    pas en silence ce que la chaîne demande. La même lecture sert à l'aperçu :
+    ce qu'un lanceur montre est ce qui part."""
+    return {**resoudre(role.inputs, valeurs, resultats, strict),
+            **(params.get("inputs") or {})}
+
+
+def champs_lus_par(etape: Etape, technique: Technique | None = None) -> set[str]:
+    """Les TÊTES des renvois qu'une étape lit — dans ses paramètres, son
+    « quand », et ce que la technique met derrière son rôle ou sa liste de
+    contrôles. Un champ exposé s'y reconnaît à son nom ; une étape d'amont
+    aussi, et l'appelant fait le tri. La clé de MÉMOIRE ne compte pas : un
+    champ qui ne servirait qu'à distinguer des souvenirs ne pèse sur rien."""
+    params = etape.params
+    if isinstance(params, dict) and "memoire" in params:
+        params = {k: v for k, v in params.items() if k != "memoire"}
+    tetes = {r.split(".", 1)[0] for r in list(renvois(params)) + list(renvois(etape.quand))}
+    if technique is not None:
+        if etape.role is not None and etape.role in technique.roles:
+            tetes |= {r.split(".", 1)[0] for r in renvois(technique.roles[etape.role].inputs)}
+        nommes = etape.controles_nommes
+        if nommes is not None and nommes in technique.controles:
+            tetes |= {r.split(".", 1)[0] for r in renvois(technique.controles[nommes])}
+    return tetes
+
+
+def _vide(valeur: Any) -> bool:
+    """Ce qu'une étape facultative appelle « vide » : texte blanc, faux, zéro,
+    liste ou objet vides, absent — la règle de « quand », écrite une fois."""
+    if isinstance(valeur, str):
+        return not valeur.strip()
+    return not valeur
+
+
+def sans_effet_si_sautee(chaine: Chaine, etape: Etape, technique: Technique | None,
+                         valeurs: dict[str, Any]) -> list[str]:
+    """Les champs exposés qui restent SANS EFFET quand cette étape est sautée :
+    ceux qu'elle seule lit (aucune autre étape ne les nomme), et qui portent
+    une valeur non vide — un réglage posé pour une étape qui n'a pas lieu.
+
+    Une police d'appel sans appel partait nulle part sans le dire (2026-09-19) ;
+    le renvoi de « quand » lui-même n'y est pas : c'est lui qui est vide.
+    """
+    lus = champs_lus_par(etape, technique)
+    ailleurs: set[str] = set()
+    for autre in chaine.etapes:
+        if autre.id != etape.id:
+            ailleurs |= champs_lus_par(autre, technique)
+    quand = etape.quand.lstrip("$").split(".", 1)[0] if etape.quand else None
+    exposes = champs_retenus(chaine, technique)
+    return sorted(nom for nom in lus
+                  if nom in exposes and nom not in ailleurs and nom != quand
+                  and nom != chaine.champ_de_technique and not _vide(valeurs.get(nom)))
 
 
 # -- valeurs exposées ---------------------------------------------------------

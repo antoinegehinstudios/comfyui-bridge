@@ -184,8 +184,15 @@ def test_a_value_the_workflow_cannot_receive_is_named_not_swallowed():
                         host_id="h", registry=_Registry())
     plan = orch.build_plan(RenderIntent(prompt="p", fps=24, duration_s=2.0,
                                         constraints=(Constraint("frames", ConstraintOp.LTE, 10),)))
-    assert plan.params["latent_batch"] == 10       # the constraint did apply…
-    assert "batch" in plan.ignored     # …under the name the caller actually sent
+    # DÉCISION ÉCRITE, 2026-09-19 : le nombre d'images n'est plus DÉRIVÉ de la
+    # durée pour un graphe qui ne le lie pas — il ne partait nulle part, et
+    # chaque sous-job d'une chaîne disait « non appliqué — batch » pour un
+    # réglage que personne n'avait envoyé. La contrainte n'a donc rien à
+    # contraindre… et c'est toujours DIT, sous le nom que l'appelant a employé.
+    assert "latent_batch" not in plan.params
+    assert "batch" in plan.ignored
+    # La durée et la cadence, elles, atteignent le graphe : rien à signaler.
+    assert "duration_s" not in plan.ignored and "fps" not in plan.ignored
 
 
 def test_a_run_stopped_on_request_is_not_recorded_against_the_workflow():

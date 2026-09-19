@@ -3,6 +3,9 @@
   "technique": "brume",
   "libelle": "Brume",
   "resume": "L'image est déjà là, entière et en couleur, sous une nappe de bruit fractal animé qui se dissipe selon le chemin du récit ; sous la brume elle est floue et désaturée d'autant qu'elle est couverte.",
+  "budget": {
+    "queue_s": 5.0
+  },
   "expose": {
     "brume": {
       "type": "COMBO",
@@ -117,6 +120,7 @@
     "la_conduite_ne_lui_est_pas_passee": "« conduite » est un champ COMMUN de la chaîne, avec ses deux valeurs — mais le rôle « deroulement » de la brume ne le reçoit pas : la brume ne sait se dissiper que le long d'un chemin narratif, et son nœud porte « le plan » en littéral. Lui passer le champ aurait obligé la chaîne à rétrécir la liste d'un champ commun pour une technique, c'est-à-dire à reprendre la dépendance qu'on vient de lui retirer. Ce qu'un appelant choisit là n'est donc pas appliqué sous la brume, et la passerelle le DIT au journal.",
     "ni_encre_ni_rendu": "Ni « encre », ni « rendu », ni « ambiance », ni « negatif » : la brume n'a pas de trait, pas de lumière de page, rien à inverser. Le champ « fond » y choisit la TEINTE de la brume (blanche, grise, dorée) — c'est le même nom que sous l'encre, avec d'autres valeurs, et c'est la technique choisie qui dit lesquelles (« selon_options » dans /io).",
     "les_bords_et_l_appel": "2026-09-16 au soir : « bords » est un réglage de la peinture, il vit ici (la brume les lit comme l'encre) ; « conduite », que la brume ne lit pas, n'est plus exposé sous elle. L'appel final est un rôle qu'elle tient avec le même graphe d'écriture à l'encre que l'encre — une autre technique pourrait écrire autrement.",
-    "champs_standardises": "2026-09-17 : le champ s'appelle « brume » (« fond » désignait à la fois le papier de l'encre et la teinte de la nappe : un même nom pour deux choses) ; il porte sa catégorie et son aide ; « bords » n'est plus exposé (le graphe porte « fondus » en littéral)."
+    "champs_standardises": "2026-09-17 : le champ s'appelle « brume » (« fond » désignait à la fois le papier de l'encre et la teinte de la nappe : un même nom pour deux choses) ; il porte sa catégorie et son aide ; « bords » n'est plus exposé (le graphe porte « fondus » en littéral).",
+    "budget": "2026-09-19 : « budget.queue_s » est la FIN FIXE que le nœud de déroulement de cette technique impose, en secondes, avant la contemplation — ce que le plan doit retrancher de la durée demandée pour tailler ses temps. Le plan la lit par « $technique.budget.queue_s » (62.queue_s de l'intention) : c'est la technique qui dit ce que son nœud fait, comme elle déclare ses entrées, et une technique publiée qui ne porterait pas ce chemin est refusée à la lecture. Ici 5 s ; le témoin exige que ce nombre soit celui du récit du nœud (duree_fixe_s − contemplation)."
   }
 }

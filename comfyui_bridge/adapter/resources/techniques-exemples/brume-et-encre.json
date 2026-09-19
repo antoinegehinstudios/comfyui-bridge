@@ -3,6 +3,9 @@
   "technique": "brume-et-encre",
   "libelle": "Brume, refermée à l'encre",
   "resume": "L'image est là, entière et en couleur, sous une nappe de brume qui se dissipe le long du récit ; puis c'est l'encre qui referme la page sur elle, et l'appel s'écrit à l'encre. Une technique d'ESSAI : elle n'écrit rien de neuf, elle recompose deux façons de tenir les rôles — la preuve qu'une technique de plus est un fichier de plus, sans une ligne de chaîne ni de code.",
+  "budget": {
+    "queue_s": 5.0
+  },
   "expose": {
     "brume": {
       "type": "COMBO",
@@ -123,6 +126,7 @@
     ]
   },
   "notes": {
-    "pourquoi": "Antoine, 2026-09-16 au soir : « je veux pouvoir garder ce workflow de création, mais essayer des styles vraiment différents, plus tard, en tout cas le permettre ». Cette technique le prouve sur pièces : déposée dans _data/techniques/ et la passerelle relancée, elle est au menu, ses champs suivent (selon), et une production entière se rend — le plan n'a pas bougé, le code non plus. Ses contrôles plan_tenu sont ceux de la brume (c'est elle qui déroule) ; sa fermeture reçoit un papier à elle (« papier ») parce que la fermeture à l'encre veut un papier, pas une teinte de brume."
+    "pourquoi": "Antoine, 2026-09-16 au soir : « je veux pouvoir garder ce workflow de création, mais essayer des styles vraiment différents, plus tard, en tout cas le permettre ». Cette technique le prouve sur pièces : déposée dans _data/techniques/ et la passerelle relancée, elle est au menu, ses champs suivent (selon), et une production entière se rend — le plan n'a pas bougé, le code non plus. Ses contrôles plan_tenu sont ceux de la brume (c'est elle qui déroule) ; sa fermeture reçoit un papier à elle (« papier ») parce que la fermeture à l'encre veut un papier, pas une teinte de brume.",
+    "budget": "2026-09-19 : « budget.queue_s » est la FIN FIXE que le nœud de déroulement de cette technique impose, en secondes, avant la contemplation — ce que le plan doit retrancher de la durée demandée pour tailler ses temps. Le plan la lit par « $technique.budget.queue_s » (62.queue_s de l'intention) : c'est la technique qui dit ce que son nœud fait, comme elle déclare ses entrées, et une technique publiée qui ne porterait pas ce chemin est refusée à la lecture. Ici 5 s ; le témoin exige que ce nombre soit celui du récit du nœud (duree_fixe_s − contemplation)."
   }
 }

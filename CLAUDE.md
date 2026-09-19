@@ -25,8 +25,12 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   `ordre`, `apercu_url`), `runnable`, `warned`, `chaine`, `etapes[].workflow`,
   et `raccourcis[]` (les ensembles de réglages enregistrés sous ce mode :
   `id`, `titre`, `resume`, `valeurs`, `ecarts[].{champ,libelle,valeur,libelle_valeur}`,
-  `apercu_url` s'il existe, `job_id`, `ordre` — liste vide sinon ; le MODE
-  lui-même, avec ses défauts, est le raccourci implicite, affiché en premier),
+  `apercu_url` s'il existe, `job_id`, `ordre`, et `perime: {champs[], raison}`
+  quand le raccourci a vieilli — champ que le mode n'expose plus, valeur hors
+  menu, réglage d'une autre technique que la sienne ; ABSENT quand il tient ;
+  le lanceur grise la carte et dit la raison (depuis le 2026-09-19) — liste
+  vide sinon ; le MODE lui-même, avec ses défauts, est le raccourci implicite,
+  affiché en premier),
   et sur une CHAÎNE `techniques[]` (`valeur`, `libelle`, `resume` — les façons
   de tenir ses rôles, liste vide si elle n'en emploie aucune) ;
 - `GET /v1/workflows/{nom}/io` : `intent_inputs[]` (`field`, `type`, `value`,
@@ -48,9 +52,16 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   `GET|PUT|DELETE /v1/workflows/{nom}/raccourcis/{id}` (+ `…/{id}/apercu`) —
   le lanceur DÉSIGNE (une livraison devient un raccourci), la passerelle
   valide, range et fabrique l'image ;
+  `POST /v1/preview` sur une chaîne rend, par étape, `params` — pour une étape
+  à rôle, `params.inputs` porte AUSSI les entrées que la technique met derrière
+  le rôle, résolues : ce que le lanceur montre est ce qui part ;
   un job porte `demande`, `etapes` (chaque étape rendue : `resultat`, dont
   `recit`, le récit compact écrit par le nœud — ce sur quoi l'étape `verifier`
-  de la chaîne a jugé, et `controles[].{id,ok,mesure,attendu,aide}`),
+  de la chaîne a jugé, et `controles[].{id,ok,mesure,attendu,aide}` ; une étape
+  gardée par clé porte `resultat.memoire.{cle, reprise}` et, reprise sans run,
+  `job_id` nul et la note « reprise de la mémoire : même clé » ; une étape
+  sautée porte `note` et `resultat.sans_effet[]`, les champs qu'elle seule
+  lisait et qu'on avait réglés),
   `artifacts[].{kind,path,url}`, `problem` — et sur un refus de chaîne
   (`problem_kind` `controle-echoue`) : `problem.etape` et
   `problem.controles[].{id,op,attendu,mesure,ok,aide}`, `aide` étant
@@ -133,12 +144,34 @@ graphe appelé directement aussi** (`POST /v1/render`, un mode de n'importe quel
 catégorie, un rejeu : le graphe devient une chaîne d'une seule étape « rendu ») —
 quand le nœud le déclare (entrées littérales `segment_index` + `segment_count`,
 et `duree_max_s` — borne absolue — ou `allonge_max_s` — de combien au plus il
-allonge la durée demandée — qui bornent le compte ; la taille d'un graphe qui la
-prend d'une vidéo d'entrée se lit sur cette vidéo) et que la mémoire l'oblige
-(budget calculé sur `_data/materiel.local.json`) : N runs d'une même simulation, recollés
-par copie de flux (aucune image ré-encodée), récits fusionnés. Le job porte alors
+allonge la durée demandée — qui bornent le compte : avec une allonge déclarée
+et une durée demandée, c'est `demandée + allonge` qui compte, jamais le
+plafond (2026-09-19 : compté sur `max(demandée, 79)`, 10 s demandées se
+comptaient comme 79) ; la taille d'un graphe qui la prend d'une vidéo d'entrée
+se lit sur cette vidéo) et que la mémoire l'oblige (budget calculé sur
+`_data/materiel.local.json`) : N runs d'une même simulation, recollés par copie
+de flux (aucune image ré-encodée), récits fusionnés. Le job porte alors
 `etapes[].job_ids` et `etapes[].tranches` (un `job_id` par tranche, tous visibles
-dans `/v1/jobs`) ; voir « Rendu par tranches » dans le README.
+dans `/v1/jobs`) ; une tranche n'est pas le média : son sous-job n'écrit aucun
+« écart » de durée. Voir « Rendu par tranches » dans le README.
+
+**La durée demandée fait loi** (Antoine, 2026-09-19, après deux productions
+de 10 s livrées à 72,9 puis 88,7 s : « tout paramètre a son poids, les
+paramètres fantômes sont à bannir »). Dans « Révéler une image », l'intention
+reçoit le budget — `62.duree_s`, `62.contemplation_s`, `62.queue_s` (la fin
+fixe que le nœud de la technique choisie impose, lue dans SON fichier par le
+renvoi `$technique.budget.queue_s`) — et la graine, et se taille dedans ;
+`plan_valide` refuse en chiffrant un plan dont le minimum dépasse la demande
+(`le_plan_tient_dans_la_duree`) ; le déroulement n'allonge que dans la marge
+que son graphe déclare (`61.allonge_max_s`, 5 s) et `plan_tenu` le CONSTATE
+(`la_duree_est_tenue`). Le plan est gardé par clé (`memoire` de l'étape
+`intention` : même image, réglages, graine, technique → repris sans run).
+Trois grammaires génériques portent cela, sans un nom de flux dans le code :
+le renvoi `$<champ de technique>.<chemin>` (`core/chaine.py`), la clé
+`memoire` d'un `rendre`, et `sans_effet` d'une étape sautée. Le témoin
+statique `tests/test_chaque_champ_pese.py` refuse tout champ exposé qu'aucune
+étape ne lit ou qui vise une entrée absente du graphe, et exige que chaque
+raccourci soit valide ou périmé avec sa raison.
 
 **Les LIMITES du poste sont déclarées, jamais devinées** : `_data/materiel.local.json`
 (RAM totale, part réservée au reste de la machine, facteur de crête, VRAM, cœurs)
@@ -163,6 +196,12 @@ livrable final (`<nom>_<chaine>-final_<id>`), et chaque étape rendue porte
 Ne jamais relancer la passerelle (8077) pendant qu'un run tourne
 (`GET /v1/engine/queue` : `running` et `pending` vides d'abord) ; relancer par
 `start-bridge-silent.vbs`, prouver le changement de PID par le port.
+Un montage (`_data/workflows/`) et ses blocs (`_data/blocs/`) sont lus SUR
+DISQUE à chaque assemblage, sans relance : modifiés pendant qu'une chaîne
+tourne, ses tours SUIVANTS les prennent, et le job ne le dit pas (depuis le
+2026-09-18 ; avant, le montage restait figé en mémoire à côté de blocs
+frais). Réconciliation, chaînes et techniques, eux, sont lus une fois — au
+démarrage ou au premier usage — et jamais relus : relancer, file vide.
 
 **Le moteur n'a qu'un guichet : la passerelle.** Une DEMANDE de l'utilisateur
 (rendu, chaîne, rejeu, reprise) entre dans la file des demandes et tourne seule,

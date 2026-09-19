@@ -301,3 +301,55 @@ def test_une_fiche_s_ecrit_d_un_coup_et_se_relit(tmp_path):
     assert raccourcis.retirer(tmp_path, "un-mode", "second") is True
     assert raccourcis.apercu_fichier(tmp_path, "un-mode", "second") is None
     assert raccourcis.retirer(tmp_path, "un-mode", "second") is False
+
+
+# -- périmé, publié périmé -----------------------------------------------------
+
+
+def test_un_raccourci_qui_a_vieilli_est_publie_perime_avec_sa_raison(atelier):
+    """Un raccourci vieillit sans qu'on y touche : un champ que le mode
+    n'expose plus, une valeur sortie du menu. Le retirer effacerait ce que
+    l'utilisateur avait nommé ; le publier tel quel le laisserait échouer au
+    lancement sans un mot (2026-09-19 : trois sur cinq partaient en 422). Il est
+    publié PÉRIMÉ — ses champs, la raison — et son lancement tel quel reste
+    refusé ; celui qui tient n'a pas la clé."""
+    base = _base(atelier)
+    raccourcis.ecrire(base, "chaine-simple", {
+        "id": "d-un-autre-age", "workflow": "chaine-simple", "titre": "D'un autre âge",
+        "valeurs": {"largeur": 96, "profondeur": 3, "mode": "z"}, "ordre": 100})
+    raccourcis.ecrire(base, "chaine-simple", {
+        "id": "qui-tient", "workflow": "chaine-simple", "titre": "Qui tient",
+        "valeurs": {"largeur": 96}, "ordre": 100})
+    raccourcis.ecrire(base, "sd15-txt2img", {
+        "id": "trop-profond", "workflow": "sd15-txt2img", "titre": "Trop profond",
+        "valeurs": {"width": 128, "profondeur": 4}, "ordre": 100})
+    vus = {r["id"]: r for r in atelier.get("/v1/workflows").json()
+           ["workflows"]["chaine-simple"]["raccourcis"]}
+    assert "perime" not in vus["qui-tient"]
+    perime = vus["d-un-autre-age"]["perime"]
+    assert perime["champs"] == ["mode", "profondeur"]
+    assert "« profondeur » : le mode ne l'expose plus" in perime["raison"]
+    assert "Mode (mode) : 'z' n'est pas au menu" in perime["raison"]
+    # La même chose, lue seule.
+    seul = atelier.get("/v1/workflows/chaine-simple/raccourcis/d-un-autre-age").json()
+    assert seul["perime"] == perime
+    # …et son lancement tel quel reste un refus, nommé.
+    refus = atelier.post("/v1/render", json={"workflow": "chaine-simple",
+                                             **vus["d-un-autre-age"]["valeurs"]})
+    assert refus.status_code == 422 and "profondeur" in refus.json()["detail"]
+    # Un graphe juge les siens de même.
+    graphe = atelier.get("/v1/workflows").json()["workflows"]["sd15-txt2img"]["raccourcis"][0]
+    assert graphe["perime"]["champs"] == ["profondeur"]
+    assert "profondeur" in graphe["perime"]["raison"]
+
+
+def test_la_forme_d_un_raccourci_perime_est_ecrite_une_fois():
+    """Rien quand rien n'est reproché ; sinon les champs, sans doublon et dans
+    l'ordre, et les raisons à la suite."""
+    assert raccourcis.perime([]) is None
+    assert raccourcis.perime([("fond", "« fond » : n'est pas un réglage de la technique voile"),
+                              ("conduite", "« conduite » : le mode ne l'expose plus"),
+                              ("fond", "encore")]) == {
+        "champs": ["conduite", "fond"],
+        "raison": "« fond » : n'est pas un réglage de la technique voile ; "
+                  "« conduite » : le mode ne l'expose plus ; encore"}

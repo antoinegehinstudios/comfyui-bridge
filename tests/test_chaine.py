@@ -260,3 +260,158 @@ def test_une_etape_facultative_porte_un_renvoi_dans_quand():
                                      {"id": "deux", "rendre": {"workflow": "wf"}}],
                              livrable="$deux.livrable"))
     assert "APRÈS" in refus.value.detail
+
+
+# -- $technique.<chemin> : ce que la technique dit de son nœud ------------------
+
+def _a_techniques():
+    """Un plan dont une étape lit, dans le fichier de la technique choisie, ce
+    que son nœud impose (« $technique.budget.queue_s »)."""
+    return noyau.lire(_minimale(
+        expose={"duration_s": {"type": "FLOAT", "defaut": 30, "min": 5, "max": 90},
+                "technique": {"type": "COMBO", "options_depuis": {"techniques": True}}},
+        etapes=[{"id": "plan", "rendre": {"workflow": "wf",
+                                          "inputs": {"62.duree_s": "$duration_s",
+                                                     "62.queue_s": "$technique.budget.queue_s"}}},
+                {"id": "peinture", "rendre": {"role": "peinture", "technique": "$technique"}}],
+        livrable="$peinture.livrable"))
+
+
+def _technique(nom, **plus):
+    return noyau.lire_technique({"technique": nom, "roles": {"peinture": {"workflow": "g"}},
+                                 "controles": {}, **plus})
+
+
+def test_un_renvoi_vers_le_fichier_de_la_technique_choisie_se_resout():
+    """2026-09-19 : le plan doit connaître la FIN FIXE que le nœud de la
+    technique impose pour se tailler dans la durée — et c'est la technique qui
+    le sait, là où elle déclare ses entrées. « $technique » reste son nom ;
+    « $technique.budget.queue_s » descend dans son fichier, posé parmi les
+    résultats sous le nom du champ qui la choisit, avant la première étape."""
+    chaine = _a_techniques()
+    techniques = {"a": _technique("a", budget={"queue_s": 7.0}, par_defaut=True),
+                  "b": _technique("b", budget={"queue_s": 2.0})}
+    noyau.verifier_techniques(chaine, techniques)
+    valeurs, _ = noyau.valeurs(chaine, {"technique": "b"}, {}, techniques)
+    depart = noyau.resultats_initiaux(chaine, techniques["b"])
+    assert list(depart) == ["technique"] and depart["technique"]["budget"] == {"queue_s": 2.0}
+    assert noyau.resoudre("$technique", valeurs, depart) == "b"
+    assert noyau.resoudre(chaine.etapes[0].params, valeurs, depart)["inputs"] == {
+        "62.duree_s": 30.0, "62.queue_s": 2.0}
+    # Sans technique choisie (une chaîne sans ce champ) : rien à poser.
+    assert noyau.resultats_initiaux(noyau.lire(_minimale()), None) == {}
+    assert noyau.resultats_initiaux(chaine, None) == {}
+
+
+def test_une_technique_qui_ne_porte_pas_le_chemin_est_refusee_a_la_lecture():
+    """La technique est choisie à l'appel : celle qui ne porterait pas la
+    section ferait échouer l'étape sous elle seule, après les étapes d'avant.
+    Refusé quand la chaîne et ses techniques sont lues ensemble, en nommant le
+    chemin — pour un renvoi de la chaîne comme pour un renvoi de la technique
+    vers son propre fichier."""
+    chaine = _a_techniques()
+    sans = _technique("sans")
+    with pytest.raises(WorkflowMappingError) as refus:
+        noyau.verifier_techniques(chaine, {"a": _technique("a", budget={"queue_s": 7.0}),
+                                           "sans": sans})
+    assert "budget.queue_s" in refus.value.detail and "'sans'" in refus.value.detail
+    incomplete = _technique("incomplete", budget={"autre": 1})
+    with pytest.raises(WorkflowMappingError, match="budget.queue_s"):
+        noyau.verifier_techniques(chaine, {"incomplete": incomplete})
+    # Une technique qui lit son propre fichier par le même renvoi : même règle.
+    reflexive = noyau.lire_technique({
+        "technique": "reflexive", "budget": {"queue_s": 5.0},
+        "roles": {"peinture": {"workflow": "g", "inputs": {"61.fin": "$technique.budget.fin_s"}}}})
+    with pytest.raises(WorkflowMappingError, match="budget.fin_s"):
+        noyau.verifier_techniques(chaine, {"reflexive": reflexive})
+    # Le fichier est gardé tel quel : une section de plus est une clé de plus.
+    assert _technique("a", budget={"queue_s": 7.0}, notes={"x": "y"}).donnees["notes"] == {"x": "y"}
+
+
+def test_les_entrees_du_role_passent_sous_celles_de_l_etape():
+    """Ce que la technique met derrière son rôle est résolu ici et passe SOUS
+    ce que l'étape écrit elle-même : le plan garde le dernier mot. La même
+    lecture sert à l'aperçu (strict=False : ce qui n'existe pas encore reste
+    tel quel, jamais inventé)."""
+    role = noyau.Role(nom="peinture", workflow="g",
+                      inputs={"61.fond": "$fond", "61.plan": "$intention.recit.plan"})
+    valeurs = {"fond": "sepia"}
+    assert noyau.entrees_du_role(role, {"inputs": {"61.fond": "washi"}}, valeurs,
+                                 {"intention": {"recit": {"plan": "p"}}}) == {
+        "61.fond": "washi", "61.plan": "p"}
+    assert noyau.entrees_du_role(role, {}, valeurs, {}, strict=False) == {
+        "61.fond": "sepia", "61.plan": "$intention.recit.plan"}
+    with pytest.raises(WorkflowMappingError):
+        noyau.entrees_du_role(role, {}, valeurs, {})
+
+
+# -- memoire : le résultat d'une étape, gardé par clé --------------------------
+
+def test_une_etape_declare_de_quoi_sa_memoire_est_faite():
+    """« Le plan est gardé par clé : même image, mêmes réglages, même graine →
+    même plan » (2026-09-19). La clé est une liste NON VIDE de renvois, lus à
+    la lecture comme les autres ; une valeur en dur ne distingue rien, une clé
+    vide dirait « toujours le même »."""
+    chaine = noyau.lire(_minimale(
+        expose={"duration_s": {"type": "FLOAT", "defaut": 5}, "seed": {"type": "INT", "defaut": 7}},
+        etapes=[{"id": "analyse", "rendre": {"workflow": "wf"}},
+                {"id": "plan", "rendre": {"workflow": "wf", "duration_s": "$duration_s",
+                                          "memoire": {"cle": ["$analyse.recit.empreinte",
+                                                              "$seed", "$duration_s"]}}}],
+        livrable="$plan.livrable"))
+    assert chaine.etapes[0].memoire is None
+    assert chaine.etapes[1].memoire == ("$analyse.recit.empreinte", "$seed", "$duration_s")
+
+    def _avec(memoire):
+        return _minimale(etapes=[{"id": "plan", "rendre": {"workflow": "wf", "memoire": memoire}}],
+                         livrable="$plan.livrable")
+    for faux, dit in (("$seed", "attend un objet"), ({"cle": []}, "non vide"),
+                      ({"cle": "$seed"}, "non vide"),
+                      ({"cle": ["$duration_s"], "x": 1}, "attend un objet"),
+                      ({"cle": ["$duration_s", 71]}, "en dur")):
+        with pytest.raises(WorkflowMappingError) as refus:
+            noyau.lire(_avec(faux))
+        assert dit in refus.value.detail, (faux, refus.value.detail)
+    # …et un renvoi de la clé vers l'aval ou l'inconnu est refusé comme les autres.
+    with pytest.raises(WorkflowMappingError, match="APRÈS"):
+        noyau.lire(_minimale(etapes=[{"id": "plan", "rendre": {
+            "workflow": "wf", "memoire": {"cle": ["$suite.recit.x"]}}},
+            {"id": "suite", "rendre": {"workflow": "wf"}}], livrable="$suite.livrable"))
+    with pytest.raises(WorkflowMappingError, match="inconnu"):
+        noyau.lire(_avec({"cle": ["$inconnu"]}))
+    # Un autre genre ne se souvient de rien.
+    with pytest.raises(WorkflowMappingError, match="memoire"):
+        noyau.lire(_minimale(etapes=[{"id": "un", "extraire_queue": {
+            "video": "x.mp4", "images": 3, "memoire": {"cle": ["$duration_s"]}}}],
+            livrable="$un.fichier"))
+
+
+# -- une étape sautée nomme ce qui reste sans effet -----------------------------
+
+def test_une_etape_sautee_nomme_les_champs_qu_elle_seule_lisait():
+    """Une police d'appel sans appel partait nulle part sans le dire
+    (2026-09-19). Les champs sans effet : ceux que l'étape sautée seule lit —
+    dans ses paramètres, ou dans ce que la technique met derrière son rôle —,
+    non vides ; jamais le renvoi de « quand » (c'est lui qui est vide), jamais
+    un champ qu'une autre étape lit aussi, jamais un champ laissé vide."""
+    chaine = noyau.lire(_minimale(
+        expose={"cta": {"type": "STRING", "defaut": ""},
+                "police": {"type": "STRING", "defaut": ""},
+                "fps": {"type": "INT", "defaut": 30},
+                "technique": {"type": "COMBO", "options_depuis": {"techniques": True}}},
+        etapes=[{"id": "video", "rendre": {"workflow": "wf", "fps": "$fps"}},
+                {"id": "appel", "quand": "$cta",
+                 "rendre": {"role": "appel", "technique": "$technique", "fps": "$fps",
+                            "media": {"video": "$video.livrable"}}}],
+        livrable="$appel.livrable"))
+    technique = noyau.lire_technique({"technique": "t", "roles": {"appel": {
+        "workflow": "g", "inputs": {"7.texte": "$cta", "7.police": "$police"}}}})
+    appel = chaine.etapes[1]
+    assert noyau.champs_lus_par(appel, technique) == {"technique", "fps", "video", "cta", "police"}
+    assert noyau.sans_effet_si_sautee(chaine, appel, technique,
+                                      {"cta": "", "police": "Garamond", "fps": 30,
+                                       "technique": "t"}) == ["police"]
+    assert noyau.sans_effet_si_sautee(chaine, appel, technique,
+                                      {"cta": "", "police": "", "fps": 30, "technique": "t"}) == []
+    # Sans technique (un rôle sans personne derrière) : ce que l'étape lit seule.
+    assert noyau.sans_effet_si_sautee(chaine, appel, None, {"cta": "", "police": "G"}) == []

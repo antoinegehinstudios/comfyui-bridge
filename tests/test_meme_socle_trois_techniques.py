@@ -46,7 +46,8 @@ from comfyui_bridge.config import Settings  # noqa: E402
 from comfyui_bridge.core import chaine as noyau  # noqa: E402
 from comfyui_bridge.core.plan import Artifact, BackendResult  # noqa: E402
 from test_chaines_api import SANS_FFMPEG, BackendQuiLivre, _job  # noqa: E402
-from test_socle_ink import CONTROLES_PLAN_VALIDE, EXEMPLES, PLAN, TECHNIQUES  # noqa: E402
+from test_socle_ink import (CONTROLES_PLAN_TENU_DU_PLAN, CONTROLES_PLAN_VALIDE,  # noqa: E402
+                            EXEMPLES, PLAN, TECHNIQUES)
 from test_tranches import LARGE  # noqa: E402
 
 RACINE = pathlib.Path(__file__).resolve().parents[1]
@@ -61,7 +62,9 @@ AMONT = ("image-iconographe", "image-iconologue", "image-intention")
 
 # LA DEMANDE, la même pour toutes : le plan, son format, son appel.
 LARGEUR, HAUTEUR, CADENCE = 128, 128, 10
-DUREE_S, CONTEMPLATION_S, CONCLUSION_S = 8.0, 3.0, 2.0
+# DÉCISION ÉCRITE, 2026-09-19 : la durée demandée fait loi, et son plancher est
+# passé de 5 à 12 s (test_socle_ink.BORNES_DU_PLAN) — la demande d'essai suit.
+DUREE_S, CONTEMPLATION_S, CONCLUSION_S = 12.0, 3.0, 2.0
 APPEL = "La suite, bientôt"
 IMAGES_REPRISES = 5                      # ce que l'appel d'essai reprend à la conclusion
 DEMANDE = {"workflow": "video-revelation", "image": "oeuvre.png",
@@ -102,7 +105,12 @@ RECIT_INTENTION = {"hook": "la lanterne", "climax": "le visage", "hook_recouvre_
                    "nb_temps": 3, "hook_aire": 0.028, "hook_est_vide": False,
                    "climax_est_central": True, "climax_coeur": "oe.p3", "trajet_retours": 0,
                    "temps_dans_l_approche": True, "part_des_traces": 0.5,
-                   "accroche_couverte_par_le_suivant": 0.0, "direction_json": DIRECTION}
+                   "accroche_couverte_par_le_suivant": 0.0, "direction_json": DIRECTION,
+                   # Le plan a reçu le budget et s'y est taillé (2026-09-19) : son
+                   # minimum tient dans la durée demandée — « le_plan_tient_dans_la_duree ».
+                   "duree_s": DUREE_S, "duree_fixe_s": 12.5, "duree_minimale_s": 11.3,
+                   "duree_prevue_s": DUREE_S, "temps_retires_pour_la_duree": 0,
+                   "duree_detail": "3 temps : fixe 12,5 s + trajets 0 s"}
 RECIT_APPEL = {"images_reprises": IMAGES_REPRISES, "images_ecrites": 10}
 
 
@@ -349,6 +357,12 @@ def _recits(techniques: dict) -> dict:
         graphe = technique.roles["deroulement"].workflow
         recit = recits.setdefault(graphe, {
             "duree_retenue_s": DUREE_S,
+            # Ce que tout nœud de déroulement écrit de la durée (2026-09-19) : la
+            # demande RÉELLE, la prévue, la retenue, et si elle est tenue — le
+            # constat commun « la_duree_est_tenue » le lit, quelle que soit la
+            # technique.
+            "duree_demandee_s": DUREE_S, "duree_prevue_s": DUREE_S,
+            "duree_minimale_s": 11.3, "duree_tenue": True,
             "fermeture_json": json.dumps({"technique": technique.nom, "cadre": [0, 0, LARGEUR, HAUTEUR],
                                           "duree_retenue_s": DUREE_S})})
         _recit_qui_tient(technique.controles["plan_tenu"], recit)
@@ -502,11 +516,28 @@ def test_l_amont_est_le_meme_et_seuls_les_roles_changent_de_graphe(atelier, prod
                     GRAPHES[atelier.techniques[nom].roles["conclusion"].workflow]["6"]["class_type"])
               for nom in TROIS}
     assert len({d for d, _ in noeuds.values()}) == 3 and len({c for _, c in noeuds.values()}) == 3, noeuds
-    # L'amont ne reçoit RIEN de la technique : mêmes réglages, mêmes entrées.
-    amont = {nom: [(params.get("image"), _sans_segments(overrides))
+    # L'amont ne reçoit RIEN de la technique : mêmes réglages, mêmes entrées —
+    # à UNE entrée près, depuis le 2026-09-19 : la FIN FIXE que le nœud de la
+    # technique choisie impose (« $technique.budget.queue_s »), que le plan
+    # retranche de la durée pour se tailler dedans. C'est la technique qui dit
+    # ce que son nœud fait, comme elle déclare ses entrées ; et chez les trois,
+    # ce nombre n'est pas le même.
+    queue = "62.queue_s"
+    amont = {nom: [(params.get("image"), {k: v for k, v in _sans_segments(overrides).items()
+                                          if k != queue})
                    for g, params, overrides in recus if g in AMONT]
              for nom, (_, recus) in productions.items()}
     assert len({json.dumps(a, sort_keys=True) for a in amont.values()}) == 1
+    queues = {}
+    for nom, (_, recus) in productions.items():
+        (_, intention), = [(p, o) for g, p, o in recus if g == "image-intention"]
+        attendu = atelier.techniques[nom].donnees["budget"]["queue_s"]
+        assert intention[queue] == attendu, (nom, intention[queue], attendu)
+        # …et le plan a reçu la durée, la contemplation et la graine de la DEMANDE.
+        assert intention["62.duree_s"] == DUREE_S and intention["62.contemplation_s"] == CONTEMPLATION_S
+        assert intention["62.seed"] == DEMANDE["seed"]
+        queues[nom] = intention[queue]
+    assert len({queues[n] for n in TROIS}) == 3, queues
 
 
 def test_le_plan_atteint_chaque_noeud_de_role_tel_quel_et_le_reste_est_a_la_technique(
@@ -546,12 +577,14 @@ def test_le_plan_atteint_chaque_noeud_de_role_tel_quel_et_le_reste_est_a_la_tech
     # une clé en commun avec les deux autres ; l'encre et la brume visent la
     # même ENTRÉE de nœud (« 61.fond ») depuis deux champs de noms différents
     # (« fond », le papier ; « brume », la teinte de la nappe) et avec d'autres
-    # valeurs — et l'encre en porte trois de plus.
+    # valeurs — et l'encre en porte QUATRE de plus (trois, puis « bords »
+    # revenu chez elle le 2026-09-19 : il pèse, un raccourci le nomme).
     propres = propres_par_technique
     assert set(propres["livre"]).isdisjoint(set(propres["encre"]) | set(propres["brume"]))
     assert propres["encre"]["61.fond"] != propres["brume"]["61.fond"]
     assert set(propres["brume"]) < set(propres["encre"])
-    assert len(propres["encre"]) - len(propres["brume"]) == 3
+    assert len(propres["encre"]) - len(propres["brume"]) == 4
+    assert propres["encre"]["61.bords"] == "fondus"
     # Les conclusions, de même : le contrat du plan (l'instant de reprise, le
     # texte de l'appel, la fermeture reçue du déroulement) est le même chez
     # toutes ; le reste est à la technique.
@@ -610,8 +643,10 @@ def test_les_controles_du_plan_sont_les_memes_et_ceux_de_la_peinture_sont_a_la_t
                                ("controle", ["le_montage_a_ses_parts", "livrable_pese"])):
             lignes = _etape(job, ident)["resultat"]["controles"]
             assert [c["id"] for c in lignes] == attendu and all(c["ok"] for c in lignes), (nom, ident)
+        # La peinture se CONSTATE sur le constat commun du plan (la durée
+        # tenue, 2026-09-19) PUIS sur la liste de sa technique.
         lignes = _etape(job, "plan_tenu")["resultat"]["controles"]
-        assert [c["id"] for c in lignes] == [
+        assert [c["id"] for c in lignes] == CONTROLES_PLAN_TENU_DU_PLAN + [
             c["id"] for c in atelier.techniques[nom].controles["plan_tenu"]], nom
         assert all(c["ok"] for c in lignes), nom
         tenus[nom] = [c["id"] for c in lignes]

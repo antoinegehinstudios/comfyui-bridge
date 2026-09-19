@@ -128,8 +128,11 @@ def test_un_port_qui_traverse_sans_relais_se_lit():
 
 
 def test_un_relais_sans_fichier_confie_se_lit():
-    with pytest.raises(WorkflowMappingError, match="aucun fichier"):
+    """…et le tour est numéroté comme au journal du parent (« tour 2/4 »,
+    1-based) : « le tour 1 relit » désignait le deuxième run (2026-09-19)."""
+    with pytest.raises(WorkflowMappingError, match="le tour 2 relit le relais") as refus:
         _run(1)
+    assert "aucun fichier" in refus.value.detail
 
 
 def test_un_tour_hors_de_la_boucle_se_lit():

@@ -4,6 +4,9 @@
   "libelle": "Encre",
   "resume": "L'encre saigne sur une page vierge : une tache par temps du récit, qui fleurit à bords humides et rejoint les autres, sous une lumière posée hors champ.",
   "par_defaut": true,
+  "budget": {
+    "queue_s": 7.0
+  },
   "expose": {
     "fond": {
       "type": "COMBO",
@@ -41,6 +44,17 @@
       "categorie": "matiere",
       "aide": "« Non » (le défaut) : l'encre est ce qui est sombre dans l'œuvre — une nuit se peint en lavis noir autour d'une lune laissée en réserve. « Oui » : l'encre inverse la lumière, ce qui est clair s'encre. « Selon l'œuvre » : inversée si l'œuvre est majoritairement sombre (médiane de luminance sous 0,35) — pour une scène de nuit, sans quoi la construction ne se lit qu'à la couleur."
     },
+    "bords": {
+      "type": "COMBO",
+      "defaut": "fondus",
+      "options": [
+        "fondus",
+        "francs"
+      ],
+      "libelle": "Bords de l'œuvre",
+      "categorie": "matiere",
+      "aide": "Comment l'œuvre se pose sur la feuille. « Fondus » (le défaut) : la matière continue au-delà de l'arête et se fond dans le papier sur un front ondulé — le rectangle de l'œuvre ne se lit pas pendant la construction. « Francs » : le prolongement d'avant, flouté dès l'arête — le cadre se lit dès le premier trait (le rendu du 2026-09-13, image pour image)."
+    },
     "ambiance": {
       "type": "COMBO",
       "defaut": "lanterne",
@@ -64,7 +78,8 @@
         "61.ambiance": "$ambiance",
         "61.encre": "$encre",
         "61.contemplation_s": "$contemplation_s",
-        "61.negatif": "$negatif"
+        "61.negatif": "$negatif",
+        "61.bords": "$bords"
       }
     },
     "conclusion": {
@@ -213,9 +228,10 @@
     "les_defauts_sont_ceux_du_socle": "Les défauts de cette technique sont ceux des vidéos ink livrées le 2026-09-15 à midi (« c'est parfait — assure cette standardisation ») : washi, lanterne, lavis, non, ink-bleed. Le témoin `tests/test_socle_ink.py` les épingle : les changer est une décision à écrire, jamais un accident.",
     "la_conduite_est_commune": "« conduite » est un champ de la CHAÎNE, avec ses deux valeurs (« le plan », « la camera ») : le rôle « deroulement » de l'encre la passe au nœud (61.conduite). Une autre technique qui ne saurait pas s'en servir ne la reçoit simplement pas — elle n'a pas à faire rétrécir la liste d'un champ commun.",
     "les_bords_la_conduite_et_l_appel": "2026-09-16 au soir : « bords » et « conduite » sont des réglages de la peinture, pas du plan — ils vivent ici. L'appel final est un rôle que l'encre tient avec son graphe d'écriture (le texte s'écrit à l'encre sur les dernières images de la conclusion). Et l'encre se dit « par_defaut » : c'est la technique qui s'ouvre quand l'appelant n'en nomme aucune, le plan ne la nomme pas.",
-    "champs_standardises": "2026-09-17 : ses champs portent leur catégorie et leur aide ; « rendu », « bords » et « conduite » ne sont plus exposés (leurs options « d'avant » et « essai » faisaient des fantômes : le graphe porte en littéral ink-bleed, fondus, le plan, et le nœud garde ses défauts d'identité), « washi-sans-lampe » et l'ambiance « selon-le-fond » de même ; « negatif » n'offre plus que oui et non.",
+    "champs_standardises": "2026-09-17 : ses champs portent leur catégorie et leur aide ; « rendu », « bords » et « conduite » ne sont plus exposés (leurs options « d'avant » et « essai » faisaient des fantômes : le graphe porte en littéral ink-bleed, fondus, le plan, et le nœud garde ses défauts d'identité), « washi-sans-lampe » et l'ambiance « selon-le-fond » de même ; « negatif » n'offre plus que oui et non. 2026-09-19 : « bords » REVIENT (fondus / francs) — il pèse sur la peinture (cinematic.py, la pose de l'œuvre sur la feuille : traits qui continuent au-delà de l'arête, ou cadre qui se lit) et un raccourci le nomme (« Encre dense, gris d'atelier, bords francs »), qui partait en 422 depuis son retrait. Le défaut reste « fondus », celui du socle ; le graphe le porte aussi en littéral. La conclusion (InkClosing) n'a pas d'entrée « bords » : elle ne le reçoit pas.",
     "le_plan_porte_des_traits": "2026-09-17 : l'encre exige du PLAN un quart de temps tracés au moins — « des traits et pas que des blocs » se décide sur les gestes que l'intention écrit, avant de peindre ; le contrôle du même nom sur la peinture reste, il juge ce que l'encre en a fait.",
     "l_accroche_n_est_pas_dans_le_temps_suivant": "2026-09-17 (job 9b554fd9, Bloodborne) : une accroche « main de fer » nichée dans le temps suivant (« guerrier en armure », couverte à 1,0) a été peinte vingt-cinq minutes avant que « l_accroche_est_vue_a_2_5_s » (0,047 pour 0,1) et « l_ordre_d_arrivee_est_celui_du_plan » la refusent : la saignée de l'encre s'arrête à la porte du temps suivant dès l'ouverture (cinematic.py, « une tache n'engloutit pas celles qui doivent venir après elle »). L'encre exige donc du PLAN que le temps suivant ne recouvre pas plus de la moitié de l'accroche (« accroche_couverte_par_le_suivant », écrite par l'intention) — les neuf autres plans du jour valaient 0, celui-là 1 ; la moitié est un seuil posé entre ces deux valeurs, pas une mesure.",
-    "negatif_selon_l_oeuvre": "2026-09-17, soir : « selon-l-oeuvre » revient au menu. Retiré le matin comme option inemployée, il est le mode du nœud pour une œuvre sombre (médiane de luminance sous 0,35 : l'encre est inversée) — un plan de jeu vidéo nocturne peint en positif (négatif « non », le défaut du 15, juste pour la Nuit étoilée) donne une construction sans lecture jusqu'à la couleur (Antoine, Bloodborne-chasseur). Le défaut reste « non »."
+    "negatif_selon_l_oeuvre": "2026-09-17, soir : « selon-l-oeuvre » revient au menu. Retiré le matin comme option inemployée, il est le mode du nœud pour une œuvre sombre (médiane de luminance sous 0,35 : l'encre est inversée) — un plan de jeu vidéo nocturne peint en positif (négatif « non », le défaut du 15, juste pour la Nuit étoilée) donne une construction sans lecture jusqu'à la couleur (Antoine, Bloodborne-chasseur). Le défaut reste « non ».",
+    "budget": "2026-09-19 : « budget.queue_s » est la FIN FIXE que le nœud de déroulement de cette technique impose, en secondes, avant la contemplation — ce que le plan doit retrancher de la durée demandée pour tailler ses temps. Le plan la lit par « $technique.budget.queue_s » (62.queue_s de l'intention) : c'est la technique qui dit ce que son nœud fait, comme elle déclare ses entrées, et une technique publiée qui ne porterait pas ce chemin est refusée à la lecture. Ici 7 s ; le témoin exige que ce nombre soit celui du récit du nœud (duree_fixe_s − contemplation)."
   }
 }

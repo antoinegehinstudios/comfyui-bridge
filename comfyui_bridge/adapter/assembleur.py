@@ -26,8 +26,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..core.blocs import Fragment
-from ..core.errors import WorkflowMappingError
+from ..core.blocs import Fragment, evaluer
+from ..core.errors import IntentValidationError, WorkflowMappingError
 
 PREFIXE = "$"
 PRECEDENT = "precedent"
@@ -287,6 +287,37 @@ def _segment(forme: dict[str, Any], portee: dict[str, Any], ou: str) -> str:
     return "%s %s" % (global_, temps[i])
 
 
+SI = "$si"
+ALORS = "alors"
+SINON = "sinon"
+
+
+def _choisir(forme: dict[str, Any], portee: dict[str, Any], ou: str) -> Any:
+    """Une entrée qui dépend d'un réglage se décide AU MONTAGE, pas dans le graphe.
+
+    ``{"$si": {"parametre": "fps", "op": "ne", "valeur": 24}, "alors": ["5", 0],
+    "sinon": ["3", 0]}`` : le même prédicat déclaratif que le « si » d'un montage
+    (``core.blocs.evaluer``), et la branche retenue est une entrée ordinaire —
+    un lien, une valeur, une constante, un calcul, ou un autre « $si ».
+
+    Mesuré le 2026-09-18 : la même décision confiée à un commutateur PARESSEUX du
+    moteur (`ComfySwitchNode`) lui faisait ré-exécuter, sous `--cache-none`, le
+    modèle et l'échantillonneur d'un bloc entier — le producteur avait fini
+    avant que la branche ne soit réclamée, et rien ne se souvenait de sa sortie
+    (`tasks/enquete-double-echantillonnage-2026-09-18.md`). Décidée ici, la
+    branche non prise n'est reliée à aucune sortie : le moteur ne la voit pas.
+    """
+    manque = [k for k in (ALORS, SINON) if k not in forme]
+    if manque:
+        raise WorkflowMappingError(
+            f"{ou} : « $si » sans « {manque[0]} » — les deux branches doivent être écrites")
+    try:
+        vrai = evaluer(forme[SI], portee)
+    except IntentValidationError as exc:
+        raise WorkflowMappingError(f"{ou} : {exc.detail}", **exc.extensions) from None
+    return forme[ALORS] if vrai else forme[SINON]
+
+
 def _constante(valeur: Any, constantes: dict[str, Any], ou: str) -> Any:
     """Une valeur de nœud écrite ``"$const.<nom>"`` vaut la constante du montage.
 
@@ -405,15 +436,27 @@ class _Fenetre:
 
 
 def _noms_cites(contenu: dict[str, Any]) -> set[str]:
-    """Les fragments qu'un contenu vise par leur NOM (« $commun.x »), hors « $precedent »."""
+    """Les fragments qu'un contenu vise par leur NOM (« $commun.x »), hors « $precedent ».
+
+    Les deux branches d'un « $si » comptent : laquelle sera prise ne se sait
+    qu'au montage, et un run doit garder ce que l'une ou l'autre cite.
+    """
     noms: set[str] = set()
+
+    def voir(valeur: Any) -> None:
+        if isinstance(valeur, dict) and SI in valeur:
+            voir(valeur.get(ALORS))
+            voir(valeur.get(SINON))
+            return
+        if _est_lien(valeur) and valeur[0].startswith(PREFIXE):
+            corps = valeur[0][len(PREFIXE):]
+            nom = corps.split(".", 1)[0].partition("#")[0]
+            if nom != PRECEDENT:
+                noms.add(nom)
+
     for noeud in contenu.values():
         for valeur in ((noeud or {}).get("inputs") or {}).values():
-            if _est_lien(valeur) and valeur[0].startswith(PREFIXE):
-                corps = valeur[0][len(PREFIXE):]
-                nom = corps.split(".", 1)[0].partition("#")[0]
-                if nom != PRECEDENT:
-                    noms.add(nom)
+            voir(valeur)
     return noms
 
 
@@ -440,8 +483,11 @@ def _noeud_lire(fenetre: _Fenetre, port: str, suivant: list[int]) -> tuple[str, 
     recette = _recette_relais(fenetre, port, "lire")
     fichier = fenetre.fichiers.get(port)
     if not fichier:
+        # Le numéro est celui du JOURNAL du parent (« tour 3/4 », 1-based) :
+        # `fenetre.tour` compte depuis zéro, et « le tour 2 relit… » désignait
+        # le troisième run (2026-09-19).
         raise WorkflowMappingError(
-            f"montage : le tour {fenetre.tour} relit le relais {port!r}, et aucun fichier "
+            f"montage : le tour {fenetre.tour + 1} relit le relais {port!r}, et aucun fichier "
             f"ne lui a été confié (« relais_{port} »)")
     entrees = {champ: (fichier if valeur == RELAIS_FICHIER else valeur)
                for champ, valeur in (recette.get("inputs") or {}).items()}
@@ -561,26 +607,28 @@ def assembler(fragments: list[Fragment],
                 raise WorkflowMappingError(
                     f"fragment {f.nom!r} : le nœud {local!r} n'a pas de « class_type »")
             copie = {k: v for k, v in noeud.items() if k != "inputs"}
+            # Le numéro de tour est dans la portée : un bloc répété doit
+            # pouvoir placer quelque chose plus loin à chaque répétition.
+            portee = dict(constantes or {}, tour=f.tour, tours_total=f.tours_total)
+            # Avec des phases, le bloc (le tour de boucle proprement dit)
+            # et la phase : « rang = bloc » pour la direction du bloc.
+            phases = int((f.boucle or {}).get("phases", 1) or 1) if isinstance(f.boucle, dict) else 1
+            portee["bloc"] = f.tour // phases
+            portee["phase"] = f.tour % phases
+            if moi in rangs:
+                portee["bloc_rang"] = rangs[moi]
+                portee["blocs_total"] = len(rangs)
             entrees = {}
             for champ, valeur in (noeud.get("inputs") or {}).items():
+                ou = f"fragment {f.nom!r} (tour {f.tour}), nœud {local!r}, entrée {champ!r}"
+                # Une entrée décidée au montage : la branche retenue est une
+                # entrée ordinaire, et peut elle-même se décider.
+                while isinstance(valeur, dict) and SI in valeur:
+                    valeur = _choisir(valeur, portee, ou)
                 if _est_lien(valeur):
                     entrees[champ] = _lien(valeur, moi, ordre, table, sorties, fenetre, suivant)
                 else:
-                    # Le numéro de tour est dans la portée : un bloc répété doit
-                    # pouvoir placer quelque chose plus loin à chaque répétition.
-                    portee = dict(constantes or {},
-                                  tour=f.tour, tours_total=f.tours_total)
-                    # Avec des phases, le bloc (le tour de boucle proprement dit)
-                    # et la phase : « rang = bloc » pour la direction du bloc.
-                    phases = int((f.boucle or {}).get("phases", 1) or 1) if isinstance(f.boucle, dict) else 1
-                    portee["bloc"] = f.tour // phases
-                    portee["phase"] = f.tour % phases
-                    if moi in rangs:
-                        portee["bloc_rang"] = rangs[moi]
-                        portee["blocs_total"] = len(rangs)
-                    entrees[champ] = _constante(
-                        valeur, portee,
-                        f"fragment {f.nom!r} (tour {f.tour}), nœud {local!r}, entrée {champ!r}")
+                    entrees[champ] = _constante(valeur, portee, ou)
             copie["inputs"] = entrees
             graphe[table[moi][str(local)]] = copie
     if fenetre is not None and fenetre.a_ecrire:

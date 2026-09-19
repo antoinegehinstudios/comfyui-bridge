@@ -34,15 +34,18 @@
   "« livrer-amorce » et « livrer » dans « blocs ») commence à l'image fine",
   "F0 = 615·r + 205·t ; skip = ((d − 1 − F0 mod d) mod d) + 1 — et 0 pour le tout",
   "premier tier de l'amorce (sa première image est à elle) ; ailleurs l'image 0",
-  "du lot est l'ancre, déjà livrée. Un commutateur paresseux saute tout cela à",
-  "24 i/s (les 41 images natives partent telles quelles).",
+  "du lot est l'ancre, déjà livrée.",
+  "À 24 i/s, tout cela est sauté (les 41 images natives partent telles quelles) :",
+  "la branche est DÉCIDÉE AU MONTAGE par « $si » sur « fps » (voir plus bas), jamais par",
+  "un commutateur du moteur.",
   "",
   "L'AGRANDISSEMENT : « agrandir » vrai, ImageUpscaleWithModelBatched (KJNodes)",
   "passe les images sélectionnées par l'agrandisseur ×2 (« agrandisseur » :",
   "RealESRGAN_x2plus, téléchargé le 2026-09-18 avec l'accord d'Antoine, sha256",
   "49fafd45…), par lots de 8 en fp16, AVANT le lanczos qui donne la taille de",
   "livraison — validé face au lanczos seul (variance du laplacien ×4,6 pour",
-  "+20 % de temps). Paresseux : faux, l'agrandisseur n'est jamais chargé.",
+  "+20 % de temps). Décidé au montage (« $si » sur « agrandir ») : faux, l'agrandisseur n'est jamais",
+  "chargé, sa branche n'étant reliée à aucune sortie.",
   "",
   "LA TAILLE : ImageScale (lanczos, recadrage centré) vers « largeur_livraison » ×",
   "« hauteur_livraison » (la demande, plafonnée par le montage — au-delà, la",
@@ -53,26 +56,43 @@
   "l'ordre de ce numéro, en copie de flux. Le bloc offre « ecrit » (les fichiers",
   "du dernier tier) et « derniere_image » : ce que le jalon du tour suivant attend.",
   "",
-  "En tête de chaque tier, entre l'ImageBatch et FILM, une GARDE DE PLACE (nœud « GardeDePlace », paquet comfyui-garde-de-place) mesure la marge du poste — RAM physique ET commit — et attend qu'elle tienne « garde_go » Gio (constante du montage, 6 ici : FILM ×5 puis l'agrandisseur d'un tier) avant de laisser passer les images ; au-delà de 30 min, elle refuse par une erreur propre. Mesuré le 2026-09-18 : sans elle, le moteur est mort deux fois à l'entrée d'un tier, un voisin ayant chargé 25 Go de commit pendant le run. Elle ne libère rien : elle empêche d'aller dans le mur sans rien dire."
+  "En tête de chaque tier, entre l'ImageBatch et FILM, une GARDE DE PLACE (nœud « GardeDePlace », paquet comfyui-garde-de-place) mesure la marge du poste — RAM physique ET commit — et attend qu'elle tienne « garde_go » Gio (constante du montage, 6 ici : FILM ×5 puis l'agrandisseur d'un tier) avant de laisser passer les images ; au-delà de 30 min, elle refuse par une erreur propre. Mesuré le 2026-09-18 : sans elle, le moteur est mort deux fois à l'entrée d'un tier, un voisin ayant chargé 25 Go de commit pendant le run. Elle ne libère rien : elle empêche d'aller dans le mur sans rien dire.",
+  "",
+  "AUCUNE ENTRÉE PARESSEUSE. Jusqu'au 2026-09-18 au soir, « lisser » et « agrandir » étaient",
+  "des « ComfySwitchNode » (entrées on_true/on_false paresseuses). Mesuré et rejoué sur",
+  "comfy_execution/graph.py : sous --cache-none, une entrée paresseuse réclamée APRÈS que",
+  "son producteur a fini ré-enfile le producteur et tout son cône — ici le relais",
+  "« derniere_image » faisait finir le décodage avant que les tiers ne le réclament, et",
+  "modèle, échantillonneur et décodage tournaient DEUX FOIS par bloc du milieu (28 min",
+  "au lieu de 12, ≈ 24 Gio tenus jusqu'à la fin du prompt, garde de place qui attendait",
+  "510 s puis a refusé à 1 800 s). Les deux décisions sont prises à l'assemblage par la",
+  "forme « $si » de l'assembleur (même prédicat que le « si » d'un montage) ; le graphe",
+  "envoyé au moteur n'a plus de commutateur, et la branche non prise n'est reliée à rien.",
+  "Preuve : tasks/enquete-double-echantillonnage-2026-09-18.md ; témoin :",
+  "tests/test_video_h3_texte_exemple.py.",
+  "",
+  "Depuis le 2026-09-18 (R2) : les tiers se découpent sur « nouvelles » (123 images au bloc 0, dont l'image 0 est l'ancre livrée par le tier 0 ; 124 aux blocs ≥ 1, toutes nouvelles — une vraie extension), le troisième tier prend 41 ou 42 images ; la phase de sélection compte 124 images natives par bloc sur la grille globale ; « queue » (22 dernières images) et « identite » traversent tels quels vers le relais."
  ],
  "besoin": {
   "lisseur": "INTERP_MODEL",
   "multiplicateur": "INT",
-  "lisser": "BOOLEAN",
   "selection": "INT",
   "cadence_sortie": "FLOAT",
-  "agrandir": "BOOLEAN",
   "agrandisseur": "UPSCALE_MODEL",
   "largeur_livraison": "INT",
   "hauteur_livraison": "INT"
  },
  "attend": {
-  "images": "IMAGE",
+  "nouvelles": "IMAGE",
   "ancre": "IMAGE",
-  "derniere_image": "IMAGE"
+  "derniere_image": "IMAGE",
+  "queue": "IMAGE",
+  "identite": "IMAGE"
  },
  "sorties": {
   "derniere_image": "1",
+  "queue": "2",
+  "identite": "3",
   "ecrit": "310"
  },
  "contenu": {
@@ -89,10 +109,10 @@
   "100": {
    "class_type": "GetImageRangeFromBatch",
    "inputs": {
-    "start_index": 1,
+    "start_index": 0,
     "num_frames": 41,
     "images": [
-     "$precedent.images",
+     "$precedent.nouvelles",
      0
     ]
    }
@@ -139,25 +159,8 @@
      0
     ],
     "skip_first_images": {
-     "$calc": "((((cadence * multiplicateur // fps) - 1 - (images_nouvelles_par_bloc * multiplicateur * bloc_rang + 0 * 41 * multiplicateur) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1) * (1 - 0 ** bloc_rang)"
+     "$calc": "((((cadence * multiplicateur // fps) - 1 - (multiplicateur * ((124 * bloc_rang + 0 + 0 ** bloc_rang) - 1)) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1) * (1 - 0 ** (bloc_rang + 0))"
     }
-   }
-  },
-  "106": {
-   "class_type": "ComfySwitchNode",
-   "inputs": {
-    "switch": [
-     "$commun.lisser",
-     0
-    ],
-    "on_true": [
-     "105",
-     0
-    ],
-    "on_false": [
-     "100",
-     0
-    ]
    }
   },
   "107": {
@@ -167,38 +170,54 @@
      "$commun.agrandisseur",
      0
     ],
-    "images": [
-     "106",
-     0
-    ],
+    "images": {
+     "$si": {
+      "parametre": "fps",
+      "op": "ne",
+      "valeur": 24
+     },
+     "alors": [
+      "105",
+      0
+     ],
+     "sinon": [
+      "100",
+      0
+     ]
+    },
     "per_batch": 8,
     "precision": "float16"
-   }
-  },
-  "108": {
-   "class_type": "ComfySwitchNode",
-   "inputs": {
-    "switch": [
-     "$commun.agrandir",
-     0
-    ],
-    "on_true": [
-     "107",
-     0
-    ],
-    "on_false": [
-     "106",
-     0
-    ]
    }
   },
   "109": {
    "class_type": "ImageScale",
    "inputs": {
-    "image": [
-     "108",
-     0
-    ],
+    "image": {
+     "$si": {
+      "parametre": "agrandir",
+      "op": "eq",
+      "valeur": true
+     },
+     "alors": [
+      "107",
+      0
+     ],
+     "sinon": {
+      "$si": {
+       "parametre": "fps",
+       "op": "ne",
+       "valeur": 24
+      },
+      "alors": [
+       "105",
+       0
+      ],
+      "sinon": [
+       "100",
+       0
+      ]
+     }
+    },
     "upscale_method": "lanczos",
     "width": [
      "$commun.largeur_livraison",
@@ -235,10 +254,10 @@
   "200": {
    "class_type": "GetImageRangeFromBatch",
    "inputs": {
-    "start_index": 42,
+    "start_index": 41,
     "num_frames": 41,
     "images": [
-     "$precedent.images",
+     "$precedent.nouvelles",
      0
     ]
    }
@@ -246,10 +265,10 @@
   "201": {
    "class_type": "GetImageRangeFromBatch",
    "inputs": {
-    "start_index": 41,
+    "start_index": 40,
     "num_frames": 1,
     "images": [
-     "$precedent.images",
+     "$precedent.nouvelles",
      0
     ]
    }
@@ -312,25 +331,8 @@
      0
     ],
     "skip_first_images": {
-     "$calc": "(((cadence * multiplicateur // fps) - 1 - (images_nouvelles_par_bloc * multiplicateur * bloc_rang + 1 * 41 * multiplicateur) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1"
+     "$calc": "((((cadence * multiplicateur // fps) - 1 - (multiplicateur * ((124 * bloc_rang + 41 + 0 ** bloc_rang) - 1)) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1) * (1 - 0 ** (bloc_rang + 1))"
     }
-   }
-  },
-  "206": {
-   "class_type": "ComfySwitchNode",
-   "inputs": {
-    "switch": [
-     "$commun.lisser",
-     0
-    ],
-    "on_true": [
-     "205",
-     0
-    ],
-    "on_false": [
-     "202",
-     1
-    ]
    }
   },
   "207": {
@@ -340,38 +342,54 @@
      "$commun.agrandisseur",
      0
     ],
-    "images": [
-     "206",
-     0
-    ],
+    "images": {
+     "$si": {
+      "parametre": "fps",
+      "op": "ne",
+      "valeur": 24
+     },
+     "alors": [
+      "205",
+      0
+     ],
+     "sinon": [
+      "202",
+      1
+     ]
+    },
     "per_batch": 8,
     "precision": "float16"
-   }
-  },
-  "208": {
-   "class_type": "ComfySwitchNode",
-   "inputs": {
-    "switch": [
-     "$commun.agrandir",
-     0
-    ],
-    "on_true": [
-     "207",
-     0
-    ],
-    "on_false": [
-     "206",
-     0
-    ]
    }
   },
   "209": {
    "class_type": "ImageScale",
    "inputs": {
-    "image": [
-     "208",
-     0
-    ],
+    "image": {
+     "$si": {
+      "parametre": "agrandir",
+      "op": "eq",
+      "valeur": true
+     },
+     "alors": [
+      "207",
+      0
+     ],
+     "sinon": {
+      "$si": {
+       "parametre": "fps",
+       "op": "ne",
+       "valeur": 24
+      },
+      "alors": [
+       "205",
+       0
+      ],
+      "sinon": [
+       "202",
+       1
+      ]
+     }
+    },
     "upscale_method": "lanczos",
     "width": [
      "$commun.largeur_livraison",
@@ -408,10 +426,12 @@
   "300": {
    "class_type": "GetImageRangeFromBatch",
    "inputs": {
-    "start_index": 83,
-    "num_frames": 41,
+    "start_index": 82,
+    "num_frames": {
+     "$calc": "41 + (1 - 0 ** bloc_rang)"
+    },
     "images": [
-     "$precedent.images",
+     "$precedent.nouvelles",
      0
     ]
    }
@@ -419,10 +439,10 @@
   "301": {
    "class_type": "GetImageRangeFromBatch",
    "inputs": {
-    "start_index": 82,
+    "start_index": 81,
     "num_frames": 1,
     "images": [
-     "$precedent.images",
+     "$precedent.nouvelles",
      0
     ]
    }
@@ -485,25 +505,8 @@
      0
     ],
     "skip_first_images": {
-     "$calc": "(((cadence * multiplicateur // fps) - 1 - (images_nouvelles_par_bloc * multiplicateur * bloc_rang + 2 * 41 * multiplicateur) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1"
+     "$calc": "((((cadence * multiplicateur // fps) - 1 - (multiplicateur * ((124 * bloc_rang + 82 + 0 ** bloc_rang) - 1)) % (cadence * multiplicateur // fps)) % (cadence * multiplicateur // fps)) + 1) * (1 - 0 ** (bloc_rang + 2))"
     }
-   }
-  },
-  "306": {
-   "class_type": "ComfySwitchNode",
-   "inputs": {
-    "switch": [
-     "$commun.lisser",
-     0
-    ],
-    "on_true": [
-     "305",
-     0
-    ],
-    "on_false": [
-     "302",
-     1
-    ]
    }
   },
   "307": {
@@ -513,38 +516,54 @@
      "$commun.agrandisseur",
      0
     ],
-    "images": [
-     "306",
-     0
-    ],
+    "images": {
+     "$si": {
+      "parametre": "fps",
+      "op": "ne",
+      "valeur": 24
+     },
+     "alors": [
+      "305",
+      0
+     ],
+     "sinon": [
+      "302",
+      1
+     ]
+    },
     "per_batch": 8,
     "precision": "float16"
-   }
-  },
-  "308": {
-   "class_type": "ComfySwitchNode",
-   "inputs": {
-    "switch": [
-     "$commun.agrandir",
-     0
-    ],
-    "on_true": [
-     "307",
-     0
-    ],
-    "on_false": [
-     "306",
-     0
-    ]
    }
   },
   "309": {
    "class_type": "ImageScale",
    "inputs": {
-    "image": [
-     "308",
-     0
-    ],
+    "image": {
+     "$si": {
+      "parametre": "agrandir",
+      "op": "eq",
+      "valeur": true
+     },
+     "alors": [
+      "307",
+      0
+     ],
+     "sinon": {
+      "$si": {
+       "parametre": "fps",
+       "op": "ne",
+       "valeur": 24
+      },
+      "alors": [
+       "305",
+       0
+      ],
+      "sinon": [
+       "302",
+       1
+      ]
+     }
+    },
     "upscale_method": "lanczos",
     "width": [
      "$commun.largeur_livraison",
@@ -624,6 +643,26 @@
      "$texte": "livraison tier",
      "$rang": "3 * bloc_rang + 2"
     }
+   }
+  },
+  "2": {
+   "class_type": "RepeatImageBatch",
+   "inputs": {
+    "image": [
+     "$precedent.queue",
+     0
+    ],
+    "amount": 1
+   }
+  },
+  "3": {
+   "class_type": "RepeatImageBatch",
+   "inputs": {
+    "image": [
+     "$precedent.identite",
+     0
+    ],
+    "amount": 1
    }
   }
  }

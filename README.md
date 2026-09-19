@@ -797,6 +797,83 @@ une erreur serveur ; une chaîne « en cours » au démarrage de la passerelle n
 plus de fil : elle est close, et `POST /v1/jobs/{id}/reprendre` repart de la
 première étape non faite.
 
+### Une entrée décidée au montage : `$si` — jamais de commutateur paresseux
+
+Une entrée de nœud qui dépend d'un réglage se décide dans le montage, pas dans
+le graphe :
+
+```jsonc
+"images": {"$si": {"parametre": "fps", "op": "ne", "valeur": 24},
+           "alors": ["105", 0], "sinon": ["100", 0]}
+```
+
+Même prédicat déclaratif que le `si` d'un montage (`parametre`, `op`, `valeur`,
+évalué sur les constantes, les paramètres, `tour`, `bloc`, `bloc_rang`…) ; la
+branche retenue est une entrée ordinaire — un lien, une valeur, un `$const`, un
+`$calc`, ou un autre `$si`. La branche non prise n'est reliée à aucune sortie :
+le moteur ne la voit pas (un agrandisseur non demandé n'est jamais chargé).
+
+Pourquoi pas un commutateur du moteur (`ComfySwitchNode`, entrées `lazy`) :
+mesuré le 2026-09-18 et rejoué sur `comfy_execution/graph.py` — sous
+`--cache-none`, une entrée paresseuse réclamée APRÈS que son producteur a fini
+lui fait ré-enfiler le producteur et tout son cône amont, en silence. Dans le
+bloc `livrer`, le relais `derniere_image` faisait finir le décodage avant que les
+tiers ne le réclament : modèle, échantillonneur et décodage tournaient DEUX FOIS
+par bloc du milieu (28 min au lieu de 12, ≈ 24 Gio tenus jusqu'à la fin du
+prompt, garde de place qui attend puis refuse). Un graphe envoyé à ce moteur ne
+porte donc aucune entrée paresseuse ; le témoin
+`tests/test_video_h3_texte_exemple.py` le tient, et
+`tasks/enquete-double-echantillonnage-2026-09-18.md` porte la preuve.
+
+### D'un bloc à l'autre : continuer, pas rejouer
+
+Feedback d'Antoine sur deux livraisons du 2026-09-18 : des coupures ratées, une
+bouteille qui change de sens de rotation, une main qui bouge mal ; un
+personnage sorti du champ qui revient avec un autre T-shirt. L'enquête
+(`tasks/enquete-continuite-2026-09-18.md`, sept essais A à F sur le moteur,
+SSIM à la couture et planches d'images) a trouvé deux causes, dans l'USAGE du
+modèle, pas dans les nœuds :
+
+* **même graine = même trajectoire.** Chaque bloc était semé à la même graine
+  et repartait de la dernière image du précédent (image-vers-vidéo) : le modèle
+  REJOUAIT le même mouvement de caméra — la bouteille repartait en arrière, la
+  main refaisait son geste. Le bruit du bloc *b* est désormais semé à
+  `graine + b` (nœud `ComfyMathExpression` du rendu, `$commun.graine` restant
+  la graine que l'utilisateur voit et rejoue) ;
+* **une image n'est pas un plan.** Repartir d'UNE image ne dit au modèle ni
+  d'où vient le mouvement ni à quoi ressemblait le sujet quand il était en
+  plein cadre : le T-shirt change. Chaque bloc suivant CONTINUE désormais le
+  précédent par référence (`MiniMaxH3ReferenceToVideo`) : ses 22 dernières
+  images natives en vidéo de référence (`<Video 1> is the preceding shot;
+  continue it seamlessly…`, relais `queue` — `SauverImages` /
+  `ChargerImages`, un seul `.pt` fp16, paquet `comfyui-conditionnement-en-fichier`)
+  et une image de son milieu en image d'identité (`<Picture 1> is the same
+  subject, same identity, same clothes…`, relais `identite`), avec le poids
+  `ref2va` et sa LoRA turbo à QUATRE pas (fragment `modele-ref`). Mesuré
+  (essais B2/C2) : SSIM 0,927 et 0,910 à la couture — une vraie extension,
+  aucune image rejouée ni perdue — en 301 à 318 s par bloc au lieu de 431 avec
+  fl2va à huit pas, et l'identité tenue (essai F : même personnage, mêmes
+  vêtements, après une sortie de champ).
+
+La couture est CONSTATÉE, jamais maquillée : le nœud `MeilleurRaccord` (paquet
+`comfyui-meilleur-raccord`, SSIM en gris, fenêtre gaussienne 11×11) compare la
+dernière image du bloc précédent aux premières du nouveau, écrit un récit JSON
+(`cortex/recits/raccord_<bloc>` : `raccord_ssim_min`, `raccords`) que la chaîne
+lit — le constat `les_blocs_se_raccordent` (seuil 0,85) est un CONSTAT au sens
+de « c'est l'utilisateur qui juge la vidéo », pas un refus — et en mode
+`couper` il saurait jeter un préfixe rejoué. Ici il ne coupe rien (`couper:
+false`) : le modèle de référence n'en rejoue pas.
+
+Ce que cela a demandé à l'outillage, pour que ce soit by design et non une
+vidéo : un port qu'un bloc `attend` peut être servi par un RELAIS de la boucle
+(`bibliotheque._verifier` : « `$precedent.queue` » au début d'un run vise le
+nœud qui relit le relais, quel que soit le fragment qui précède dans
+l'écriture) ; un montage à un run par tour se rend ainsi sans qu'on tente de
+le trancher d'un seul tenant (ordre des décisions dans `chaines._rendre`) ; la
+graine passe par `$commun.graine` (liaison `seed` de la réconciliation) ; et
+`livrer` découpe sur `nouvelles` (ce que le raccord a laissé passer), avec une
+phase de grille globale calculée sur 124 images par bloc.
+
 ### Une seule demande à la fois
 
 Deux demandes acceptées ensemble (mesuré le 2026-09-18 : deux chaînes à 350 ms
@@ -918,9 +995,45 @@ pas. Nommer deux sources à la fois, ou un menu sans le nommer, est refusé **à
 la lecture**.
 
 **Renvois** : `$champ` (une valeur exposée), `$etape.cle` (un résultat d'étape
-PRÉCÉDENTE). Un renvoi vers l'aval ou vers un nom inconnu est refusé **à la
-lecture**, en le nommant : découvert en route, il faisait échouer la chaîne
-après avoir dépensé les étapes d'avant.
+PRÉCÉDENTE), et `$technique.<chemin>` (une section du FICHIER de la technique
+choisie — `$technique` seul reste son nom). Un renvoi vers l'aval ou vers un
+nom inconnu est refusé **à la lecture**, en le nommant : découvert en route, il
+faisait échouer la chaîne après avoir dépensé les étapes d'avant. Un chemin
+qu'une technique publiée ne porte pas est refusé de même, quand la chaîne et
+ses techniques sont lues ensemble (`verifier_techniques`) — la technique est
+choisie à l'appel, et celle qui ne porterait pas la section ferait échouer
+l'étape sous elle seule. C'est ainsi que le plan lit ce que le nœud de la
+technique IMPOSE (`"62.queue_s": "$technique.budget.queue_s"`, la fin fixe de
+la peinture) : la technique dit ce que son nœud fait, comme elle déclare ses
+entrées, et le code n'a rien à en savoir (le fichier est posé parmi les
+résultats sous le nom du champ qui choisit la technique, avant la première
+étape — `resultats_initiaux`).
+
+**Mémoire d'étape** : une étape `rendre` peut porter
+`"memoire": {"cle": ["$analyse.recit.empreinte", "$seed", "$duration_s", …]}` —
+une liste NON VIDE de renvois, vérifiés à la lecture comme les autres. Le
+runner résout la clé sans exiger (un renvoi absent vaut `null`), la hache
+(sha256 du JSON canonique) et, si `<données>/memoire/<chaîne>/<étape>/<clé>.json`
+existe avec son livrable, REPREND l'étape sans run : statut `done`, `job_id`
+nul, note « reprise de la mémoire : même clé », le récit et la mesure gardés
+tels quels, le livrable recopié dans le dossier de sortie sous le nom que ce
+run lui aurait donné, et le journal qui dit d'où il vient (« étape intention
+reprise : même clé (…) — le résultat du job … du … est recopié, aucun run »).
+Sinon l'étape se joue, puis son résultat est déposé sous la clé (« résultat
+gardé en mémoire sous sa clé »). Décidé le 2026-09-19 : **le plan est gardé par
+clé** — même image, mêmes réglages, même graine → même plan ; une autre
+graine, un autre plan. La mémoire vit dans le dossier de données (à côté de
+`hermes.sqlite3`), jamais parmi les livrables ; la purger, c'est effacer le
+dossier. Aucun nom d'étape dans le code : la définition dit de quoi la clé est
+faite (`etapes[].resultat.memoire.{cle, reprise}` sur la fiche).
+
+**Une étape sautée nomme ce qui reste sans effet** : quand `quand` est vide,
+la raison (`note`, journal, `resultat.sans_effet`) liste les champs exposés
+que cette étape SEULE lisait — dans ses paramètres ou dans ce que la technique
+met derrière son rôle — et qu'on a pourtant réglés : « étape appel (rendre)
+sautée : « $cta » est vide — cta_police sans effet » (2026-09-19 : une police
+d'appel sans appel partait nulle part, sans un mot). Laissés vides, ils ne
+sont pas nommés ; lus aussi par une autre étape, ils ne sont pas sans effet.
 
 **Réglages de nœud** : une étape `rendre` peut écrire directement une entrée
 du graphe qu'elle vise, `"inputs": {"<nœud>.<entrée>": "$champ"}` — c'est
@@ -1008,10 +1121,18 @@ déroulement, qui allonge un plan pour ne précipiter aucun temps), ou
 `allonge_max_s`, de combien AU PLUS il allonge au-delà de la durée demandée
 (une conclusion, qui garde la page vivante le temps que l'appel s'écrive :
 `frames + allonge_max_s × fps` images, jamais une de plus — le nœud tient la
-borne qu'il déclare). Une entrée **liée** à un autre nœud (`["12", 0]`) ne
-compte pas : on ne peut pas y écrire. Sans `segment_index`/`segment_count`,
-rien n'est tranché — trancher un graphe qui ne sait pas le faire rendrait N fois
-la vidéo entière.
+borne qu'il déclare). Un nœud qui déclare LES DEUX (le déroulement, depuis le
+2026-09-19 : `duree_max_s` pour la conduite d'avant, `allonge_max_s` = 5 s
+sous le plan) est compté sur la **demande plus l'allonge** dès qu'une durée est
+demandée — jamais sur le plafond : compté sur `max(demandée, 79)`, le compte
+de 10 s demandées était celui de 79 s, et la demande n'y pesait pas. Une
+entrée **liée** à un autre nœud (`["12", 0]`) ne compte pas : on ne peut pas y
+écrire. Sans `segment_index`/`segment_count`, rien n'est tranché — trancher un
+graphe qui ne sait pas le faire rendrait N fois la vidéo entière. Et **une
+tranche n'est pas le média** : rendue comme part *i* de *N*, sa durée n'est pas
+celle demandée, et le sous-job d'une tranche n'écrit plus d'« écart entre la
+demande et le média livré » (la durée se juge au parent, sur le recollage —
+`la_duree_est_tenue` dans « Révéler une image »).
 
 **Ce mécanisme ne connaît aucun projet.** Il ne lit que le graphe et son
 budget : un nœud déclare la convention (`segment_index`/`segment_count`, une
@@ -1036,7 +1157,9 @@ poste », plus bas) :
 
 ```
 budget = (memoire.totale_octets − memoire.reservee_octets) / memoire.facteur_de_crete
-images = ceil(max(duration_s + allonge_max_s, duree_max_s) × fps)
+duree  = duration_s + allonge_max_s   si allonge_max_s > 0 et duration_s > 0
+       = max(duration_s, duree_max_s) sinon (le plafond ne compte que sans allonge)
+images = ceil(duree × fps)
 N      = ceil(images × largeur × hauteur × 12 / budget)
 ```
 
@@ -1250,7 +1373,15 @@ seulement : sous elle, « qui commande » n'existe pas.
   jamais les deux. Le runner résout : le graphe est celui du rôle, et les
   `inputs` du rôle passent **sous** ceux de l'étape (le plan garde le dernier
   mot sur ce qu'il a écrit lui-même). Le journal le dit : « étape deroulement :
-  technique encre → video-reveal-cinematic-dirige ».
+  technique encre → video-reveal-cinematic-dirige » — et `POST /v1/preview`
+  montre ces entrées résolues (`etapes[].params.inputs`) : ce que le lanceur
+  montre est ce qui part.
+* Une technique peut porter une section `budget` — `{"queue_s": 7.0}` : la
+  FIN FIXE que son nœud de déroulement impose, en secondes, avant la
+  contemplation (7 s pour l'encre, 5 s pour la brume, 2 s pour le livre). Le
+  plan la lit par `"62.queue_s": "$technique.budget.queue_s"` pour se tailler
+  dans la durée demandée ; une technique publiée sans ce chemin est refusée à
+  la lecture. C'est la technique qui dit ce que son nœud fait.
 * `verifier` accepte `{"technique": "$…", "controles": "<nom>"}` : la liste est
   celle de la technique — deux peintures ne se jugent pas sur les mêmes
   grandeurs. Et `{"controles": [...], "technique": "$…",
@@ -1330,10 +1461,10 @@ catégorie, **onze étapes** qui portent les noms du travail :
 |---|---|
 | `analyse` | la DOCUMENTATION de l'image par **Iconographe** (`image-iconographe`) — carte d'attention, éléments découpés au pixel, hiérarchie mesurée, noms et textes — servie par sa bibliothèque si l'œuvre y est déjà (verdict « repris », 15,9 s mesurées), calculée sinon (≈ 18 min, une fois). Ne livre aucun média : son artefact `.json` EST son résultat |
 | `culture` | la CULTURE de l'œuvre par **Iconologue** (`image-iconologue`) — identité prouvée, notice, passage du récit représenté, sens des motifs, et une **attestation par élément** du relevé. Elle rend l'ancrage **enrichi**, et son central re-décidé sur la figure que les bases déclarent sujet : sur l'Uccello, le climax passe du cheval blanc au **dragon** (rang 6 + 3 contre 7). Œuvre inconnue des bases : `reconnu: false`, l'ancrage ressort intact, rien ne casse |
-| `intention` | le plan : accroche, temps retenus, climax, dans la structure de récit demandée. Artefact `.json` lui aussi |
-| `plan_valide` | le plan tient-il ? accroche et climax nommés, l'accroche ne recouvre pas le climax, au moins trois temps, **le plan tient dans son APPROCHE et son trajet ne revient pas sur ses pas** — avant de dépenser la moindre seconde de rendu |
+| `intention` | le plan : accroche, temps retenus, climax, dans la structure de récit demandée. Artefact `.json` lui aussi. **Depuis le 2026-09-19 il reçoit le BUDGET** — la durée demandée (`62.duree_s`), la contemplation, la fin fixe que le nœud de la technique choisie impose (`62.queue_s` = `$technique.budget.queue_s`) — et la graine (`62.seed`), et se taille dedans (temps retirés, dits : `temps_retires_pour_la_duree`, `duree_minimale_s`, `duree_prevue_s`, `duree_detail`). **Gardé par clé** (`memoire`) : même image (empreinte d'Iconographe, clé d'Iconologue), mêmes réglages, même graine, même technique → le même plan, repris sans run ; une autre graine, un autre plan |
+| `plan_valide` | le plan tient-il ? accroche et climax nommés, l'accroche ne recouvre pas le climax, au moins trois temps, **le plan tient dans son APPROCHE et son trajet ne revient pas sur ses pas**, et **il tient dans la DURÉE demandée** (`le_plan_tient_dans_la_duree` : son minimum incompressible — accroche 2,5 s, fin de la technique, contemplation, tenues et trajets — est ≤ `duration_s` ; refus chiffré, `duree_detail` dans la fiche) — avant de dépenser la moindre seconde de rendu |
 | `deroulement` | la peinture, qui reçoit le relevé et le plan tels quels — et, depuis le 2026-09-14, qui les SUIT : le champ `conduite` vaut « le plan », l'ordre des temps, leur rythme et le cadrage viennent de l'intention (« la camera » rejoue le déroulement d'avant). Le champ `rendu` vaut « ink-bleed » : une tache d'encre par temps, qui fleurit, s'étend à bords humides et rejoint les autres. Le champ `ambiance` vaut « lanterne » depuis le 2026-09-15 : une flaque de lumière chaude posée hors champ, dont le centre dérive et dont la flamme respire, et dont les rayons rasants font accrocher les fibres du papier — la page se VIT pendant qu'on dessine dessus (« selon-le-fond » rejoue la lampe fixe d'avant, « atelier » la page nue). Depuis le 2026-09-15, trois choses de plus : la CONTEMPLATION (`contemplation_s`, 4 s, bornée de 3 à 5) est la dernière étape du déroulement — l'image révélée se regarde sous une caméra qui continue de s'ouvrir, jamais figée ; le NÉGATIF est un champ (`negatif`, « non » par défaut : l'encre est ce qui est sombre dans l'œuvre, une nuit se peint en lavis noir autour d'une lune laissée en réserve — « selon-l-oeuvre » rejoue l'inversion automatique d'avant) ; et le SILLAGE fait suivre la caméra par l'encre pendant les trajets (une goutte par seconde là où elle sera, un trait sur le contour qu'elle va montrer), sans jamais entrer dans la boîte d'un temps à venir. Et depuis le 2026-09-15 après-midi, les BORDS de l'œuvre (`bords`, « fondus » par défaut) : la matière de l'œuvre continue au-delà de son arête et se fond dans la feuille sur un front ondulé — le rectangle de l'œuvre ne se lit plus pendant la construction (« francs » rejoue le prolongement d'avant, flouté dès l'arête, où il se lisait ; le récit mesure `cadre_lu_encre` / `cadre_lu_couleur`) |
-| `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait : accroche vue, climax hors de l'ouverture et tenu, étapes qui se suivent, **ordre du plan suivi, chaque temps cadré (≥ 0,9) à son heure, aucun temps supprimé, caméra qui glisse (≤ 0,1 largeur/s) sans saccade (accélération ≤ 0,5 largeur/s²), page qui ne s'achève pas d'un coup (≤ 0,25 au dézoom), temps lisibles (halo encré ≥ 0,85), ordre d'ARRIVÉE de l'encre conforme au plan, cœur du climax en dernier, contemplation qui ne se fige pas (≤ 0,5 s immobile), jamais de page blanche sous la caméra (≥ 1 % du cadre encré après l'accroche)** |
+| `plan_tenu` | ce que la peinture a MESURÉ contre ce que le plan promettait — d'abord le constat COMMUN du plan, **la durée est tenue** (`la_duree_est_tenue` : `$deroulement.recit.duree_tenue`, le rendu n'a pas allongé au-delà de la marge de 5 s que son graphe déclare, `61.allonge_max_s` ; sinon le récit dit de combien), puis la liste de la technique : accroche vue, climax hors de l'ouverture et tenu, étapes qui se suivent, **ordre du plan suivi, chaque temps cadré (≥ 0,9) à son heure, aucun temps supprimé, caméra qui glisse (≤ 0,1 largeur/s) sans saccade (accélération ≤ 0,5 largeur/s²), page qui ne s'achève pas d'un coup (≤ 0,25 au dézoom), temps lisibles (halo encré ≥ 0,85), ordre d'ARRIVÉE de l'encre conforme au plan, cœur du climax en dernier, contemplation qui ne se fige pas (≤ 0,5 s immobile), jamais de page blanche sous la caméra (≥ 1 % du cadre encré après l'accroche)** |
 | `raccord` | les 50 dernières images, en clip sans perte |
 | `conclusion` | la page se referme (0 s = pas de conclusion) — sous la MÊME ambiance, et à la seconde où le déroulement s'arrête (`6.depart_s` = `$deroulement.recit.duree_retenue_s`) : la flamme y reprend sa phase, et la luminance ne bouge pas de plus de 1 % au raccord. Depuis le 2026-09-15 elle ne contemple plus (`hold_s` 0,5 s au lieu de 2,2 : la contemplation appartient au déroulement) : un souffle, puis l'encre reprend la page — et elle MÈNE AU CTA |
 | `appel` | l'appel final (`cta`) écrit à l'encre quand la fermeture a fini : il ne mord que sur sa dernière seconde, puis reste le temps de se lire, déduit du texte (la conclusion reçoit le même texte par `6.appel_texte` et prolonge sa page refermée, vivante, d'autant) ; la police s'injecte par `cta_police` (nom ou chemin). **Depuis le 2026-09-16, il lit la conclusion PARESSEUSEMENT** (entrée `video` du nœud) et ne rend QUE les images qu'il écrit — en 4K, charger la conclusion entière pour quelques secondes d'encre était une vidéo de plus en mémoire ; son récit dit combien d'images il a reprises (`images_reprises`). Sans texte, l'étape est **sautée** (`"quand": "$cta"`) et son `sinon` rend un livrable nul et zéro image reprise |
@@ -1397,26 +1528,31 @@ tient (« des choix qui ne mentent pas »).
 La DURÉE ne tient pas dans un run : le montage emploie les **blocs de boucle**
 de la passerelle, **deux runs du moteur par bloc** (voir « Un run par tour » :
 `un_run_par_tour`, `phases: 2`). La phase 0 ENCODE : au bloc 0 l'amorce (la
-seule consigne — ou texte + références), ensuite `segment-h3-encodage`, depuis
-la DERNIÈRE IMAGE NATIVE du bloc précédent relayée ; `DirectionDuBloc` puis le
+seule consigne — ou texte + références), ensuite `segment-h3-encodage`, qui
+CONTINUE le bloc précédent par référence (voir « D'un bloc à l'autre » :
+sa queue en vidéo de référence, une image de son milieu en image d'identité,
+toutes deux relayées) ; `DirectionDuBloc` puis le
 nœud MiniMax rendent un CONDITIONNEMENT et un LATENT, écrits en fichiers en
 queue du run (relais `conditionnement` — `SauverConditionnement` /
 `ChargerConditionnement`, paquet `comfyui-conditionnement-en-fichier` — et
 `latent` — `SauverLatent` / `ChargerLatent`, du même paquet : le latent MiniMax est EMBOÎTÉ, vidéo + son, ce que `SaveLatent` du cœur refuse). Ce run ne pose que l'encodeur de
 texte et le VAE. La phase 1 REND ET LIVRE : `rendu` relit les deux fichiers,
-pose le modèle (fragment `modele` : UNET, LoRA, ordonnanceur — le commun est
-séparé en `texte`, `modele`, `commun`, et chaque run ne pose que ce qu'il
+pose le modèle (fragment `modele` au bloc 0, `modele-ref` ensuite : UNET, LoRA,
+ordonnanceur — le commun est
+séparé en `texte`, `modele`, `modele-ref`, `commun`, et chaque run ne pose que ce qu'il
 cite), échantillonne, décode ; puis `livrer`. Mesuré le 2026-09-18 : encodé
 dans le même prompt que le rendu, l'encodeur (Qwen3-VL 32B, 14,6 Go) restait
 en mémoire tout le bloc — 60 Go de commit pour le moteur seul, et la garde de
 place ne trouvait plus ses 6 Gio. La passerelle attend la place avant chaque
 run et recolle les runs en copie de flux. Le nombre de blocs se
 déduit de la durée demandée, en secondes natives : `pour { jusqu_a:
-duration_s, chaque: 5,125 s, deja: 0,042 s }` — un bloc fait 124 images à
-24 i/s, la borne basse de la plage d'entraînement du modèle (124 à 362).
+duration_s, chaque: 5,167 s }` — un bloc fait 124 images à
+24 i/s, la borne basse de la plage d'entraînement du modèle (124 à 362) ; au
+bloc 0 la première image est l'ancre du film, ensuite les 124 sont neuves.
 
 La LIVRAISON d'un bloc (`_data/blocs/livrer.json`, réutilisable par tout
-maillon qui offre `images`, `ancre` et `derniere_image`) tient la cadence, la
+maillon qui offre `nouvelles`, `ancre`, `derniere_image`, `queue` et
+`identite` — les deux derniers, elle les passe au relais) tient la cadence, la
 netteté et la taille demandées AVANT d'écrire, en TROIS TIERS de 41 images
 natives, chaque tier attendant l'écriture du précédent (mesuré le 2026-09-18 :
 d'un seul tenant, la sortie de l'agrandisseur — 154 images à 1152×2048 en
@@ -1428,11 +1564,13 @@ les images sélectionnées étant celles de la grille globale) :
   cadence, `FrameInterpolate` (FILM) multiplie par cinq — une grille à
   120 i/s — et `VHS_SelectEveryNthImage` en garde une sur N (4 → 30 i/s,
   2 → 60 i/s), avec une phase calculée sur la grille GLOBALE de la vidéo (un
-  bloc apporte 615 images fines, qui n'est pas un multiple de 4). Le lot
+  bloc apporte 615 ou 620 images fines, jamais un multiple de 4 ; le témoin
+  `tests/test_video_h3_texte_exemple.py` rejoue la grille sur trois blocs et
+  neuf tiers : une image sur quatre, sans trou ni doublon). Le lot
   interpolé commence par la VRAIE dernière image du bloc précédent : la
   couture est interpolée comme toute autre paire. 24, 30, 40 et 60 sont
-  exacts ; une autre valeur est ramenée au recollage. À 24 i/s, un commutateur
-  paresseux fait que l'interpolation n'est jamais exécutée ;
+  exacts ; une autre valeur est ramenée au recollage. À 24 i/s, `$si` laisse
+  l'interpolation hors du graphe : elle n'est jamais exécutée ;
 * la **netteté** : le modèle rend à 0,6 mégapixel dans la proportion demandée
   (576×1024 pour un 16:9) ; `ImageUpscaleWithModelBatched` (RealESRGAN ×2,
   téléchargé le 2026-09-18 avec l'accord d'Antoine, par lots de 8 en fp16)
@@ -1459,8 +1597,9 @@ devient alors « texte + références → vidéo » (`MiniMaxH3ReferenceToVideo`
 les images en `ref_images.ref_image_0…`, la consigne du bloc suivie d'une
 phrase « `<Picture i>` is <rôle> » par image, la grammaire d'étiquettes du
 modèle) ; trois variantes de l'amorce sous le même nom, une par nombre
-d'images, choisies par `si` ; les tours suivants repartent de la dernière
-image, où l'identité est déjà. Les rôles sont des **réglages nommés** de
+d'images, choisies par `si` ; les blocs suivants ne relisent pas ces images :
+leur référence est le bloc précédent lui-même (sa queue, son image d'identité,
+où ce que les images ont posé est déjà). Les rôles sont des **réglages nommés** de
 l'étape (`parametres`), injectés par les liaisons du montage (`$amorce.21`…)
 exactement comme une pièce jointe l'est — la chaîne ne nomme aucun nœud, et
 une liaison vers une variante que ce dépliage n'a pas posée n'est une faute
@@ -1483,7 +1622,7 @@ assure cette standardisation ». Trois couches, et un témoin exécutable
 | couche | ce que c'est | où |
 |---|---|---|
 | **le plan** | agnostique, hors de tout style : les onze étapes, dans cet ordre, avec leurs genres — `analyse` → `culture` → `intention` → `plan_valide` → `deroulement` → `plan_tenu` → `raccord` → `conclusion` → `appel` → `montage` → `controle` — et le contrat par lequel chacune parle à la suivante (`$etape.recit.*`, `$etape.livrable`, `$raccord.depot` ; la fermeture reçoit `fermeture_json` du récit du déroulement au lieu de relire le disque). Les deux étapes qui PEIGNENT nomment un rôle, jamais un graphe : c'est la technique choisie qui les tient. | `_data/chaines/*.json` et leurs jumeaux |
-| **les paramètres** | tout ce qui se règle, chaque champ chez son propriétaire, avec sa rubrique (`categorie`) et son `aide` : ceux du PLAN dans la chaîne — structure du récit (seules les structures qui portent une accroche, `requiert`), approche, contemplation, conclusion, CTA et sa police, format, graine, technique — et ceux de la TECHNIQUE dans son fichier (l'encre : papier, tracé, négatif, ambiance ; la brume : sa teinte ; le livre : son papier). **Leurs défauts sont ceux du style ink livré le 2026-09-15 et ne changent pas** : `reseau-social`, `peinture-calme`, `washi`, `lanterne`, `lavis`, négatif `non`, contemplation 4 s, conclusion 8 s, 45 s, 720×1280, 30 i/s, graine 71. Depuis le 2026-09-17, une option « d'avant » ou « essai » n'est plus une option : `rendu`, `bords`, `conduite` ne sont plus exposés (le graphe porte `ink-bleed`, `fondus`, `le plan` en littéral) | `expose` de la chaîne et des techniques ; littéraux du graphe local `video-reveal-cinematic-dirige` |
+| **les paramètres** | tout ce qui se règle, chaque champ chez son propriétaire, avec sa rubrique (`categorie`) et son `aide` : ceux du PLAN dans la chaîne — structure du récit (seules les structures qui portent une accroche, `requiert`), approche, contemplation, conclusion, CTA et sa police, format, graine, technique — et ceux de la TECHNIQUE dans son fichier (l'encre : papier, tracé, négatif, ambiance ; la brume : sa teinte ; le livre : son papier). **Leurs défauts sont ceux du style ink livré le 2026-09-15 et ne changent pas** : `reseau-social`, `peinture-calme`, `washi`, `lanterne`, `lavis`, négatif `non`, bords `fondus`, contemplation 4 s, conclusion 8 s, 45 s, 720×1280, 30 i/s, graine 71. Depuis le 2026-09-17, une option « d'avant » ou « essai » n'est plus une option : `rendu` et `conduite` ne sont plus exposés (le graphe porte `ink-bleed` et `le plan` en littéral) ; `bords` (fondus / francs) est REVENU chez l'encre le 2026-09-19 — il pèse sur la peinture et un raccourci le nomme. **La durée demandée fait loi** (2026-09-19) : `duration_s` (12 à 79 s) est la durée LIVRÉE du déroulement — le plan se taille dedans, sous le minimum incompressible la chaîne refuse avant de peindre en chiffrant ; chaque technique déclare `budget.queue_s`, la fin fixe de son nœud, que le plan retranche | `expose` de la chaîne et des techniques ; littéraux du graphe local `video-reveal-cinematic-dirige` |
 | **les styles** | ce qu'on ajoute sans rien casser : un style narratif ou une approche dans les catalogues de `comfyui-direction-de-style` (`styles/narratifs.json`, `styles/approches.json`), un fond, une encre, une ambiance, un rendu, un négatif dans les tables du paquet de nœuds (`FONDS`, `ENCRES`, `AMBIANCES`, `RENDUS`, `NEGATIFS`), une brume dans `BRUMES`. Une **entrée de plus**, jamais un défaut de moins ; le défaut reste en tête de chaque liste | les catalogues et les tables |
 
 **Une exception, écrite** : le FORMAT par défaut est passé du 704×1280 à 25 i/s
@@ -1624,9 +1763,26 @@ est publié — aucune liste écrite chez lui, aucune image fabriquée par lui.
     { "champ": "duration_s", "libelle": "Durée", "valeur": 45, "libelle_valeur": "45 s" }
   ],
   "apercu_url": "/v1/workflows/…/raccourcis/sepia-au-trait-sec/apercu",
-  "job_id": "1f04…", "cree_le": "2026-09-15T20:10:00+00:00", "ordre": 100
+  "job_id": "1f04…", "cree_le": "2026-09-15T20:10:00+00:00", "ordre": 100,
+  "perime": {                          // ABSENT quand le raccourci tient encore
+    "champs": ["conduite", "fond"],
+    "raison": "« fond » : n'est pas un réglage de la technique brume — sans effet sous elle ; « conduite » : le mode ne l'expose plus"
+  }
 }
 ```
+
+**Un raccourci qui a vieilli est publié PÉRIMÉ, jamais retiré ni tu**
+(2026-09-19 : trois raccourcis sur cinq partaient en 422 au lancement, sans un
+mot sur la carte). À la lecture, chaque fiche est jugée par la validation d'une
+demande, champ par champ pour TOUT nommer : un champ que le mode n'expose
+plus, une valeur sortie de son menu ou de ses bornes, un réglage d'une AUTRE
+technique que celle du raccourci (« Brume dorée » portait le papier de
+l'encre sous la brume : il aurait rendu une brume blanche). L'entrée gagne
+alors `perime: {"champs": [...], "raison": "…"}` — le lanceur grise la carte
+et dit pourquoi, l'utilisateur décide de le retirer ou de le corriger. Son
+lancement tel quel reste ce qu'il était : refusé (422) pour un champ inconnu
+ou hors menu ; un réglage d'une autre technique est écarté et dit, comme pour
+toute demande.
 
 `valeurs` porte TOUS les réglages, jamais les pièces jointes (l'image se
 redépose à chaque fois) ni ce que la passerelle possède elle-même (`workflow`,
@@ -1701,8 +1857,10 @@ modifier ça ? » a donc une réponse par nature de changement :
 | un TEXTE incrusté (accroche, appel : minutage, position, fondu) | l'étape `recoller` de la chaîne, clé `textes` | la livraison (`adapter/textes.py`) |
 | une POLICE proposée au menu | `_data/polices.json` (une ligne par police présente dans les polices du poste) | le menu `police`, `/io` |
 | le STYLE d'une vidéo écrite (médium, temps du récit, caméra) | les catalogues `styles/*.json` du paquet de direction de style — une entrée éprouvée de plus, jamais un mot de style dans la chaîne | `/io` (menus), `DirectionDeStyle` / `DirectionDuBloc` |
-| une TECHNIQUE (quel graphe tient chaque rôle, ses réglages, ses contrôles) | `_data/techniques/<nom>.json` (et sa copie `resources/techniques-exemples/`) — une technique de plus est un FICHIER de plus | le runner de chaînes, `/v1/workflows` (`techniques`), `/io` (`selon`) |
-| un RACCOURCI (un ensemble de réglages nommé, son aperçu) | `_data/raccourcis/<mode>/` — par l'API, jamais à la main | `/v1/workflows`, `…/raccourcis` |
+| une TECHNIQUE (quel graphe tient chaque rôle, ses réglages, ses contrôles, ce que son nœud IMPOSE — `budget.queue_s`) | `_data/techniques/<nom>.json` (et sa copie `resources/techniques-exemples/`) — une technique de plus est un FICHIER de plus ; le plan lit son fichier par `$technique.<chemin>` | le runner de chaînes, `/v1/workflows` (`techniques`), `/io` (`selon`) |
+| la MÉMOIRE d'une étape (ce qui fait sa clé : même image, mêmes réglages, même graine → repris sans run) | la clé `memoire: {"cle": [renvois]}` de l'étape `rendre`, dans `_data/chaines/<nom>.json` ; les souvenirs dans `_data/memoire/<chaîne>/<étape>/` (à purger pour rejouer) | le runner de chaînes (`etapes[].resultat.memoire`, journal « reprise : même clé ») |
+| la MARGE d'allonge d'un rendu sous le plan (de combien au plus le nœud allonge la durée demandée) | l'entrée littérale `allonge_max_s` du nœud, dans `_data/workflows/<nom>.json` (5 s sur le déroulement) | le compte des tranches (`demandée + allonge`), le constat `la_duree_est_tenue` |
+| un RACCOURCI (un ensemble de réglages nommé, son aperçu) | `_data/raccourcis/<mode>/` — par l'API, jamais à la main ; périmé (champ disparu, valeur hors menu, réglage d'une autre technique), il est publié périmé avec `perime: {champs, raison}`, jamais retiré | `/v1/workflows`, `…/raccourcis` |
 | le VOCABULAIRE des styles | `styles/*.json` du paquet de direction de style | `/io` (`options` + `choix`) |
 
 Jamais dans un fichier `.py` de la passerelle, jamais dans le lanceur. Ce n'est
@@ -1713,6 +1871,25 @@ graphes extraits, chaînes — et refuse tout fichier de code qui en nomme un
 vocabulaire est lu chez la passerelle de ce poste. Un cas particulier écrit
 « pour ce flux-là » dans le code ne passe donc plus le commit ; et la copie de
 référence d'une chaîne qui diverge de `_data/` est refusée par les tests.
+
+**Quand une modification est vue.** Ce qui est écrit dans `_data/` est lu au
+moment où on s'en sert, sans relancer la passerelle : les blocs
+(`_data/blocs/`) à chaque assemblage, et le montage
+(`_data/workflows/<montage>.json`) est relu dès que son fichier change (date
+d'écriture ou taille). Montage et blocs sont donc lus au même instant, celui
+de l'assemblage. Une chaîne en cours assemble ses tours SUIVANTS sur ce qui
+est sur disque à cet instant, les tours déjà rendus gardant l'ancien — et le
+job ne le dit pas : modifier une recette pendant qu'une chaîne la joue, c'est
+la changer pour les tours qui restent. Mesuré le 2026-09-18 à 21:06 : un
+montage et l'un de ses blocs modifiés ensemble pendant une chaîne ; le tour
+suivant était assemblé avec le montage gardé en mémoire depuis le démarrage et
+les blocs frais, et refusé pour un port que le montage sur disque servait.
+Depuis, le montage est relu (témoin dans `tests/test_catalog.py`) ; la règle
+retenue est « ce qui est sur disque à l'assemblage », plutôt que refuser un
+montage changé en route. Ce que la RÉCONCILIATION dit d'une entrée (liaisons,
+champs pilotes, exemple), les chaînes et les techniques sont lus une fois —
+au démarrage ou au premier usage — et jamais relus : les changer demande de
+relancer la passerelle, file vide.
 
 ## Configuration (variables d'environnement)
 

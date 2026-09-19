@@ -46,7 +46,14 @@ DELIVERABLE_EXT = MEDIA_EXT | DATA_EXT
 # « latents » (SaveLatent) et « conditionnements » (SauverConditionnement) : ce
 # qu'un run écrit pour le run SUIVANT — un relais entre deux runs d'un même
 # tour — se ramasse comme un livrable, sans quoi il n'existerait pas ici.
-OUTPUT_KEYS = ("images", "gifs", "videos", "audio", "3d", "files", "latents", "conditionnements")
+# `images_lot` : un LOT d'images écrit tel quel en tenseur (`SauverImages`, paquet
+# conditionnement-en-fichier) — le relais « queue » d'un montage par tours. Mesuré
+# le 2026-09-19 : le nœud écrivait bien son .pt, rapporté sous cette clé, et la
+# passerelle ne le ramassait pas ; le tour suivant échouait « aucun fichier ne lui
+# a été confié » après onze minutes de rendu. Une clé que le moteur rapporte et
+# que ce module ignore est un livrable perdu en silence.
+OUTPUT_KEYS = ("images", "gifs", "videos", "audio", "3d", "files", "latents", "conditionnements",
+               "images_lot")
 
 # La VERSION de ce mécanisme de livraison : ce que ce module sait ramasser et
 # reconnaître. Elle est enregistrée avec chaque run, comme WORK_MODEL l'est pour
@@ -56,7 +63,8 @@ OUTPUT_KEYS = ("images", "gifs", "videos", "audio", "3d", "files", "latents", "c
 # qu'il ramasse ou comment il le nomme.
 #   1: images / gifs / videos / audio / files
 #   2: + la clé `3d` (géométrie) et les extensions de maillage
-DELIVERY_MECHANISM = 2
+#   3: + la clé `images_lot` (un lot d'images en tenseur : le relais « queue »)
+DELIVERY_MECHANISM = 3
 
 # Ce que ce service écrit lui-même dans le dossier de sortie pour travailler :
 # un backend qui ramasse « tout fichier nouveau » se livrerait ses propres

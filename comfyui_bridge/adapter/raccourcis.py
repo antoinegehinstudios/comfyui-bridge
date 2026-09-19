@@ -176,6 +176,25 @@ def apercu_fichier(base: Path, workflow: str, ident: str) -> tuple[Path, str] | 
     return None
 
 
+def perime(fautes: Iterable[tuple[str, str]]) -> dict[str, Any] | None:
+    """La forme de ce qu'un raccourci PÉRIMÉ publie : ``{"champs": [...],
+    "raison": "…"}`` — ou ``None`` quand rien ne lui est reproché.
+
+    Un raccourci vieillit sans qu'on y touche : un champ que le mode n'expose
+    plus, une valeur sortie du menu, un réglage d'une autre technique que la
+    sienne. Le retirer en silence effacerait ce que l'utilisateur avait nommé ;
+    le publier tel quel le laisserait échouer au lancement, sans un mot. Il est
+    donc publié PÉRIMÉ, avec ses champs et la raison — c'est le lanceur qui le
+    grise et l'utilisateur qui décide (2026-09-19). Le jugement, lui, est
+    celui d'une demande (à l'API, où vit la validation) ; ici, la forme.
+    """
+    lignes = [(str(champ), str(raison)) for champ, raison in fautes]
+    if not lignes:
+        return None
+    return {"champs": sorted({champ for champ, _ in lignes}),
+            "raison": " ; ".join(raison for _, raison in lignes)}
+
+
 def _texte(valeur: Any) -> str:
     """Une valeur, telle qu'on la LIT sur une carte.
 

@@ -189,3 +189,17 @@ def test_both_backends_share_one_definition_of_a_deliverable():
     for module in (comfy_cli, comfy_http):
         source = inspect.getsource(module)
         assert '"images", "gifs"' not in source, module.__name__   # plus de liste recopiée
+
+
+def test_un_lot_d_images_en_tenseur_est_un_livrable_ramasse():
+    """Le relais « queue » d'un montage par tours est un lot d'images écrit en
+    tenseur par `SauverImages`, rapporté sous la clé `images_lot`. Mesuré le
+    2026-09-19 : le fichier existait chez le moteur et n'était pas ramassé, donc
+    jamais confié au tour suivant — l'échec venait onze minutes plus tard."""
+    from comfyui_bridge.adapter.media import media_kind, output_refs
+    entree = {"outputs": {"148": {"images_lot": [
+        {"filename": "x-rendu-2sur4_video-h3-texte_relais_queue_00001_.pt",
+         "subfolder": "cortex", "type": "output"}]}}}
+    trouves = [r["filename"] for r in output_refs(entree)]
+    assert trouves == ["x-rendu-2sur4_video-h3-texte_relais_queue_00001_.pt"]
+    assert media_kind(trouves[0]) == media_kind("relais_latent_00001_.pt")

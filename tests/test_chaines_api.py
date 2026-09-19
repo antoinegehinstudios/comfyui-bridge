@@ -211,6 +211,50 @@ CHAINE_FACULTATIVE = {
     "livrable": "$montage.livrable",
 }
 
+# La même étape facultative, avec un RÉGLAGE qu'elle seule lit (« police ») :
+# sautée, elle doit le nommer comme sans effet — une police d'appel sans appel
+# partait nulle part sans le dire (2026-09-19).
+CHAINE_FACULTATIVE_REGLEE = {
+    "version": 1, "chaine": "chaine-facultative-reglee",
+    "resume": "une étape facultative qui porte un réglage à elle",
+    "expose": {"texte": {"type": "STRING", "defaut": "", "libelle": "Appel final"},
+               "police": {"type": "STRING", "defaut": "", "libelle": "Police de l'appel"},
+               "cadence": {"type": "INT", "defaut": 25, "libelle": "Cadence"}},
+    "etapes": [
+        {"id": "une", "rendre": {"workflow": "video-essai", "prompt": "une",
+                                 "duration_s": 1.0, "fps": "$cadence"}},
+        {"id": "appel", "quand": "$texte",
+         "rendre": {"workflow": "video-essai", "prompt": "$texte", "duration_s": 1.0,
+                    "fps": "$cadence", "inputs": {"7.police": "$police"},
+                    "media": {"video": "$une.livrable"}}},
+        {"id": "montage", "recoller": {"parts": ["$une.livrable", "$appel.livrable"],
+                                       "fps": 25, "largeur": 160, "hauteur": 120}},
+    ],
+    "livrable": "$montage.livrable",
+}
+
+# Une étape GARDÉE PAR CLÉ (« memoire ») : le plan d'un relevé, sous une graine
+# et une durée. La même clé qui revient reprend le résultat sans run ; une
+# autre graine rejoue (2026-09-19 : « le plan est gardé par clé »).
+CHAINE_QUI_SE_SOUVIENT = {
+    "version": 1, "chaine": "chaine-qui-se-souvient",
+    "resume": "un plan gardé par clé : même relevé, même graine, même durée → repris sans run",
+    "expose": {"graine": {"type": "INT", "defaut": 7, "libelle": "Graine"},
+               "duree": {"type": "FLOAT", "defaut": 5, "libelle": "Durée"}},
+    "etapes": [
+        {"id": "releve", "rendre": {"workflow": "sd15-txt2img", "prompt": "relevé"}},
+        {"id": "plan", "rendre": {"workflow": "sd15-txt2img", "prompt": "plan",
+                                  "seed": "$graine",
+                                  "memoire": {"cle": ["$releve.recit.empreinte", "$graine",
+                                                      "$duree"]}}},
+        # La peinture lit une clé LONGUE du récit du plan (que la fiche ne
+        # résume pas) : la reprise d'un plan doit rendre son récit entier.
+        {"id": "peinture", "rendre": {"workflow": "sd15-txt2img",
+                                      "prompt": "$plan.recit.intention"}},
+    ],
+    "livrable": "$peinture.livrable",
+}
+
 # Le livrable d'une étape « rendre » est un CHEMIN local ; une étape suivante
 # qui le reprend en média (ici « deux » lit « $une.livrable ») ne doit jamais
 # le voir tel quel. « image_2 » n'est déjà pas un fichier d'ici : rien à
@@ -240,6 +284,10 @@ def atelier():
                                                      encoding="utf-8")
     (tmp / "chaine-facultative.json").write_text(json.dumps(CHAINE_FACULTATIVE),
                                                  encoding="utf-8")
+    (tmp / "chaine-facultative-reglee.json").write_text(
+        json.dumps(CHAINE_FACULTATIVE_REGLEE, ensure_ascii=False), encoding="utf-8")
+    (tmp / "chaine-qui-se-souvient.json").write_text(
+        json.dumps(CHAINE_QUI_SE_SOUVIENT, ensure_ascii=False), encoding="utf-8")
     (tmp / "structures.json").write_text(json.dumps(STRUCTURES, ensure_ascii=False),
                                          encoding="utf-8")
     (tmp / "reconciliation.local.json").write_text(json.dumps({
@@ -261,6 +309,14 @@ def atelier():
                                    "chaine": str(tmp / "chaine-facultative.json"),
                                    "titre": "Chaîne facultative",
                                    "categorie": "essais", "ordre": 7},
+            "chaine-facultative-reglee": {"kind": "video",
+                                          "chaine": str(tmp / "chaine-facultative-reglee.json"),
+                                          "titre": "Chaîne facultative réglée",
+                                          "categorie": "essais", "ordre": 8},
+            "chaine-qui-se-souvient": {"kind": "image",
+                                       "chaine": str(tmp / "chaine-qui-se-souvient.json"),
+                                       "titre": "Chaîne qui se souvient",
+                                       "categorie": "essais", "ordre": 9},
             "chaine-simple": {"kind": "image", "chaine": str(tmp / "chaine-simple.json"),
                               "titre": "Chaîne d'essai", "categorie": "essais", "ordre": 1},
             "chaine-recollee": {"kind": "video", "chaine": str(tmp / "chaine-recollee.json"),
@@ -771,3 +827,77 @@ def test_une_etape_facultative_est_sautee_quand_son_champ_est_vide(atelier, monk
     job = _job(atelier, r)
     assert job["status"] == "succeeded", job.get("problem")
     assert [e["statut"] for e in job["etapes"]] == ["done", "done", "done"]
+
+
+def test_une_etape_sautee_nomme_les_reglages_qui_restent_sans_effet(atelier, monkeypatch):
+    """2026-09-19 : une police d'appel réglée sans appel partait nulle part, sans
+    un mot. Sautée, l'étape nomme les champs qu'elle seule lisait et qu'on a
+    pourtant réglés — dans sa note, sa fiche et le journal ; laissés vides, ils
+    ne sont pas nommés ; et un champ qu'une autre étape lit aussi (la cadence)
+    n'est pas « sans effet »."""
+    monkeypatch.setattr("comfyui_bridge.adapter.neutral.upload_image",
+                        lambda base, nom, contenu, *reste, **autres: nom)
+    job = _job(atelier, atelier.post("/v1/render", json={
+        "workflow": "chaine-facultative-reglee", "police": "Garamond", "cadence": 25}))
+    assert job["status"] == "succeeded", job.get("problem")
+    appel = next(e for e in job["etapes"] if e["id"] == "appel")
+    assert appel["statut"] == "skipped"
+    assert appel["note"] == "« $texte » est vide — police sans effet"
+    assert appel["resultat"]["sans_effet"] == ["police"]
+    assert any("étape appel (rendre) sautée : « $texte » est vide — police sans effet" in l
+               for l in job["logs"]), job["logs"]
+    # Rien de réglé pour elle : rien à nommer.
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-facultative-reglee"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    appel = next(e for e in job["etapes"] if e["id"] == "appel")
+    assert appel["note"] == "« $texte » est vide" and "sans_effet" not in appel["resultat"]
+
+
+def test_une_etape_gardee_par_cle_est_reprise_sans_run_quand_la_cle_revient(atelier):
+    """« Le plan est gardé par clé : même image, mêmes réglages, même graine →
+    même plan » (2026-09-19). Le premier passage joue l'étape et la garde ; le
+    second, à clé égale, la REPREND : statut done, aucun sous-job, le récit et
+    la mesure tels quels, le livrable recopié dans le dossier de sortie sous un
+    nom neuf ; une autre graine rejoue. La mémoire vit dans le dossier de
+    données, jamais parmi les livrables."""
+    atelier.faux.recit = {**RECIT_D_ESSAI, "empreinte": "sha256:oeuvre"}
+    premier = _job(atelier, atelier.post("/v1/render", json={
+        "workflow": "chaine-qui-se-souvient", "graine": 7, "label": "premier"}))
+    assert premier["status"] == "succeeded", premier.get("problem")
+    assert atelier.faux.runs == ["sd15-txt2img"] * 3
+    plan = next(e for e in premier["etapes"] if e["id"] == "plan")
+    assert plan["job_id"] and plan["resultat"]["memoire"]["reprise"] is False
+    cle = plan["resultat"]["memoire"]["cle"]
+    assert any("étape plan : résultat gardé en mémoire sous sa clé" in l for l in premier["logs"])
+    memoire = (pathlib.Path(atelier.app.state.container.settings.hermes_db).parent
+               / "memoire" / "chaine-qui-se-souvient" / "plan")
+    assert (memoire / f"{cle}.json").is_file() and (memoire / f"{cle}.livrable.png").is_file()
+
+    second = _job(atelier, atelier.post("/v1/render", json={
+        "workflow": "chaine-qui-se-souvient", "graine": 7, "label": "second"}))
+    assert second["status"] == "succeeded", second.get("problem")
+    assert atelier.faux.runs == ["sd15-txt2img"] * 5          # relevé et peinture seuls
+    repris = next(e for e in second["etapes"] if e["id"] == "plan")
+    assert repris["statut"] == "done" and repris["job_id"] is None
+    assert repris["note"] == "reprise de la mémoire : même clé"
+    assert repris["resultat"]["memoire"] == {
+        "cle": cle, "reprise": True, "job_id": plan["job_id"],
+        "ecrit_le": repris["resultat"]["memoire"]["ecrit_le"]}
+    assert repris["resultat"]["recit"] == plan["resultat"]["recit"]
+    assert repris["resultat"]["mesure"]["width"] == plan["resultat"]["mesure"]["width"]
+    livrable = pathlib.Path(repris["resultat"]["livrable"])
+    assert livrable.is_file() and livrable != pathlib.Path(plan["resultat"]["livrable"])
+    assert livrable.name.startswith("second_chaine-qui-se-souvient-plan_")
+    assert any("étape plan reprise : même clé ($releve.recit.empreinte, $graine, $duree) — "
+               f"le résultat du job {plan['job_id']} du " in l for l in second["logs"]), second["logs"]
+    # …et l'aval a bien reçu le plan repris : la peinture lit son récit.
+    assert [e["statut"] for e in second["etapes"]] == ["done", "done", "done"]
+    assert len(second["artifacts"]) == 1                     # la mémoire n'est pas livrée
+
+    autre = _job(atelier, atelier.post("/v1/render", json={
+        "workflow": "chaine-qui-se-souvient", "graine": 8}))
+    assert autre["status"] == "succeeded", autre.get("problem")
+    assert atelier.faux.runs == ["sd15-txt2img"] * 8          # une autre graine : rejoué
+    rejoue = next(e for e in autre["etapes"] if e["id"] == "plan")
+    assert rejoue["job_id"] and rejoue["resultat"]["memoire"]["cle"] != cle
+

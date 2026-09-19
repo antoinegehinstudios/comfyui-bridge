@@ -8,17 +8,28 @@
   "Deux PHASES par bloc — deux runs du moteur —, et des relais entre les runs :",
   "  - la phase 0, l'ENCODAGE : au bloc 0 l'amorce (ci-dessous, texte → vidéo :",
   "    MiniMaxH3ImageToVideo sans « first_frame », ou texte + références), ensuite",
-  "    le maillon « segment-h3-encodage » (_data/blocs/), qui reprend la DERNIÈRE",
-  "    IMAGE NATIVE du bloc précédent ; chacun reçoit de « DirectionDuBloc » le",
-  "    temps du récit où il tombe (rang = bloc), et rend un CONDITIONNEMENT et un",
-  "    LATENT, écrits en fichiers pour le run suivant. Ce run ne pose que",
-  "    l'encodeur de texte (« texte ») et le VAE — pas le modèle ;",
+  "    le maillon « segment-h3-encodage » (_data/blocs/), qui continue le bloc",
+  "    précédent PAR RÉFÉRENCE : MiniMaxH3ReferenceToVideo reçoit ses 22 dernières",
+  "    images natives (relais « queue », un fichier .pt) en « ref_videos » et une",
+  "    image d'identité du bloc 0 (relais « identite ») en « ref_images », avec la",
+  "    consigne du bloc (« DirectionDuBloc », rang = bloc) précédée de « <Picture 1>",
+  "    is the same subject… <Video 1> is the preceding shot; continue it",
+  "    seamlessly ». Il rend un CONDITIONNEMENT et un LATENT, écrits en fichiers",
+  "    pour le run suivant. Ce run ne pose que l'encodeur de texte et les VAE —",
+  "    pas le modèle ;",
   "  - la phase 1, le RENDU (« rendu ») : le conditionnement et le latent relus,",
-  "    le modèle (« modele » : UNET, LoRA, ordonnanceur), l'échantillonneur, le",
-  "    décodage et les découpes ; ce run ne pose pas l'encodeur de texte (mesuré le",
-  "    2026-09-18 : gardé dans le même prompt, il tenait 14,6 Go de commit pendant",
-  "    tout le rendu — 60 Go pour le moteur seul, et la garde de place ne trouvait",
-  "    plus 6 Gio de marge) ;",
+  "    le modèle, l'échantillonneur, le décodage et les découpes ; ce run ne pose",
+  "    pas l'encodeur de texte. Le bloc 0 rend avec les poids fl2va (8 pas) ; les",
+  "    blocs ≥ 1 avec les poids ref2va + LoRA ref2v_turbo_4step (4 pas, fragment",
+  "    « modele-ref ») — mesuré le 2026-09-18 (enquête continuité, B2/C2) : avec",
+  "    ces poids le préfixe vidéo est une VRAIE EXTENSION, la première image suit",
+  "    la dernière livrée (SSIM 0,91–0,93), la caméra continue, le personnage garde",
+  "    tenue et visage, aucune image perdue, et c'est 30 % plus rapide. Chaque",
+  "    bloc a SON bruit (noise_seed = graine + bloc) : le même seed à chaque bloc",
+  "    rejouait la même trajectoire de caméra (le « rembobinage » lu comme une",
+  "    jonction ratée). La couture est CONSTATÉE (MeilleurRaccord : SSIM entre la",
+  "    dernière image livrée et la première du bloc → récit « raccord_ssim_min »,",
+  "    que la chaîne constate à ≥ 0,85) ;",
   "  - la LIVRAISON : le bloc « livrer » — FILM puis une image sur N pour la",
   "    cadence, RealESRGAN ×2 (commutable) puis lanczos pour la taille, écriture",
   "    du morceau en trois tiers ; nommé dans « blocs » pour connaître son rang",
@@ -66,9 +77,9 @@
  ],
  "constantes": {
   "images_par_bloc": 124,
-  "images_nouvelles_par_bloc": 123,
+  "images_nouvelles_par_bloc": 124,
   "secondes_par_bloc": 5.166667,
-  "secondes_nouvelles_par_bloc": 5.125,
+  "secondes_nouvelles_par_bloc": 5.166667,
   "pas": 8,
   "cadence": 24,
   "multiplicateur": 5,
@@ -77,8 +88,14 @@
   "prefixe_morceaux": "cortex/morceaux/bloc",
   "agrandisseur": "RealESRGAN_x2plus.pth",
   "agrandir": true,
-  "secondes_de_la_premiere_image": 0.041667,
-  "garde_go": 6.0
+  "garde_go": 6.0,
+  "seed": 71,
+  "modele_reference": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+  "lora_reference": "minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors",
+  "pas_reference": 4,
+  "images_de_queue": 22,
+  "seuil_raccord": 0.85,
+  "prefixe_recits": "cortex/recits/raccord"
  },
  "exemple": {
   "duration_s": 5,
@@ -96,7 +113,6 @@
    "fragment": "commun",
    "sorties": {
     "vae": "4",
-    "bruit": "5",
     "echantillonneur": "6",
     "longueur": "10",
     "cadence": "11",
@@ -115,7 +131,8 @@
     "style": "9",
     "blocs_total": "39",
     "agrandir": "40",
-    "agrandisseur": "41"
+    "agrandisseur": "41",
+    "graine": "5"
    },
    "contenu": {
     "4": {
@@ -125,9 +142,9 @@
      }
     },
     "5": {
-     "class_type": "RandomNoise",
+     "class_type": "PrimitiveInt",
      "inputs": {
-      "noise_seed": 71
+      "value": "$const.seed"
      }
     },
     "6": {
@@ -526,10 +543,57 @@
    }
   },
   {
+   "fragment": "modele-ref",
+   "sorties": {
+    "modele": "2",
+    "sigmas": "8"
+   },
+   "contenu": {
+    "1": {
+     "class_type": "UNETLoader",
+     "inputs": {
+      "unet_name": "$const.modele_reference",
+      "weight_dtype": "default"
+     }
+    },
+    "2": {
+     "class_type": "LoraLoaderModelOnly",
+     "inputs": {
+      "lora_name": "$const.lora_reference",
+      "strength_model": 1,
+      "model": [
+       "1",
+       0
+      ]
+     }
+    },
+    "7": {
+     "class_type": "PrimitiveInt",
+     "inputs": {
+      "value": "$const.pas_reference"
+     }
+    },
+    "8": {
+     "class_type": "BasicScheduler",
+     "inputs": {
+      "scheduler": "simple",
+      "steps": [
+       "7",
+       0
+      ],
+      "denoise": 1,
+      "model": [
+       "2",
+       0
+      ]
+     }
+    }
+   }
+  },
+  {
    "pour": {
     "jusqu_a": "duration_s",
-    "chaque": "secondes_nouvelles_par_bloc",
-    "deja": "secondes_de_la_premiere_image",
+    "chaque": "secondes_par_bloc",
     "max": 12,
     "un_run_par_tour": true,
     "relais": {
@@ -578,6 +642,36 @@
        "class_type": "ChargerLatent",
        "inputs": {
         "fichier": "$relais.fichier"
+       }
+      }
+     },
+     "queue": {
+      "ecrire": {
+       "class_type": "SauverImages",
+       "inputs": {
+        "images": "$relais.port",
+        "filename_prefix": "$relais.prefixe"
+       }
+      },
+      "lire": {
+       "class_type": "ChargerImages",
+       "inputs": {
+        "fichier": "$relais.fichier"
+       }
+      }
+     },
+     "identite": {
+      "ecrire": {
+       "class_type": "SaveImage",
+       "inputs": {
+        "images": "$relais.port",
+        "filename_prefix": "$relais.prefixe"
+       }
+      },
+      "lire": {
+       "class_type": "LoadImage",
+       "inputs": {
+        "image": "$relais.fichier"
        }
       }
      }
@@ -1141,7 +1235,9 @@
           "images": "5",
           "nouvelles": "9",
           "derniere_image": "6",
-          "ancre": "10"
+          "ancre": "10",
+          "queue": "11",
+          "identite": "12"
          },
          "contenu": {
           "4": {
@@ -1161,7 +1257,7 @@
            "class_type": "SamplerCustomAdvanced",
            "inputs": {
             "noise": [
-             "$commun.bruit",
+             "2",
              0
             ],
             "guider": [
@@ -1230,6 +1326,72 @@
              0
             ]
            }
+          },
+          "11": {
+           "class_type": "GetImageRangeFromBatch",
+           "inputs": {
+            "start_index": -1,
+            "num_frames": "$const.images_de_queue",
+            "images": [
+             "5",
+             0
+            ]
+           }
+          },
+          "12": {
+           "class_type": "GetImageRangeFromBatch",
+           "inputs": {
+            "start_index": {
+             "$calc": "images_par_bloc // 2"
+            },
+            "num_frames": 1,
+            "images": [
+             "5",
+             0
+            ]
+           }
+          },
+          "13": {
+           "class_type": "MeilleurRaccord",
+           "inputs": {
+            "images": [
+             "5",
+             0
+            ],
+            "k_max": 1,
+            "seuil": "$const.seuil_raccord",
+            "repli": 0,
+            "filename_prefix": {
+             "$texte": "$const.prefixe_recits",
+             "$rang": "bloc"
+            },
+            "couper": false,
+            "bloc": {
+             "$calc": "bloc"
+            }
+           }
+          },
+          "3": {
+           "class_type": "ComfyMathExpression",
+           "inputs": {
+            "expression": "a + b",
+            "values.a": [
+             "$commun.graine",
+             0
+            ],
+            "values.b": {
+             "$calc": "bloc"
+            }
+           }
+          },
+          "2": {
+           "class_type": "RandomNoise",
+           "inputs": {
+            "noise_seed": [
+             "3",
+             1
+            ]
+           }
           }
          }
         }
@@ -1239,16 +1401,18 @@
          "fragment": "rendu",
          "sorties": {
           "images": "5",
-          "nouvelles": "9",
+          "nouvelles": "13",
           "derniere_image": "6",
-          "ancre": "10"
+          "ancre": "10",
+          "queue": "11",
+          "identite": "12"
          },
          "contenu": {
           "4": {
            "class_type": "BasicGuider",
            "inputs": {
             "model": [
-             "$modele.modele",
+             "$modele-ref.modele",
              0
             ],
             "conditioning": [
@@ -1261,7 +1425,7 @@
            "class_type": "SamplerCustomAdvanced",
            "inputs": {
             "noise": [
-             "$commun.bruit",
+             "2",
              0
             ],
             "guider": [
@@ -1273,7 +1437,7 @@
              0
             ],
             "sigmas": [
-             "$modele.sigmas",
+             "$modele-ref.sigmas",
              0
             ],
             "latent_image": [
@@ -1306,20 +1470,6 @@
             ]
            }
           },
-          "9": {
-           "class_type": "GetImageRangeFromBatch",
-           "inputs": {
-            "start_index": 1,
-            "num_frames": [
-             "$commun.images_utiles",
-             0
-            ],
-            "images": [
-             "5",
-             0
-            ]
-           }
-          },
           "10": {
            "class_type": "RepeatImageBatch",
            "inputs": {
@@ -1328,6 +1478,73 @@
              0
             ],
             "amount": 1
+           }
+          },
+          "11": {
+           "class_type": "GetImageRangeFromBatch",
+           "inputs": {
+            "start_index": -1,
+            "num_frames": "$const.images_de_queue",
+            "images": [
+             "5",
+             0
+            ]
+           }
+          },
+          "12": {
+           "class_type": "RepeatImageBatch",
+           "inputs": {
+            "image": [
+             "$precedent.identite",
+             0
+            ],
+            "amount": 1
+           }
+          },
+          "13": {
+           "class_type": "MeilleurRaccord",
+           "inputs": {
+            "images": [
+             "5",
+             0
+            ],
+            "reference": [
+             "$precedent.derniere_image",
+             0
+            ],
+            "k_max": 1,
+            "seuil": "$const.seuil_raccord",
+            "repli": 0,
+            "couper": false,
+            "filename_prefix": {
+             "$texte": "$const.prefixe_recits",
+             "$rang": "bloc"
+            },
+            "bloc": {
+             "$calc": "bloc"
+            }
+           }
+          },
+          "3": {
+           "class_type": "ComfyMathExpression",
+           "inputs": {
+            "expression": "a + b",
+            "values.a": [
+             "$commun.graine",
+             0
+            ],
+            "values.b": {
+             "$calc": "bloc"
+            }
+           }
+          },
+          "2": {
+           "class_type": "RandomNoise",
+           "inputs": {
+            "noise_seed": [
+             "3",
+             1
+            ]
            }
           }
          }

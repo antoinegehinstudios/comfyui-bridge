@@ -282,3 +282,159 @@ def test_un_run_dont_les_sorties_arrivent_avant_le_tampon_reste_en_vol(tmp_path,
     out = recover(backend, log, None, host="h")
     assert out == []                              # rien de conclu…
     assert list(log.entries()) == ["p-tot"]       # …et la ligne attend son média
+
+# -- le neutre ne décide pas du montage ----------------------------------------
+#
+# Mesuré le 2026-09-18 (série « références ») : l'élément neutre posé sur
+# image_2 et image_3 AVANT le montage faisait choisir l'amorce à trois
+# références pour une demande à une image — l'encodeur recevait « <Picture 2>
+# is the exact subject to show, same identity and details » sur une image
+# blanche — et la même amorce à trois blanches pour une demande sans image.
+
+def _catalogue_a_variantes(tmp_path):
+    from comfyui_bridge.adapter.catalog import load_catalog
+    wf = tmp_path / "wf"
+    wf.mkdir(exist_ok=True)
+    montage = {"assemblage": 1, "exemple": {"n": 1}, "montage": [
+        {"fragment": "commun", "contenu": {"1": {"class_type": "Charger", "inputs": {}}}},
+        {"si": {"parametre": "image_2", "op": "ne", "valeur": None},
+         "alors": [{"fragment": "amorce", "contenu": {
+             "1": {"class_type": "LoadImage", "inputs": {"image": "a.png"}},
+             "2": {"class_type": "LoadImage", "inputs": {"image": "b.png"}},
+             "9": {"class_type": "SaveImage", "inputs": {"images": ["1", 0], "filename_prefix": "x"}}}}],
+         "sinon": [{"si": {"parametre": "image", "op": "ne", "valeur": None},
+                    "alors": [{"fragment": "amorce", "contenu": {
+                        "1": {"class_type": "LoadImage", "inputs": {"image": "a.png"}},
+                        "9": {"class_type": "SaveImage", "inputs": {"images": ["1", 0], "filename_prefix": "x"}}}}],
+                    "sinon": [{"fragment": "amorce", "contenu": {
+                        "9": {"class_type": "SaveImage", "inputs": {"images": ["$commun.1", 0], "filename_prefix": "x"}}}}]}],
+        },
+    ]}
+    (wf / "m.json").write_text(json.dumps(montage), encoding="utf-8")
+    plat = {"1": {"class_type": "LoadImage", "inputs": {"image": "a.png"}},
+            "2": {"class_type": "LoadImage", "inputs": {"image": "b.png"}},
+            "9": {"class_type": "SaveImage", "inputs": {"images": ["1", 0], "filename_prefix": "x"}}}
+    (wf / "plat.json").write_text(json.dumps(plat), encoding="utf-8")
+    rec = tmp_path / "reconciliation.json"
+    rec.write_text(json.dumps({"default": "m", "workflows": {
+        "m": {"kind": "video", "workflow": str(wf / "m.json"),
+              "bindings": {"image": {"node": "$amorce.1", "input": "image"},
+                           "image_2": {"node": "$amorce.2", "input": "image"}}},
+        "plat": {"kind": "image", "workflow": str(wf / "plat.json"),
+                 "bindings": {"image": {"node": "1", "input": "image"},
+                              "image_2": {"node": "2", "input": "image"}}}}}), encoding="utf-8")
+    return load_catalog(rec, workflows_dir=wf)
+
+
+def _graphe_envoye(tmp_path, monkeypatch, workflow, params):
+    s = Settings(comfy_backend="http", comfy_output_dir=tmp_path, comfyui_poll_interval_s=0.0,
+                 comfyui_base_url="http://127.0.0.1:9", comfyui_request_timeout_s=1,
+                 neutral_media=True)
+    backend = ComfyUIHttpBackend(s, _catalogue_a_variantes(tmp_path))
+    monkeypatch.setattr("comfyui_bridge.adapter.neutral.ensure_neutral",
+                        lambda base, param, timeout=30.0: "neutre-blanc.png")
+    monkeypatch.setattr(backend, "_evincer_les_etrangers", lambda on_note=None: None)
+    vus = {}
+    monkeypatch.setattr(backend, "_courir", lambda graph, *a, **k: vus.setdefault("graphe", graph))
+    backend.submit(ExecutionPlan(RenderIntent(prompt="x"), dict(params, n=1), kind="video", workflow=workflow))
+    return vus["graphe"]
+
+
+def _images_chargees(g):
+    return sorted(v["inputs"]["image"] for v in g.values() if v["class_type"] == "LoadImage")
+
+
+def test_sans_image_le_montage_ne_pose_aucune_reference(tmp_path, monkeypatch):
+    g = _graphe_envoye(tmp_path, monkeypatch, "m", {})
+    assert _images_chargees(g) == []
+
+
+def test_avec_une_image_le_montage_n_en_pose_qu_une_et_jamais_le_neutre(tmp_path, monkeypatch):
+    g = _graphe_envoye(tmp_path, monkeypatch, "m", {"image": "photo.png"})
+    assert _images_chargees(g) == ["photo.png"]
+
+
+def test_avec_deux_images_le_montage_pose_les_deux(tmp_path, monkeypatch):
+    g = _graphe_envoye(tmp_path, monkeypatch, "m", {"image": "photo.png", "image_2": "autre.png"})
+    assert _images_chargees(g) == ["autre.png", "photo.png"]
+
+
+def test_un_graphe_ordinaire_garde_son_neutre_pour_l_entree_laissee_vide(tmp_path, monkeypatch):
+    # Hors montage, rien ne change : une entrée image laissée vide reçoit le
+    # neutre plutôt que le contenu embarqué du workflow.
+    g = _graphe_envoye(tmp_path, monkeypatch, "plat", {"image": "photo.png"})
+    assert _images_chargees(g) == ["neutre-blanc.png", "photo.png"]
+
+
+def test_un_200_avec_node_errors_est_un_refus_qui_nomme_le_noeud(tmp_path, monkeypatch):
+    """Mesuré le 2026-09-19 : le moteur a répondu 200 avec `node_errors`
+    (« GetImageRangeFromBatch 62 : Value -22 smaller than min of -1 »), a
+    couru onze minutes en IGNORANT la sortie fautive, et l'échec n'est venu
+    qu'au tour suivant, sans le relais attendu. Un tel 200 est un REFUS : le
+    prompt est retiré de la file du moteur, et le refus nomme chaque nœud —
+    identifiant, classe, message, détail, sorties ignorées. Un 200 sans
+    `node_errors` reste accepté."""
+    from comfyui_bridge.core.errors import BackendExecutionError
+    retires = []
+
+    def fake_urlopen(req, timeout=None):
+        url = req.full_url if hasattr(req, "full_url") else req
+        if url.endswith("/prompt"):
+            return _Resp(json.dumps({"prompt_id": "p9", "number": 3, "node_errors": {
+                "62": {"class_type": "GetImageRangeFromBatch",
+                       "errors": [{"type": "value_smaller_than_min",
+                                   "message": "Value -22 smaller than min of -1",
+                                   "details": "start_index", "extra_info": {}}],
+                       "dependent_outputs": ["70", "71"]}}}).encode())
+        if url.endswith("/queue"):
+            retires.append(json.loads(req.data.decode("utf-8")))
+            return _Resp(b"")
+        raise AssertionError(f"unexpected url {url}")
+
+    monkeypatch.setattr(H.urllib.request, "urlopen", fake_urlopen)
+    try:
+        _backend(tmp_path).submit(_plan())
+    except BackendExecutionError as e:
+        assert "node_errors" in e.detail
+        assert "nœud 62 (GetImageRangeFromBatch) : Value -22 smaller than min of -1 (start_index)" in e.detail
+        assert "sorties ignorées : 70, 71" in e.detail
+        assert "p9 retiré de la file du moteur" in e.detail
+        assert e.extensions["node_errors"]["62"]["class_type"] == "GetImageRangeFromBatch"
+    else:
+        raise AssertionError("expected BackendExecutionError")
+    assert retires == [{"delete": ["p9"]}]            # l'opération officielle du moteur
+
+    # …et un retrait qui échoue est DIT, jamais tu : le refus reste un refus.
+    def urlopen_sans_retrait(req, timeout=None):
+        url = req.full_url if hasattr(req, "full_url") else req
+        if url.endswith("/prompt"):
+            return _Resp(json.dumps({"prompt_id": "p10", "node_errors": {
+                "5": {"class_type": "X", "errors": []}}}).encode())
+        raise urllib.error.URLError("moteur muet")
+
+    monkeypatch.setattr(H.urllib.request, "urlopen", urlopen_sans_retrait)
+    try:
+        _backend(tmp_path).submit(_plan())
+    except BackendExecutionError as e:
+        assert "nœud 5 (X) : erreur sans message" in e.detail
+        assert "p10 NON retiré de la file du moteur" in e.detail
+    else:
+        raise AssertionError("expected BackendExecutionError")
+    # Un 200 sans `node_errors` (ou avec un objet vide) : accepté, comme avant.
+    assert H.dire_les_noeuds_fautifs({}) == ""
+
+    def urlopen_sain(req, timeout=None):
+        url = req.full_url if hasattr(req, "full_url") else req
+        if url.endswith("/prompt"):
+            return _Resp(json.dumps({"prompt_id": "p11", "node_errors": {}}).encode())
+        if "/history/" in url:
+            return _Resp(json.dumps({"p11": {
+                "status": {"status_str": "success"},
+                "outputs": {"9": {"images": [{"filename": "sain.png", "subfolder": "",
+                                              "type": "output"}]}}}}).encode())
+        if "/view" in url:
+            return _Resp(PNG)
+        raise AssertionError(f"unexpected url {url}")
+
+    monkeypatch.setattr(H.urllib.request, "urlopen", urlopen_sain)
+    assert len(_backend(tmp_path).submit(_plan()).artifacts) == 1

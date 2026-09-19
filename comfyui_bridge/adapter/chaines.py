@@ -15,8 +15,11 @@ livrables offrait cinquante images de travail avant la vidéo commandée.
 
 from __future__ import annotations
 
+import datetime as _dt
+import hashlib
 import json
 import math
+import shutil
 import threading
 import time
 import urllib.parse
@@ -135,12 +138,15 @@ class RunnerDeChaines:
         c = self._c
         self._force = force              # passe outre un souvenir, étape par étape
         store = c.store
-        etapes = etapes_initiales(chaine, self.technique_voulue(chaine, valeurs))
+        technique = self.technique_voulue(chaine, valeurs)
+        etapes = etapes_initiales(chaine, technique)
         store.set_etapes(job_id, etapes)
         store.set_status(job_id, JobStatus.RUNNING)
         store.append_log(job_id, f"chaîne « {chaine.nom} » : {len(etapes)} étapes")
         travail = dossier_de_travail(c.settings.comfy_output_dir, job_id)
-        resultats: dict[str, Any] = {}
+        # Les résultats commencent par ce qu'un renvoi peut lire AVANT toute
+        # étape : le fichier de la technique choisie (« $technique.<chemin> »).
+        resultats: dict[str, Any] = noyau.resultats_initiaux(chaine, technique)
         produits: list[str] = []
         duree = 0.0
         repris: dict[str, dict[str, Any]] = {}
@@ -179,7 +185,7 @@ class RunnerDeChaines:
                     if isinstance(chemin, str) and chemin not in produits:
                         produits.append(chemin)
                 continue
-            sautee = self._a_sauter(etape, valeurs, resultats)
+            sautee = self._a_sauter(etape, valeurs, resultats, chaine, technique)
             if sautee is not None:
                 # UNE ÉTAPE FACULTATIVE SANS RAISON D'ÊTRE EST SAUTÉE, ET LE DIT :
                 # son « quand » désigne une valeur vide (un appel final sans
@@ -218,6 +224,9 @@ class RunnerDeChaines:
             duree += resultat.pop("_duree", None) or (time.monotonic() - debut)
             resultats[etape.id] = resultat
             etapes[rang]["statut"] = "done"
+            note = resultat.pop("_note", None)
+            if note:
+                etapes[rang]["note"] = str(note)      # ce que l'étape a à dire d'elle-même
             etapes[rang]["resultat"] = _resume(resultat)
             store.set_etapes(job_id, etapes)
             store.append_log(job_id, f"étape {etape.id} ({etape.genre}) : {_dire(resultat)}")
@@ -276,7 +285,7 @@ class RunnerDeChaines:
             if not e:
                 break
             if e.get("statut") == "done":
-                repris[etape.id] = self._resultat_repris(reprise_de, etape, e)
+                repris[etape.id] = self._resultat_repris(reprise_de, etape, e, chaine.nom)
             elif e.get("statut") == "skipped" and isinstance(e.get("resultat"), dict):
                 # Une étape SAUTÉE par sa définition (« quand » vide) porte un
                 # résultat ; une étape sautée parce que la chaîne avait échoué
@@ -293,19 +302,26 @@ class RunnerDeChaines:
         return repris
 
     def _resultat_repris(self, ancien_id: str, etape: noyau.Etape,
-                         e: dict[str, Any]) -> dict[str, Any]:
+                         e: dict[str, Any], chaine_nom: str = "") -> dict[str, Any]:
         """Le résultat COMPLET d'une étape faite, reconstruit depuis sa fiche.
 
         La fiche ne garde qu'un résumé (le récit y perd son calendrier et sa
         caméra) ; ce que les étapes suivantes lisent — « $deroulement.recit… »
         — est relu sur les sous-jobs, et fusionné comme au premier passage
-        quand l'étape était rendue par tranches.
+        quand l'étape était rendue par tranches. Une étape reprise de la
+        MÉMOIRE n'a pas de sous-job : son récit est relu dans la mémoire.
         """
         store = self._c.store
         res = dict(e.get("resultat") or {})
         if etape.genre == "rendre":
             ids = list(res.get("job_ids") or ([res["job_id"]] if res.get("job_id") else []))
             recits: list[dict[str, Any]] = []
+            cle = (res.get("memoire") or {}).get("cle") if isinstance(res.get("memoire"), dict) else None
+            if not ids and cle:
+                souvenir = self._souvenir(chaine_nom, etape.id, str(cle))
+                garde = (souvenir or {}).get("resultat") if souvenir else None
+                if isinstance(garde, dict) and isinstance(garde.get("recit"), dict):
+                    recits.append(garde["recit"])
             for sid in ids:
                 try:
                     sous = store.get(sid)
@@ -406,14 +422,19 @@ class RunnerDeChaines:
 
     @staticmethod
     def _a_sauter(etape: noyau.Etape, valeurs: dict[str, Any],
-                  resultats: dict[str, Any]) -> dict[str, Any] | None:
+                  resultats: dict[str, Any], chaine: noyau.Chaine | None = None,
+                  technique=None) -> dict[str, Any] | None:
         """Ce qu'une étape SAUTÉE rend — ou None quand elle doit être jouée.
 
         Une étape porte « quand » : un renvoi vers un champ ou un résultat
         d'amont. Vide (texte blanc, faux, zéro, liste ou objet vides, absent),
         l'étape n'a rien à faire. Son résultat est alors un PASSE-PLAT : le
         premier média qu'elle devait reprendre devient son livrable, pour que
-        l'aval la nomme sans savoir qu'elle n'a pas eu lieu."""
+        l'aval la nomme sans savoir qu'elle n'a pas eu lieu.
+
+        La raison NOMME les champs qui restent sans effet : ceux que cette
+        étape seule lisait, et qu'on a pourtant réglés (une police d'appel sans
+        appel partait nulle part sans le dire — 2026-09-19)."""
         if not etape.quand:
             return None
         valeur = noyau.resoudre(etape.quand, valeurs, resultats)
@@ -423,8 +444,14 @@ class RunnerDeChaines:
             pleine = bool(valeur)
         if pleine:
             return None
-        resultat: dict[str, Any] = {"sautee": True,
-                                    "raison": f"« {etape.quand} » est vide"}
+        raison = f"« {etape.quand} » est vide"
+        sans_effet = (noyau.sans_effet_si_sautee(chaine, etape, technique, valeurs)
+                      if chaine is not None else [])
+        if sans_effet:
+            raison += f" — {', '.join(sans_effet)} sans effet"
+        resultat: dict[str, Any] = {"sautee": True, "raison": raison}
+        if sans_effet:
+            resultat["sans_effet"] = sans_effet
         params = etape.params if isinstance(etape.params, dict) else {}
         sources: list[Any] = []
         media = params.get("media")
@@ -456,13 +483,21 @@ class RunnerDeChaines:
         if etape.genre in noyau.CONTROLENT:
             return self._verifier(etape, valeurs, resultats, technique,
                                   exiger=(etape.genre == "verifier"), job_id=job_id)
-        params = noyau.resoudre(etape.params, valeurs, resultats)
+        brut = etape.params
+        memoire: dict[str, Any] | None = None
+        if etape.memoire is not None:
+            # La clé se résout À PART, sans exiger : un renvoi absent vaut
+            # null dans la clé, il ne fait pas échouer l'étape — et « memoire »
+            # n'est pas un réglage du run.
+            memoire = self._cle_de_memoire(etape, valeurs, resultats)
+            brut = {k: v for k, v in brut.items() if k != "memoire"}
+        params = noyau.resoudre(brut, valeurs, resultats)
         if etape.genre == "rendre":
             if etape.role is not None:
                 params = self._params_du_role(job_id, etape, params, technique,
                                               valeurs, resultats)
             return self._rendre(job_id, etape, params, label, etapes, rang,
-                                travail=travail, chaine_nom=chaine_nom)
+                                travail=travail, chaine_nom=chaine_nom, memoire=memoire)
         if etape.genre == "extraire_queue":
             source = self._fichier_local(params["video"], travail)
             sortie = travail / f"{etape.id}-queue.mp4"
@@ -533,8 +568,7 @@ class RunnerDeChaines:
         role = technique.roles[etape.role]
         sortis = {k: v for k, v in params.items() if k not in ("role", "technique")}
         sortis["workflow"] = role.workflow
-        sortis["inputs"] = {**noyau.resoudre(role.inputs, valeurs, resultats),
-                            **(params.get("inputs") or {})}
+        sortis["inputs"] = noyau.entrees_du_role(role, params, valeurs, resultats)
         self._c.store.append_log(
             parent_id, f"étape {etape.id} : technique {technique.nom} → {role.workflow}")
         return sortis
@@ -571,9 +605,121 @@ class RunnerDeChaines:
         return {"controles": lignes, "constat": not exiger,
                 "non_tenus": [l["id"] for l in faux]}
 
+    # -- mémoire d'étape --------------------------------------------------------
+    #
+    # Une étape « rendre » qui déclare « memoire » est GARDÉE PAR CLÉ : le
+    # sha256 des valeurs que sa définition nomme (l'empreinte de l'image, les
+    # réglages du plan, la graine). La clé revient : le résultat est repris —
+    # récit, mesure, et le livrable recopié dans le dossier de sortie sous un
+    # nom neuf — sans un run. Décidé le 2026-09-19 : « le plan est gardé par
+    # clé (même image, réglages, graine → même plan) ». Le code ne sait ni ce
+    # que la clé nomme ni ce que l'étape écrit : c'est la définition qui le
+    # dit. La mémoire vit dans le dossier de données, jamais parmi les
+    # livrables.
+
+    def _cle_de_memoire(self, etape: noyau.Etape, valeurs: dict[str, Any],
+                        resultats: dict[str, Any]) -> dict[str, Any]:
+        """La clé de mémoire d'une étape : les renvois de sa définition,
+        résolus sans exiger (un renvoi absent vaut null — il pèse dans la clé
+        comme « rien »), en JSON canonique, hachés."""
+        resolus = []
+        for renvoi in etape.memoire or ():
+            valeur = noyau.resoudre(renvoi, valeurs, resultats, strict=False)
+            resolus.append(None if isinstance(valeur, str) and valeur.startswith("$")
+                           else valeur)
+        canon = json.dumps(resolus, sort_keys=True, ensure_ascii=False,
+                           separators=(",", ":"), default=str)
+        return {"cle": hashlib.sha256(canon.encode("utf-8")).hexdigest(),
+                "renvois": list(etape.memoire or ())}
+
+    def _dossier_de_memoire(self, chaine_nom: str, etape_id: str) -> Path:
+        surete = lambda s: "".join(ch for ch in str(s) if ch.isalnum() or ch in "-_") or "sans-nom"
+        return (Path(self._c.settings.hermes_db).parent / "memoire"
+                / surete(chaine_nom) / surete(etape_id))
+
+    def _souvenir(self, chaine_nom: str, etape_id: str, cle: str) -> dict[str, Any] | None:
+        """Ce que la mémoire garde sous cette clé — avec son livrable encore
+        là ; sinon rien, et l'étape se joue (une fiche sans fichier est un
+        souvenir qui ne sert plus)."""
+        fiche = self._dossier_de_memoire(chaine_nom, etape_id) / f"{cle}.json"
+        if not fiche.is_file():
+            return None
+        try:
+            souvenir = json.loads(fiche.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        livrable = souvenir.get("livrable") if isinstance(souvenir, dict) else None
+        if not isinstance(livrable, str) or not Path(livrable).is_file():
+            return None
+        return souvenir
+
+    def _retenir(self, parent_id: str, etape: noyau.Etape, chaine_nom: str,
+                 memoire: dict[str, Any], resultat: dict[str, Any]) -> None:
+        """Déposer le résultat d'une étape sous sa clé : sa fiche (récit,
+        mesure, d'où il vient) et une copie de son livrable, à côté."""
+        livrable = resultat.get("livrable")
+        if not isinstance(livrable, str) or not Path(livrable).is_file():
+            return
+        dossier = self._dossier_de_memoire(chaine_nom, etape.id)
+        dossier.mkdir(parents=True, exist_ok=True)
+        copie = dossier / f"{memoire['cle']}.livrable{Path(livrable).suffix}"
+        shutil.copyfile(livrable, copie)
+        fiche = {"cle": memoire["cle"], "renvois": memoire["renvois"],
+                 "chaine": chaine_nom, "etape": etape.id,
+                 "ecrit_le": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+                 "job_id": resultat.get("job_id"), "livrable": str(copie),
+                 "resultat": {k: resultat[k] for k in ("recit", "mesure") if k in resultat}}
+        brouillon = dossier / f".{memoire['cle']}.part.json"
+        brouillon.write_text(json.dumps(fiche, ensure_ascii=False), encoding="utf-8")
+        brouillon.replace(dossier / f"{memoire['cle']}.json")
+        resultat["memoire"] = {"cle": memoire["cle"], "reprise": False}
+        self._c.store.append_log(
+            parent_id, f"étape {etape.id} : résultat gardé en mémoire sous sa clé "
+                       f"({', '.join(memoire['renvois'])})")
+
+    def _reprendre(self, parent_id: str, etape: noyau.Etape, souvenir: dict[str, Any],
+                   label: str, chaine_nom: str, memoire: dict[str, Any]) -> dict[str, Any]:
+        """Le résultat repris de la mémoire : le livrable recopié dans le
+        dossier de sortie sous un nom neuf (celui que ce run lui aurait donné),
+        le récit et la mesure tels qu'ils ont été gardés — aucun run."""
+        source = Path(str(souvenir["livrable"]))
+        sortie = self._sortie(parent_id, label, etape.id, source.suffix, chaine=chaine_nom)
+        shutil.copyfile(source, sortie)
+        garde = souvenir.get("resultat") if isinstance(souvenir.get("resultat"), dict) else {}
+        resultat: dict[str, Any] = {
+            "livrable": str(sortie), "job_id": None, "artefacts": [str(sortie)],
+            "mesure": {**(garde.get("mesure") or {}), "bytes": sortie.stat().st_size},
+            "memoire": {"cle": memoire["cle"], "reprise": True,
+                        "job_id": souvenir.get("job_id"), "ecrit_le": souvenir.get("ecrit_le")},
+            "_duree": 0.0,
+            "_note": "reprise de la mémoire : même clé",
+        }
+        if isinstance(garde.get("recit"), dict):
+            resultat["recit"] = garde["recit"]
+        self._c.store.append_log(
+            parent_id, f"étape {etape.id} reprise : même clé "
+                       f"({', '.join(memoire['renvois'])}) — le résultat du job "
+                       f"{souvenir.get('job_id')} du {souvenir.get('ecrit_le')} est recopié, "
+                       f"aucun run")
+        return resultat
+
     def _rendre(self, parent_id: str, etape: noyau.Etape, params: dict[str, Any],
                 label: str, etapes: list[dict[str, Any]], rang: int,
-                travail: Path | None = None, chaine_nom: str = "") -> dict[str, Any]:
+                travail: Path | None = None, chaine_nom: str = "",
+                memoire: dict[str, Any] | None = None) -> dict[str, Any]:
+        if memoire is not None:
+            souvenir = self._souvenir(chaine_nom, etape.id, memoire["cle"])
+            if souvenir is not None:
+                return self._reprendre(parent_id, etape, souvenir, label, chaine_nom, memoire)
+        resultat = self._rendre_sans_memoire(parent_id, etape, params, label, etapes, rang,
+                                             travail, chaine_nom)
+        if memoire is not None:
+            self._retenir(parent_id, etape, chaine_nom, memoire, resultat)
+        return resultat
+
+    def _rendre_sans_memoire(self, parent_id: str, etape: noyau.Etape, params: dict[str, Any],
+                             label: str, etapes: list[dict[str, Any]], rang: int,
+                             travail: Path | None = None, chaine_nom: str = "") -> dict[str, Any]:
         c = self._c
         reglages = dict(params)
         nom = str(reglages.pop("workflow"))
@@ -610,7 +756,7 @@ class RunnerDeChaines:
             return self._rendre_par_tranches(parent_id, etape, nom, media, genre, reglages,
                                              label, etapes, rang, tranches, travail, chaine_nom)
         fini = self._executer_run(parent_id, etape, nom, media, genre, reglages,
-                                  f"{label}-{etape.id}"[:40], etapes, rang)
+                                  etiquette_de_run(label, etape.id), etapes, rang)
         return self._resultat_du_run(parent_id, etape, nom, fini)
 
     def _executer_run(self, parent_id: str, etape: noyau.Etape, nom: str,
@@ -676,9 +822,10 @@ class RunnerDeChaines:
     # elles-mêmes. Un nœud qui sait le faire le déclare par deux entrées,
     # `segment_index` et `segment_count` (la tranche i de n rend les images
     # [n·i/N, n·(i+1)/N) de la même simulation, au grain et à la lumière près
-    # de la seconde ABSOLUE), et par `duree_max_s`, la durée au-delà de laquelle
-    # il n'allonge plus : c'est elle qui borne le nombre de tranches, puisque le
-    # nœud décide lui-même de la durée retenue.
+    # de la seconde ABSOLUE), et par une borne d'allonge — `allonge_max_s`, de
+    # combien au plus il allonge la durée demandée, ou `duree_max_s`, la durée
+    # au-delà de laquelle il n'allonge plus : c'est elle qui borne le nombre de
+    # tranches, puisque le nœud décide lui-même de la durée retenue.
 
     def tranches_pour(self, nom: str, reglages: dict[str, Any],
                       etiquette: str = "rendu",
@@ -753,13 +900,19 @@ class RunnerDeChaines:
 
         # Deux bornes qu'un nœud déclare, en littéral : `duree_max_s`, la durée
         # ABSOLUE au-delà de laquelle il n'allonge plus ; `allonge_max_s`, de
-        # combien AU PLUS il allonge au-delà de la durée demandée (une
-        # conclusion qui garde la page vivante le temps de l'appel). C'est le
-        # plus grand des deux comptes qui fixe les tranches : jamais moins
-        # d'images que le nœud n'en rendra.
+        # combien AU PLUS il allonge au-delà de la durée demandée. Quand le
+        # nœud déclare une ALLONGE et qu'une durée est demandée, c'est elle
+        # qui compte : la demande fait loi, l'allonge est sa marge — le
+        # plafond ne sert que sans allonge déclarée (ou sans demande). Mesuré
+        # le 2026-09-19 : compté sur max(demandée, 79), le compte des tranches
+        # de 10 s demandées était celui de 79 s, et la demande n'y pesait pas.
+        # Jamais moins d'images que le nœud n'en rendra.
         plafond, allonge = declare("duree_max_s"), declare("allonge_max_s")
         demandee = nombre("duration_s")
-        duree = max(demandee + allonge if demandee > 0 else 0.0, plafond)
+        if allonge > 0 and demandee > 0:
+            duree = demandee + allonge
+        else:
+            duree = max(demandee, plafond)
         if duree <= 0:
             return None
         images = int(math.ceil(duree * fps))
@@ -946,7 +1099,7 @@ class RunnerDeChaines:
                 try:
                     fini = self._executer_run(parent_id, etape, nom, media, genre,
                                               {**reglages, "inputs": entrees},
-                                              f"{label}-{etape.id}-{i + 1}sur{n}"[:40],
+                                              etiquette_de_run(label, etape.id, f"{i + 1}sur{n}"),
                                               etapes, rang)
                     break
                 except MediaAssemblyError as exc:
@@ -1149,7 +1302,7 @@ class RunnerDeChaines:
             while True:
                 try:
                     fini = self._executer_run(parent_id, etape, nom, media_i, genre, reglages_i,
-                                              f"{label}-{etape.id}-{i + 1}sur{n}"[:40],
+                                              etiquette_de_run(label, etape.id, f"{i + 1}sur{n}"),
                                               etapes, rang)
                     break
                 except MediaAssemblyError as exc:
@@ -1399,6 +1552,25 @@ class RunnerDeChaines:
         return None
 
 
+# -- le nom d'un sous-run ------------------------------------------------------
+
+# La longueur que l'orchestrateur garde d'une étiquette (`resolve_params`,
+# `intent.label[:40]`) : ce qui dépasse est perdu au nom du fichier.
+LONGUEUR_D_ETIQUETTE = 40
+
+
+def etiquette_de_run(label: str, etape_id: str, suffixe: str = "",
+                     longueur: int = LONGUEUR_D_ETIQUETTE) -> str:
+    """Le nom donné à un sous-run : « <label>-<étape>[-<suffixe>] », tenu dans
+    la longueur que l'orchestrateur garde en rognant LE LABEL — jamais l'étape
+    ni le suffixe. Coupé après l'ajout du suffixe, « …-rendu-1sur4 » devenait
+    « …-rendu-1su », et deux caractères de plus auraient donné à tous les tours
+    le même préfixe de fichier (mesuré le 2026-09-19 sur un label de trente
+    caractères)."""
+    queue = f"-{etape_id}" + (f"-{suffixe}" if suffixe else "")
+    return str(label)[:max(0, longueur - len(queue))] + queue
+
+
 # -- tranches : ce qu'un nœud déclare, et comment ses récits se fusionnent -----
 
 # Une image rendue en mémoire : RVB en float32, ce qu'un nœud d'image rend au
@@ -1606,7 +1778,8 @@ def _resume(resultat: dict[str, Any]) -> dict[str, Any]:
     pas la totalité (une mesure de raccords porte une ligne par frontière)."""
     garde = {}
     for cle in ("livrable", "fichier", "depot", "images", "job_id", "job_ids", "tranches",
-                "tours", "jonctions", "mesure", "pire", "moyenne", "nombre", "parts"):
+                "tours", "jonctions", "mesure", "pire", "moyenne", "nombre", "parts",
+                "memoire", "sans_effet"):
         if cle in resultat:
             garde[cle] = resultat[cle]
     if "controles" in resultat:

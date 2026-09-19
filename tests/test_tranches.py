@@ -69,6 +69,17 @@ GRAPHE_QUI_ALLONGE = {
           "inputs": {"filename_prefix": "cortex/tranche", "images": [NOEUD, 0]}},
 }
 
+# Le même nœud, qui déclare LES DEUX : un plafond absolu (la conduite d'avant)
+# ET une allonge (la marge du rendu sous le plan). C'est la demande plus
+# l'allonge qui compte alors — jamais le plafond (2026-09-19).
+GRAPHE_QUI_ALLONGE_SOUS_PLAFOND = {
+    NOEUD: {"class_type": "RenduDEssaiParTranches",
+            "inputs": {"segment_index": 0, "segment_count": 1,
+                       "duree_max_s": DUREE_MAX, "allonge_max_s": ALLONGE_MAX, "graine": 71}},
+    "9": {"class_type": "SaveVideo",
+          "inputs": {"filename_prefix": "cortex/tranche", "images": [NOEUD, 0]}},
+}
+
 # Le récit qu'écrit CHAQUE tranche : des mesures prises sur ses images à elle.
 # Le minimum d'encre est sur la deuxième, la lumière la plus basse aussi, la
 # plus haute également — de quoi voir que la fusion va chercher l'extrême là où
@@ -190,6 +201,8 @@ def banc():
                                                    encoding="utf-8")
         (tmp / "video-qui-allonge.json").write_text(json.dumps(GRAPHE_QUI_ALLONGE),
                                                     encoding="utf-8")
+        (tmp / "video-allonge-sous-plafond.json").write_text(
+            json.dumps(GRAPHE_QUI_ALLONGE_SOUS_PLAFOND), encoding="utf-8")
         (tmp / "chaine-tranchee.json").write_text(json.dumps(CHAINE_TRANCHEE), encoding="utf-8")
         (tmp / "chaine-non-tranchee.json").write_text(json.dumps(CHAINE_NON_TRANCHEE),
                                                       encoding="utf-8")
@@ -209,6 +222,11 @@ def banc():
                 # Le nœud qui allonge la durée demandée d'au plus ALLONGE_MAX.
                 "video-qui-allonge": {
                     "kind": "video", "workflow": str(tmp / "video-qui-allonge.json"),
+                    "bindings": {"filename_prefix": {"node": "9", "input": "filename_prefix"}},
+                    "defaults": {"width": LARGEUR, "height": HAUTEUR, "fps": CADENCE}},
+                # Le nœud qui déclare un plafond ET une allonge.
+                "video-allonge-sous-plafond": {
+                    "kind": "video", "workflow": str(tmp / "video-allonge-sous-plafond.json"),
                     "bindings": {"filename_prefix": {"node": "9", "input": "filename_prefix"}},
                     "defaults": {"width": LARGEUR, "height": HAUTEUR, "fps": CADENCE}},
                 # Le graphe tranchable SANS taille déclarée : celle d'un graphe
@@ -270,6 +288,12 @@ def test_un_rendu_trop_lourd_est_demande_en_tranches(banc):
     for sous_id in rendu["job_ids"]:
         sous = atelier.get(f"/v1/jobs/{sous_id}").json()
         assert sous["parent"] == job["id"] and sous["status"] == "succeeded"
+        # UNE TRANCHE N'EST PAS LE MÉDIA (2026-09-19) : rendue comme part i de
+        # N, sa durée n'est pas celle demandée, et l'« écart » par tranche
+        # (« demandé 2, livré 0.667 ») ne disait rien de vrai — plus de
+        # comparaison ici, ni au journal, ni sur le livrable de la tranche.
+        assert not any("écart entre la demande" in ligne for ligne in sous["logs"]), sous["logs"]
+        assert all(not a.get("gaps") for a in sous["artifacts"])
     assert rendu["job_id"] == rendu["job_ids"][-1]
 
 
@@ -480,10 +504,13 @@ def test_un_probleme_connu_refuse_avant_la_premiere_tranche(banc):
     from comfyui_bridge.core.problems import OOM
     atelier = banc(BUDGET_POUR_TROIS)
     c = atelier.app.state.container
-    # La configuration telle que le plan la signe : 160×120, et les 50 images
-    # que 2 s à 25 i/s demandent (`latent_batch`).
+    # La configuration telle que le plan la signe : 160×120, et les 2 s
+    # demandées. DÉCISION ÉCRITE, 2026-09-19 : un graphe qui ne lie pas le
+    # nombre d'images (celui-ci prend la durée) ne se voit plus dériver un
+    # `latent_batch` qui ne partait nulle part — la signature porte la durée
+    # (« 160x120-2s »), plus les 50 images d'avant (« 160x120x50 »).
     c.registry.record(c.settings.host_id, "video-tranchable",
-                      {"width": LARGEUR, "height": HAUTEUR, "latent_batch": 50},
+                      {"width": LARGEUR, "height": HAUTEUR, "duration_s": 2.0},
                       status="failed", problem=OOM, detail="CUDA out of memory")
     r = atelier.post("/v1/render", json={"workflow": "video-tranchable", "duration_s": 2,
                                          "width": LARGEUR, "height": HAUTEUR, "fps": CADENCE})
@@ -566,6 +593,18 @@ def test_un_noeud_qui_allonge_declare_de_combien(banc):
     assert moins["nombre"] == 2
     # Sans durée demandée, rien à compter : le run part entier.
     assert runner.tranches_pour("video-qui-allonge", {}) is None
+    # DÉCISION ÉCRITE, 2026-09-19 : un nœud qui déclare LES DEUX (le plafond de
+    # la conduite d'avant, 4 s ici ; l'allonge du rendu sous le plan) est
+    # compté sur la DEMANDE plus l'allonge, jamais sur le plafond. Compté sur
+    # max(demandée, plafond), le compte de 10 s demandées était celui de 79 s :
+    # la demande n'y pesait pas. 0,5 s + 2 s = 63 images, deux tranches — pas
+    # les 100 du plafond ; et 3 s + 2 s = 125 images, au-delà du plafond, parce
+    # que le plafond ne borne pas ce que l'allonge déclare.
+    sous_plafond = runner.tranches_pour("video-allonge-sous-plafond", {"duration_s": 0.5})
+    assert sous_plafond["images"] == 63 and sous_plafond["nombre"] == 2
+    assert runner.tranches_pour("video-allonge-sous-plafond", {"duration_s": 3})["images"] == 125
+    # Sans demande, le plafond reste la seule borne connue : c'est lui qui compte.
+    assert runner.tranches_pour("video-allonge-sous-plafond", {})["images"] == 100
 
 
 @SANS_FFMPEG
@@ -873,3 +912,34 @@ def test_le_budget_se_lit_comme_la_memoire_qu_une_tranche_demande():
     assert demande == 23_040_000
     assert int(math.ceil(demande / BUDGET_POUR_TROIS)) == 3
     assert int(math.ceil(demande / BUDGET_IMPOSSIBLE)) > TRANCHES_MAX
+
+
+def test_le_nom_d_un_sous_run_garde_son_suffixe_entier():
+    """Mesuré le 2026-09-19 : « Documentaire-lumiere-naturelle-rendu-1sur4 »
+    coupé à 40 après le suffixe donnait « …-rendu-1su », et deux caractères de
+    plus auraient donné à tous les tours le même préfixe de fichier. C'est le
+    LABEL qui se rogne ; l'étape et le suffixe restent entiers."""
+    from comfyui_bridge.adapter.chaines import LONGUEUR_D_ETIQUETTE, etiquette_de_run
+    long = "Documentaire-lumiere-naturelle"
+    noms = [etiquette_de_run(long, "rendu", f"{i}sur4") for i in range(1, 5)]
+    assert len(set(noms)) == 4 and all(len(n) <= LONGUEUR_D_ETIQUETTE for n in noms)
+    assert [n.rsplit("-", 1)[1] for n in noms] == ["1sur4", "2sur4", "3sur4", "4sur4"]
+    assert all(n.startswith("Documentaire-lumiere-naturel-rendu-") for n in noms)
+    assert etiquette_de_run("court", "rendu") == "court-rendu"
+    assert etiquette_de_run("court", "rendu", "12sur12") == "court-rendu-12sur12"
+
+
+@SANS_FFMPEG
+def test_les_tranches_d_un_label_long_ont_chacune_leur_prefixe(banc):
+    """De bout en bout : trois tranches sous un label de trente caractères,
+    trois préfixes de fichier distincts, chacun fini par son rang."""
+    atelier = banc(BUDGET_POUR_TROIS)
+    job = _job(atelier, atelier.post("/v1/render", json={
+        "workflow": "chaine-tranchee", "secondes": 2, "label": "Documentaire-lumiere-naturelle"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    prefixes = [atelier.get(f"/v1/jobs/{sid}").json()["params"]["filename_prefix"]
+                for sid in _etape(job, "rendu")["job_ids"]]
+    assert len(set(prefixes)) == 3
+    # « cortex/<label>-rendu-<i>sur3_<workflow> » : le rang, entier, avant le type.
+    assert [p.split("_")[0].rsplit("-", 1)[1] for p in prefixes] == ["1sur3", "2sur3", "3sur3"]
+    assert all(p.startswith("cortex/Documentaire-lumiere-naturel-rendu-") for p in prefixes)

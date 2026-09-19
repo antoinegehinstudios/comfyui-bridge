@@ -92,3 +92,38 @@ def test_une_reprise_dont_le_livrable_a_disparu_le_dit_avant_de_rien_depenser(at
     detail = reprise["problem"]["detail"]
     assert "reprise impossible" in detail and "n'existe plus" in detail and livrable.name in detail
     assert vus == ["video-essai", "video-essai"]        # aucun run de plus
+
+
+def test_une_etape_reprise_de_la_memoire_se_reprend_avec_son_recit(atelier):
+    """Une étape gardée par clé (2026-09-19) n'a pas de sous-job quand elle a
+    été reprise de la mémoire : une reprise de la chaîne relit son récit dans
+    la mémoire, pas sur un sous-job qui n'existe pas — sans quoi l'aval qui
+    lit « $plan.recit.hook » repartait sur le résumé de la fiche."""
+    from test_chaines_api import RECIT_D_ESSAI
+    atelier.faux.recit = {**RECIT_D_ESSAI, "empreinte": "sha256:memoire"}
+    premier = _job(atelier, atelier.post("/v1/render", json={
+        "workflow": "chaine-qui-se-souvient", "graine": 3}))
+    assert premier["status"] == "succeeded", premier.get("problem")
+    # Le second passage reprend le plan de la mémoire, puis casse à la peinture.
+    vus = []
+
+    def avant(plan):
+        vus.append(plan.workflow)
+        if len(vus) == 2:                       # relevé, puis la peinture (le plan est repris)
+            raise BackendExecutionError("le moteur a refusé")
+    atelier.faux.avant = avant
+    echoue = _job(atelier, atelier.post("/v1/render", json={
+        "workflow": "chaine-qui-se-souvient", "graine": 3}))
+    assert echoue["status"] == "failed" and echoue["problem"]["etape"] == "peinture"
+    plan = next(e for e in echoue["etapes"] if e["id"] == "plan")
+    assert plan["job_id"] is None and plan["resultat"]["memoire"]["reprise"] is True
+    reprise = _job(atelier, atelier.post(f"/v1/jobs/{echoue['id']}/reprendre"))
+    assert reprise["status"] == "succeeded", reprise.get("problem")
+    assert vus == ["sd15-txt2img"] * 3          # un seul run de plus : la peinture
+    repris = next(e for e in reprise["etapes"] if e["id"] == "plan")
+    assert repris["note"] == f"repris du job {echoue['id']}" and repris["job_id"] is None
+    assert repris["resultat"]["recit"]["hook"] == "la lanterne"
+    # …et la peinture a reçu la clé longue du récit, que la fiche ne garde pas.
+    peinture = next(e for e in reprise["etapes"] if e["id"] == "peinture")
+    sous = atelier.get(f"/v1/jobs/{peinture['job_id']}").json()
+    assert sous["params"]["prompt"] == "i" * 120

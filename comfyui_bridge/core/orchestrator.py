@@ -15,7 +15,7 @@ engine-specific is reached through ``RenderBackend`` / ``Reconciler`` /
 from __future__ import annotations
 
 from dataclasses import replace as _replace
-from typing import Any
+from typing import Any, Iterable
 
 from .delivery import compare, describe
 from .errors import BridgeError, HardwareReconciliationError, to_problem
@@ -32,6 +32,23 @@ _CONSTRAINT_ALIASES["frames"] = "latent_batch"
 
 # No global parameter defaults: values are not invented here. A workflow that
 # declares nothing keeps the values its author baked into the graph.
+
+# La convention des TRANCHES, côté nœud : l'entrée littérale qui dit en combien
+# de parts une même simulation est rendue (voir `noeud_de_tranches`, dans
+# l'adaptateur des chaînes, qui la lit sur le graphe). Ici on ne fait que la
+# reconnaître dans ce qu'un run a reçu.
+_COMPTE_DE_TRANCHES = ".segment_count"
+
+
+def _est_une_tranche(plan: ExecutionPlan) -> bool:
+    """Ce run rend-il une PART d'une simulation (tranche i de N, N > 1) ?"""
+    for cle, valeur in (plan.overrides or {}).items():
+        if str(cle).endswith(_COMPTE_DE_TRANCHES):
+            try:
+                return int(valeur) > 1
+            except (TypeError, ValueError):
+                return False
+    return False
 
 
 def derivable_params(kind: str, bindings, defaults: dict[str, Any] | None = None) -> list[str]:
@@ -77,7 +94,8 @@ class Orchestrator:
     # -- planning -------------------------------------------------------------
 
     def resolve_params(self, intent: RenderIntent, defaults: dict[str, Any],
-                       workflow: str = "") -> tuple[dict[str, Any], str]:
+                       workflow: str = "",
+                       lie: Iterable[str] | None = None) -> tuple[dict[str, Any], str]:
         """Resolve ONLY the parameters that were actually asked for.
 
         The workflow is the authority on its own settings. A value is injected
@@ -85,6 +103,12 @@ class Orchestrator:
         for it. Anything else is left out entirely, so the graph keeps the value
         its author chose — inventing a value here silently overrode workflows
         (a video workflow was being cut down to a single frame).
+
+        ``lie`` : ce que le graphe LIE (ses bindings). Le nombre d'images n'est
+        dérivé de la durée que si le graphe le reçoit : dérivé pour un graphe
+        qui prend la durée elle-même, il ne partait nulle part et chaque
+        sous-job disait « non appliqué — batch » (mesuré le 2026-09-19).
+        ``None`` : rien n'est su du graphe, la dérivation d'avant.
         """
         declared = dict(defaults or {})
         kind = (intent.kind.value if intent.kind else None) or declared.get("kind", "image")
@@ -122,11 +146,13 @@ class Orchestrator:
             if field in asked:
                 params[field] = cast(asked[field])
 
-        # Frame count: only when a duration was actually requested. For a still,
-        # the batch is only set if asked. Otherwise the workflow decides.
+        # Frame count: only when a duration was actually requested — and only
+        # for a graph that receives it (or one we know nothing about). For a
+        # still, the batch is only set if asked. Otherwise the workflow decides.
         fps = int(asked.get("fps", 0)) or 0
         duration = float(asked.get("duration_s", 0) or 0)
-        if kind == "video" and duration > 0 and fps > 0:
+        derivable = lie is None or "latent_batch" in set(lie)
+        if kind == "video" and duration > 0 and fps > 0 and derivable:
             params["latent_batch"] = max(1, round(duration * fps))
         elif "batch" in asked:
             params["latent_batch"] = int(asked["batch"])
@@ -173,7 +199,8 @@ class Orchestrator:
         profile = self._registry.get_profile(intent.workflow)  # raises if unknown
         # The workflow's declared kind is the default when the caller states none.
         defaults = {"kind": profile.kind, **profile.defaults}
-        params, kind = self.resolve_params(intent, defaults, workflow=profile.name)
+        params, kind = self.resolve_params(intent, defaults, workflow=profile.name,
+                                           lie=profile.accepts or None)
         self._apply_constraints(params, intent.constraints)
         # A value the workflow cannot receive goes nowhere. Naming it here is
         # the difference between "your 10 frames were applied" and the truth.
@@ -185,8 +212,15 @@ class Orchestrator:
             kind == "video" and "latent_batch" in params and "latent_batch" in reachable) else set()
         # Nommés comme l'appelant les a envoyés : lui rendre "latent_batch"
         # quand il a écrit "batch" le laissait chercher un champ qui n'existe pas.
-        ignored = tuple(sorted(intent_field_of(k) for k in params
-                               if profile.accepts and k not in reachable and k not in converties))
+        # Une CONTRAINTE sur ce que le graphe ne reçoit pas (« au plus 10
+        # images » pour un graphe qui prend la durée) n'a rien contraint : dite
+        # sous le nom que l'appelant a employé, comme un réglage sans prise.
+        sans_prise = {intent_field_of(_CONSTRAINT_ALIASES.get(c.key, c.key))
+                      for c in intent.constraints
+                      if profile.accepts and _CONSTRAINT_ALIASES.get(c.key, c.key) not in reachable}
+        ignored = tuple(sorted({intent_field_of(k) for k in params
+                                if profile.accepts and k not in reachable and k not in converties}
+                               | sans_prise))
         return ExecutionPlan(
             intent=intent,
             params=params,
@@ -377,13 +411,18 @@ class Orchestrator:
                 self._store.append_log(job_id, f"simulated (plan only, no media): {a.path}")
         else:
             # End of chain on success: the produced MEDIA is the deliverable.
+            # UNE TRANCHE N'EST PAS LE MÉDIA : rendue comme part i de N d'une
+            # même simulation, sa durée n'est pas celle demandée, et l'écart
+            # par tranche (« demandé 10, livré 40 ») ne disait rien de vrai —
+            # la durée se juge au parent, sur le recollage (2026-09-19).
+            tranche = _est_une_tranche(plan)
             delivered = []
             for a in result.artifacts:
                 self._store.append_log(job_id, f"delivered media: {a.path}")
                 # Ce qui a été demandé n'est pas toujours ce qui sort : un
                 # workflow peut recalculer les dimensions. Le constater sur le
                 # fichier, et le dire — au journal comme au livrable.
-                gaps = compare(plan.params, a.measured or {})
+                gaps = [] if tranche else compare(plan.params, a.measured or {})
                 if gaps:
                     self._store.append_log(job_id, describe(gaps))
                 delivered.append(_replace(a, gaps=tuple(gaps)))

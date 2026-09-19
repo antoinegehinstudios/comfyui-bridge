@@ -77,10 +77,22 @@ DEFAUTS_DU_PLAN = {
 # « selon-le-fond », ni le négatif « selon-l-oeuvre ». Ce que le mode emploie
 # reste en LITTÉRAL dans le graphe (LITTERAUX_DU_GRAPHE) et les nœuds gardent
 # leurs défauts d'identité : le rendu livré le 15 à midi n'a pas bougé.
-DEFAUTS_INK = {"fond": "washi", "ambiance": "lanterne", "encre": "lavis", "negatif": "non"}
-LITTERAUX_DU_GRAPHE = {"rendu": "ink-bleed", "conduite": "le plan", "bords": "fondus"}
+# DÉCISION ÉCRITE, 2026-09-19 (Antoine : « tout paramètre a son poids, les
+# paramètres fantômes sont à bannir ») : « bords » REVIENT chez l'encre — il
+# pèse sur la peinture (la pose de l'œuvre sur la feuille) et un raccourci le
+# nomme, qui partait en 422 depuis son retrait. Le défaut reste « fondus ».
+DEFAUTS_INK = {"fond": "washi", "ambiance": "lanterne", "encre": "lavis", "negatif": "non",
+               "bords": "fondus"}
+LITTERAUX_DU_GRAPHE = {"rendu": "ink-bleed", "conduite": "le plan"}
 
-BORNES_DU_PLAN = {"contemplation_s": (3, 5), "conclusion_s": (0, 30), "duration_s": (5, 79)}
+# DÉCISION ÉCRITE, 2026-09-19 : LA DURÉE DEMANDÉE FAIT LOI. Deux productions
+# demandées à 10 s ont livré 72,9 s puis 88,7 s : le plan s'écrivait sans
+# budget, et le rendu allongeait en silence. Le plancher passe de 5 à 12 s —
+# l'accroche (2,5 s), la fin de la technique, la contemplation et trois temps
+# tenus (Visite guidée ≈ 12 s ; Peinture calme ≈ 17 s avec 4 s de
+# contemplation) ; le VRAI minimum est dit par « le_plan_tient_dans_la_duree »,
+# avant de peindre. Le défaut (45 s) ne bouge pas.
+BORNES_DU_PLAN = {"contemplation_s": (3, 5), "conclusion_s": (0, 30), "duration_s": (12, 79)}
 OPTIONS_INK = {
     "fond": ["washi", "sepia", "gris-atelier"],
     "ambiance": ["lanterne", "chandelle", "atelier"],
@@ -89,7 +101,12 @@ OPTIONS_INK = {
     # c'est le mode du nœud pour une œuvre sombre (une scène de nuit peinte en
     # positif ne se lit qu'à la couleur — Antoine, Bloodborne). Le défaut reste « non ».
     "negatif": ["non", "oui", "selon-l-oeuvre"],
+    "bords": ["fondus", "francs"],
 }
+# La FIN FIXE que le nœud de déroulement de chaque technique impose, avant la
+# contemplation : ce que le plan retranche de la durée demandée pour tailler ses
+# temps (« $technique.budget.queue_s », 2026-09-19). L'encre : PEINTURE_FIN_S.
+BUDGET_INK = {"queue_s": 7.0}
 # LE VOCABULAIRE DES CATÉGORIES DE CHAMPS, déclaré une fois (réconciliation),
 # dans cet ordre ; chaque champ exposé en nomme une et porte son aide.
 CATEGORIES_DE_CHAMPS = ["oeuvre", "recit", "format", "technique", "matiere", "lumiere", "avance"]
@@ -101,7 +118,7 @@ CATEGORIES_DU_PLAN = {
     "seed": "avance", "technique": "technique",
 }
 CATEGORIES_DE_L_ENCRE = {"fond": "matiere", "encre": "matiere", "negatif": "matiere",
-                         "ambiance": "lumiere"}
+                         "bords": "matiere", "ambiance": "lumiere"}
 
 # CE QUE CHAQUE ÉTAPE DU PLAN APPELLE, ET CE QU'ELLE REÇOIT DE L'AMONT.
 CONTRAT_DU_PLAN = {
@@ -109,11 +126,25 @@ CONTRAT_DU_PLAN = {
     "culture": ("image-iconologue", {"1.markers_json": "$analyse.recit.markers_json",
                                      "1.anchors_json": "$analyse.recit.anchors_json",
                                      "1.empreinte_iconographe": "$analyse.recit.empreinte"}),
+    # DÉCISION ÉCRITE, 2026-09-19 : l'intention reçoit le BUDGET (la durée, la
+    # contemplation, la fin fixe de la technique choisie — lue dans SON fichier)
+    # et la GRAINE : le plan se taille dans la durée, et la même graine donne
+    # le même plan.
     "intention": ("image-intention", {"70.style_approche": "$style_approche",
                                       "62.markers_json": "$analyse.recit.markers_json",
                                       "62.culture_json": "$culture.recit.culture_json",
-                                      "62.anchors_json": "$culture.recit.anchors_json"}),
+                                      "62.anchors_json": "$culture.recit.anchors_json",
+                                      "62.duree_s": "$duration_s",
+                                      "62.contemplation_s": "$contemplation_s",
+                                      "62.queue_s": "$technique.budget.queue_s",
+                                      "62.seed": "$seed"}),
 }
+# CE DONT LE PLAN SE SOUVIENT : la clé de mémoire de l'intention — même image
+# (l'empreinte d'Iconographe, la clé d'Iconologue), mêmes réglages, même
+# graine, même technique → le même plan, repris sans run (2026-09-19).
+CLE_DE_MEMOIRE_DE_L_INTENTION = [
+    "$analyse.recit.empreinte", "$culture.recit.cle", "$style_narratif", "$style_approche",
+    "$seed", "$duration_s", "$contemplation_s", "$technique"]
 
 # CE QUE L'ENCRE MET DERRIÈRE CHAQUE RÔLE : le graphe, et ses entrées de nœud.
 CONTRAT_DE_L_ENCRE = {
@@ -121,7 +152,8 @@ CONTRAT_DE_L_ENCRE = {
         "61.markers_json": "$analyse.recit.markers_json",
         "61.direction_json": "$intention.recit.direction_json",
         "61.fond": "$fond", "61.ambiance": "$ambiance", "61.encre": "$encre",
-        "61.contemplation_s": "$contemplation_s", "61.negatif": "$negatif"}),
+        "61.contemplation_s": "$contemplation_s", "61.negatif": "$negatif",
+        "61.bords": "$bords"}),
     "conclusion": ("video-reveal-closing", {
         "6.fond": "$fond", "6.ambiance": "$ambiance",
         "6.depart_s": "$deroulement.recit.duree_retenue_s",
@@ -134,7 +166,13 @@ CONTROLES_PLAN_VALIDE = [
     "l_accroche_ne_devoile_pas_le_climax", "le_plan_a_de_quoi_croitre",
     "l_accroche_est_un_detail", "l_accroche_montre_de_la_matiere",
     "le_climax_est_la_figure_de_l_oeuvre", "le_climax_garde_un_coeur_pour_la_fin",
-    "le_trajet_ne_revient_pas", "le_plan_tient_dans_l_approche"]
+    "le_trajet_ne_revient_pas", "le_plan_tient_dans_l_approche",
+    # …et le plan tient dans la DURÉE demandée (2026-09-19) : refusé chiffré
+    # avant de peindre, jamais d'allonge silencieuse.
+    "le_plan_tient_dans_la_duree"]
+# Le constat COMMUN de la peinture, porté par la chaîne devant la liste de la
+# technique : le rendu a-t-il tenu la durée que le plan prévoyait (2026-09-19).
+CONTROLES_PLAN_TENU_DU_PLAN = ["la_duree_est_tenue"]
 CONTROLES_PLAN_TENU = [
     "l_accroche_est_vue_a_2_5_s", "le_climax_est_hors_du_cadre_d_ouverture",
     "le_climax_est_tenu", "les_temps_se_suivent", "l_ordre_du_plan_est_suivi",
@@ -179,9 +217,12 @@ def test_le_plan_est_agnostique_et_ne_nomme_aucune_technique(ink):
         etape = [e for e in chaine.etapes if e.id == ident][0]
         assert etape.role == role and etape.workflow is None, ident
         assert etape.technique == "$technique", ident
-    # …et le contrôle de la peinture prend sa liste chez la technique.
+    # …et le contrôle de la peinture prend sa liste chez la technique — devant
+    # elle, le seul constat que le PLAN porte lui-même : la durée est-elle
+    # tenue (DÉCISION ÉCRITE, 2026-09-19).
     plan_tenu = [e for e in chaine.etapes if e.id == "plan_tenu"][0]
-    assert plan_tenu.params == {"technique": "$technique", "controles": "plan_tenu"}
+    assert plan_tenu.controles_nommes == "plan_tenu" and plan_tenu.technique == "$technique"
+    assert [c["id"] for c in plan_tenu.controles_propres] == CONTROLES_PLAN_TENU_DU_PLAN
     # Aucun nom de graphe de peinture ni d'écriture ne reste dans le plan, et
     # aucun nom de technique non plus — hors des notes, qui racontent l'histoire.
     sans_notes = json.dumps({k: v for k, v in ink.items() if k != "notes"}, ensure_ascii=False)
@@ -232,6 +273,11 @@ def test_chaque_etape_ne_recoit_que_le_contrat_declare(ink):
             attendu = {k: v for k, v in attendu.items() if k != "media"}
         assert recu == attendu, ident
     assert etapes["raccord"]["extraire_queue"] == {"video": "$deroulement.livrable", "images": 50}
+    # Le plan est GARDÉ PAR CLÉ (2026-09-19) : l'intention déclare de quoi sa
+    # mémoire est faite — et elle seule, le plan LLM étant la seule étape qui
+    # ne rejoue pas à l'identique.
+    assert etapes["intention"]["rendre"]["memoire"] == {"cle": CLE_DE_MEMOIRE_DE_L_INTENTION}
+    assert [e["id"] for e in ink["etapes"] if "memoire" in (e.get("rendre") or {})] == ["intention"]
     # Les étapes à rôle ne portent QUE ce que le plan sait : le média et le format.
     assert etapes["deroulement"]["rendre"]["media"] == {"image": "$image"}
     assert "inputs" not in etapes["deroulement"]["rendre"]
@@ -271,6 +317,18 @@ def test_les_controles_communs_gardent_le_plan_et_le_livrable(ink):
     # un plan à un tracé sur six temps a été peint trente-deux minutes en 720p
     # avant que l'encre le refuse (2026-09-17, job 464e6a4c).
     assert (plan["technique"], plan["controles_de_la_technique"]) == ("$technique", "plan")
+    # Le contrôle de la durée est CHIFFRÉ par la demande elle-même : mesuré
+    # (le minimum du plan écrit) ≤ attendu (la durée demandée).
+    duree = [c for c in plan["controles"] if c["id"] == "le_plan_tient_dans_la_duree"][0]
+    assert (duree["valeur"], duree["op"], duree["attendu"]) == (
+        "$intention.recit.duree_minimale_s", "lte", "$duration_s")
+    # …et « plan_tenu » CONSTATE la durée tenue, devant la liste de la technique.
+    tenu = etapes["plan_tenu"]["constater"]
+    assert (tenu["technique"], tenu["controles_de_la_technique"]) == ("$technique", "plan_tenu")
+    assert [_juge(c) for c in tenu["controles"]] == [
+        {"id": "la_duree_est_tenue", "valeur": "$deroulement.recit.duree_tenue",
+         "op": "eq", "attendu": True}]
+    assert all(str(c.get("aide", "")).strip() for c in tenu["controles"])
     assert [c["id"] for c in etapes["controle"]["verifier"]] == [
         "le_montage_a_ses_parts", "livrable_pese"]
     # Deux parts (sans appel) ou trois (avec) : le contrôle dit l'un ET l'autre
@@ -290,6 +348,9 @@ def test_l_encre_tient_les_roles_du_plan(technique_encre):
     lue = noyau.lire_technique(technique_encre, "encre")
     assert lue.nom == "encre" and lue.libelle == "Encre"
     assert sorted(lue.roles) == sorted(CONTRAT_DE_L_ENCRE)
+    # La fin fixe que son nœud impose, déclarée là où elle déclare ses entrées
+    # — et lisible par le plan comme « $technique.budget.queue_s ».
+    assert technique_encre["budget"] == BUDGET_INK and lue.donnees["budget"] == BUDGET_INK
     for role, (workflow, inputs) in CONTRAT_DE_L_ENCRE.items():
         assert lue.roles[role].workflow == workflow, role
         assert lue.roles[role].inputs == inputs, role
@@ -408,10 +469,18 @@ def test_le_graphe_local_du_deroulement_porte_les_memes_defauts():
     for cle, valeur in LITTERAUX_DU_GRAPHE.items():
         assert noeud["inputs"][cle] == valeur, cle
     assert noeud["inputs"]["contemplation_s"] == DEFAUTS_DU_PLAN["contemplation_s"]
+    # DÉCISION ÉCRITE, 2026-09-19 : le rendu n'allonge que dans une MARGE qu'il
+    # déclare (l'écart entre l'estimation de l'intention et le calcul exact) ;
+    # « duree_max_s » reste (la conduite d'avant, sans effet sous le plan).
+    assert noeud["inputs"]["allonge_max_s"] == 5.0 and noeud["inputs"]["duree_max_s"] == 79.0
     fermeture = json.loads((graphes / "video-reveal-closing.json").read_text(encoding="utf-8"))["6"]
     assert fermeture["class_type"] == "InkClosing"
     assert fermeture["inputs"]["hold_s"] == 0.5 and not fermeture["inputs"].get("goutte", False)
     for cle in ("fermeture_json", "appel_texte", "prolongation_s"):
         assert cle in fermeture["inputs"], cle
-    appel = json.loads((graphes / "video-appel-final.json").read_text(encoding="utf-8"))["7"]
+    graphe_appel = json.loads((graphes / "video-appel-final.json").read_text(encoding="utf-8"))
+    appel = graphe_appel["7"]
     assert appel["class_type"] == "InkCaption" and "police" in appel["inputs"]
+    # DÉCISION ÉCRITE, 2026-09-19 : l'appel ne dure plus 3,5 s en littéral — à
+    # 0, sa durée est DÉDUITE du texte (écriture + lecture), le défaut du nœud.
+    assert graphe_appel["3"]["inputs"]["value"] == 0.0

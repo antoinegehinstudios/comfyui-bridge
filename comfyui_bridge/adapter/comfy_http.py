@@ -72,6 +72,29 @@ def _served_from_cache(entry: dict) -> bool:
     return bool(producing) and producing.issubset(cached)
 
 
+def dire_les_noeuds_fautifs(fautes: dict) -> str:
+    """Les « node_errors » du moteur, nœud par nœud, en une phrase : l'identifiant,
+    la classe, chaque message (et son détail), et les sorties qui seraient
+    ignorées. C'est ce qu'un journal doit dire pour qu'on corrige le graphe
+    sans rejouer onze minutes."""
+    phrases = []
+    for ident, noeud in fautes.items():
+        noeud = noeud if isinstance(noeud, dict) else {}
+        messages = []
+        for erreur in noeud.get("errors") or []:
+            if not isinstance(erreur, dict):
+                continue
+            message = str(erreur.get("message") or erreur.get("type") or "erreur")
+            details = str(erreur.get("details") or "").strip()
+            messages.append(message + (f" ({details})" if details else ""))
+        ignorees = [str(s) for s in (noeud.get("dependent_outputs") or [])]
+        phrases.append(
+            f"nœud {ident} ({noeud.get('class_type') or '?'}) : "
+            + ("; ".join(messages) or "erreur sans message")
+            + (f" — sorties ignorées : {', '.join(ignorees)}" if ignorees else ""))
+    return " | ".join(phrases)
+
+
 class ComfyUIHttpBackend:
     def __init__(self, settings: Settings, catalog: WorkflowCatalog,
                  inflight: InflightLog | None = None) -> None:
@@ -128,10 +151,13 @@ class ComfyUIHttpBackend:
         progress is ever reported.
         """
         spec = self._catalog.get_spec(plan.workflow)
-        params = self._with_neutral_media(spec, dict(plan.params))
+        params = dict(plan.params)
         # `monter` déplie les gabarits de montage : le nombre de blocs sort des
-        # paramètres, donc les liaisons ne sont connues qu'après le dépliage.
+        # paramètres, donc les liaisons ne sont connues qu'après le dépliage —
+        # et le montage se décide sur ce que l'appelant a VRAIMENT joint : un
+        # média absent reste absent ici (voir _with_neutral_media, après).
         gabarit, liaisons = self._catalog.monter(spec, params)
+        params = self._with_neutral_media(spec, params, liaisons)
         graph = apply_overrides(inject(gabarit, liaisons, params), plan.overrides)
         # UNE DEMANDE N'ATTEND JAMAIS DERRIÈRE UN TRAVAIL ÉTRANGER : ce qui est
         # dans la file du moteur sans être passé par la passerelle en est
@@ -308,15 +334,27 @@ class ComfyUIHttpBackend:
         out_dir.mkdir(parents=True, exist_ok=True)
         return self._download(entry, out_dir, req_t, plan), _execution_seconds(entry)
 
-    def _with_neutral_media(self, spec, params: dict[str, Any]) -> dict[str, Any]:
+    def _with_neutral_media(self, spec, params: dict[str, Any],
+                            liaisons: dict[str, Any] | None = None) -> dict[str, Any]:
         """A media input the caller left empty gets a neutral element, never the
-        content the workflow happens to carry."""
+        content the workflow happens to carry.
+
+        ``liaisons`` : les liaisons que le graphe ASSEMBLÉ porte vraiment. Un
+        montage décide de ses variantes sur les médias joints (« si image_3 ne
+        null ») ; remplir le neutre AVANT le montage lui faisait voir trois images
+        là où une seule était jointe — mesuré le 2026-09-18 : l'encodeur recevait
+        « <Picture 2> is the exact subject to show, same identity and details »
+        sur une image blanche, pour toute demande à une image, et l'amorce à
+        trois références pour une demande sans image. Le neutre ne va donc
+        qu'aux entrées que le graphe assemblé a gardées.
+        """
         if not self._settings.neutral_media:
             return params
         from ..core.intention import media_category
         from .neutral import ensure_neutral, has_neutral
         deposes: dict[str, str] = {}        # une catégorie, un seul dépôt
-        for param in sorted(spec.bindings):
+        cibles = spec.bindings if liaisons is None else liaisons
+        for param in sorted(cibles):
             if params.get(param) or not has_neutral(param):
                 continue
             categorie = media_category(param) or ""
@@ -353,7 +391,38 @@ class ComfyUIHttpBackend:
         prompt_id = resp.get("prompt_id")
         if not prompt_id:
             raise BackendExecutionError("ComfyUI returned no prompt_id", response=str(resp)[:200])
+        fautes = resp.get("node_errors")
+        if isinstance(fautes, dict) and fautes:
+            # UN 200 DONT « node_errors » N'EST PAS VIDE EST UN REFUS. Le moteur
+            # a pris le prompt, mais il IGNORERA les sorties qui dépendent des
+            # nœuds fautifs (« Output will be ignored ») — mesuré le
+            # 2026-09-19 : un nœud hors bornes (« Value -22 smaller than min of
+            # -1 »), onze minutes de run sans écrire le relais attendu, et
+            # l'échec au tour suivant seulement. Le prompt est retiré de la
+            # file, et chaque nœud est nommé avec ce que le moteur lui reproche.
+            retrait = self._retirer_de_la_file(str(prompt_id), req_t)
+            raise BackendExecutionError(
+                "ComfyUI a refusé une partie du graphe (node_errors) : "
+                + dire_les_noeuds_fautifs(fautes) + f" — prompt {retrait}",
+                status=200, node_errors=fautes)
         return str(prompt_id)
+
+    def _retirer_de_la_file(self, prompt_id: str, req_t: float) -> str:
+        """Retirer un prompt que le moteur a pris et qu'on refuse : son
+        opération officielle (POST /queue {delete}). Ce qui arrive est DIT dans
+        le refus, jamais tu — un prompt laissé en file tournerait pour rien."""
+        try:
+            req = urllib.request.Request(
+                self._base + "/queue", data=json.dumps({"delete": [prompt_id]}).encode("utf-8"),
+                headers={"content-type": "application/json"}, method="POST")
+            with urllib.request.urlopen(req, timeout=req_t) as r:
+                r.read()
+            return f"{prompt_id} retiré de la file du moteur"
+        except Exception as exc:                        # noqa: BLE001
+            # repli: le retrait a échoué (moteur muet, prompt déjà parti) — le
+            # refus le dit, et la file du moteur reste visible sur /v1/engine/queue.
+            return f"{prompt_id} NON retiré de la file du moteur ({exc})"
+
 
     def _open_ws(self, client_id: str):
         """ComfyUI's own progress channel (see its script_examples).

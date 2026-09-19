@@ -814,3 +814,90 @@ def test_le_vocabulaire_des_categories_se_verifie_a_la_lecture(tmp_path):
             "s": {"type": "COMBO", "defaut": "a", "options": ["a"], "requiert": 1,
                   "options_depuis": {"menu": "m", "requiert": "hook"}}},
             "etapes": [{"id": "u", "rendre": {"workflow": "w"}}], "livrable": "$u.livrable"})
+
+
+# -- ce que la technique dit de son nœud, lu par le plan ------------------------
+
+def test_l_apercu_montre_les_entrees_que_la_technique_met_derriere_le_role(atelier):
+    """Ce que le lanceur montre est ce qui part (2026-09-19 : l'aperçu taisait
+    tout ce que la technique envoyait au nœud). Les entrées du rôle, résolues
+    avec les valeurs de la demande, sous celles de l'étape ; ce qui n'existe
+    pas encore (un résultat d'amont) reste un renvoi, jamais inventé."""
+    vue = atelier.post("/v1/preview", json={"workflow": "chaine-a-techniques",
+                                            "fond": "sepia", "largeur": 96}).json()
+    peinture = [e for e in vue["etapes"] if e["id"] == "peinture"][0]
+    assert peinture["workflow"] == "graphe-au-trait"
+    assert peinture["params"]["inputs"] == {"61.fond": "sepia", "61.grain": "fin",
+                                            "61.largeur": 96}
+    sous_voile = atelier.post("/v1/preview", json={"workflow": "chaine-a-techniques",
+                                                   "technique": "voile"}).json()
+    peinture = [e for e in sous_voile["etapes"] if e["id"] == "peinture"][0]
+    assert peinture["params"]["inputs"] == {"61.fond": "voile-clair", "61.epaisseur": 0.5}
+
+
+def test_le_plan_lit_dans_le_fichier_de_la_technique_choisie_ce_que_son_noeud_impose():
+    """« $technique.budget.queue_s » : la fin fixe que le nœud de la technique
+    impose, déclarée dans SON fichier — le plan la reçoit pour se tailler dans
+    la durée (2026-09-19). Résolu au run comme à l'aperçu, avec la technique
+    choisie ; une technique sans la section est refusée au chargement."""
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="comfybridge_techniques_budget_"))
+    trait = {**TECHNIQUE_TRAIT, "budget": {"queue_s": 7.0}}
+    voile = {**TECHNIQUE_VOILE, "budget": {"queue_s": 2.5}}
+    _ecrire(tmp, techniques=(trait, voile))
+    chaine = json.loads(json.dumps(CHAINE_A_TECHNIQUES))
+    chaine["etapes"].insert(0, {"id": "plan", "rendre": {
+        "workflow": "graphe-au-trait", "width": "$largeur", "height": "$largeur",
+        "inputs": {"61.largeur": "$largeur", "61.fin": "$technique.budget.queue_s"}}})
+    (tmp / "chaine-a-techniques.json").write_text(json.dumps(chaine), encoding="utf-8")
+    settings = Settings(comfy_backend="cli", dry_run=True,
+                        comfyui_base_url="http://127.0.0.1:9", comfyui_request_timeout_s=1,
+                        hermes_db=tmp / "hermes.sqlite3", comfy_output_dir=tmp / "out",
+                        hermes_mode="local", workflows_dir=tmp / "workflows",
+                        tranche_octets=0)
+    app = create_app(settings)
+    faux = BackendQuiLivre(settings.comfy_output_dir)
+    app.state.container.orchestrator._backend = faux
+    vus = []
+    faux.avant = lambda plan: vus.append(dict(plan.overrides))
+    with TestClient(app) as client:
+        vue = client.post("/v1/preview", json={"workflow": "chaine-a-techniques",
+                                               "technique": "voile"}).json()
+        plan = [e for e in vue["etapes"] if e["id"] == "plan"][0]
+        assert plan["params"]["inputs"] == {"61.largeur": 64, "61.fin": 2.5}
+        job = _job(client, client.post("/v1/render", json={"workflow": "chaine-a-techniques"}))
+        assert job["status"] == "succeeded", job.get("problem")
+        assert vus[0] == {"61.largeur": 64, "61.fin": 7.0}            # la technique par défaut
+        job = _job(client, client.post("/v1/render", json={"workflow": "chaine-a-techniques",
+                                                           "technique": "voile"}))
+        assert job["status"] == "succeeded", job.get("problem")
+        assert vus[2] == {"61.largeur": 64, "61.fin": 2.5}
+    # Une technique publiée qui ne porte pas le chemin : refusée en le nommant,
+    # avant qu'une chaîne ne dépense ses étapes d'avant.
+    (tmp / "techniques" / "muette.json").write_text(
+        json.dumps({**TECHNIQUE_VOILE, "technique": "muette"}), encoding="utf-8")
+    with pytest.raises(WorkflowMappingError, match="budget.queue_s"):
+        create_app(settings)
+    shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_un_raccourci_qui_porte_un_reglage_d_une_autre_technique_est_publie_perime(atelier):
+    """« Brume dorée » portait « fond » — le papier de l'encre — sous la brume :
+    il aurait rendu une brume blanche sans le dire (2026-09-19). Un réglage
+    d'une AUTRE technique que celle du raccourci le rend périmé, publié tel,
+    avec la raison ; sous sa technique, le même réglage tient."""
+    from comfyui_bridge.adapter import raccourcis
+    base = pathlib.Path(atelier.app.state.container.settings.hermes_db).parent
+    raccourcis.ecrire(base, "chaine-a-techniques", {
+        "id": "grain-sous-le-voile", "workflow": "chaine-a-techniques",
+        "titre": "Grain sous le voile", "valeurs": {"technique": "voile", "grain": "gros"},
+        "ordre": 100})
+    raccourcis.ecrire(base, "chaine-a-techniques", {
+        "id": "grain-au-trait", "workflow": "chaine-a-techniques",
+        "titre": "Grain au trait", "valeurs": {"technique": "trait", "grain": "gros"},
+        "ordre": 100})
+    vus = {r["id"]: r for r in atelier.get("/v1/workflows").json()
+           ["workflows"]["chaine-a-techniques"]["raccourcis"]}
+    assert "perime" not in vus["grain-au-trait"]
+    assert vus["grain-sous-le-voile"]["perime"] == {
+        "champs": ["grain"],
+        "raison": "« grain » : n'est pas un réglage de la technique voile — sans effet sous elle"}

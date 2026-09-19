@@ -629,6 +629,7 @@ def _intention_detape(params: dict, label: str = "") -> Any:
     from ..core.intention import MediaKind, RenderIntent
     reglages = {k: v for k, v in params.items()
                 if not (isinstance(v, str) and v.startswith("$"))}
+    reglages.pop("memoire", None)          # la clé de mémoire n'est pas un réglage du run
     nom = str(reglages.pop("workflow", "") or "")
     media = {k: str(v) for k, v in (reglages.pop("media", None) or {}).items()
              if v and not (isinstance(v, str) and v.startswith("$"))}
@@ -650,8 +651,9 @@ def _estimation_chaine(c, chaine, valeurs: dict) -> dict:
     total = bas = haut = 0.0
     manque: str | None = None
     technique = _noyau.technique_choisie(chaine, valeurs, c.catalog.techniques())
+    depart = _noyau.resultats_initiaux(chaine, technique)
     for etape in chaine.rendus:
-        params = _noyau.resoudre(etape.params, valeurs, {}, strict=False)
+        params = _noyau.resoudre(etape.params, valeurs, depart, strict=False)
         # Le workflow d'une étape peut être CHOISI à l'appel — par un renvoi
         # (« $mode ») ou par la TECHNIQUE qui tient son rôle : c'est le nom
         # résolu qui a une mesure, pas le rôle ni le renvoi.
@@ -904,7 +906,57 @@ def _vue_raccourci(c, spec, fiche: dict) -> dict:
     ident = str(fiche.get("id") or "")
     if raccourcis.apercu_fichier(_raccourcis_base(c), spec.name, ident):
         vue["apercu_url"] = f"/v1/workflows/{spec.name}/raccourcis/{ident}/apercu"
+    # Un raccourci est jugé À LA LECTURE par la validation d'une demande :
+    # périmé, il est publié périmé — ses champs et la raison —, jamais tu ni
+    # retiré (2026-09-19 : trois raccourcis sur cinq partaient en 422).
+    perime = _perime_de_raccourci(c, spec, fiche.get("valeurs") or {})
+    if perime is not None:
+        vue["perime"] = perime
     return vue
+
+
+def _perime_de_raccourci(c, spec, valeurs: dict) -> dict | None:
+    """Ce qui rend un raccourci PÉRIMÉ, champ par champ : un champ que le mode
+    n'expose plus, une pièce jointe, un réglage d'une AUTRE technique que celle
+    du raccourci, une valeur hors de son menu ou de ses bornes.
+
+    C'est la validation d'une demande (`core/chaine.py::valeurs`, `valeur_de`),
+    lue champ par champ pour TOUT nommer — une demande s'arrête au premier
+    refus ; un raccourci doit dire tout ce qui a vieilli. Ce qu'une demande
+    exige et qu'un raccourci ne porte jamais (la pièce jointe requise) ne le
+    périme pas.
+    """
+    from ..core import chaine as _noyau
+    fautes: list[tuple[str, str]] = []
+    if spec.est_chaine:
+        chaine = c.catalog.chaine(spec)
+        techniques = c.catalog.techniques()
+        admis = _noyau.champs_admis(chaine, techniques)
+        technique = _noyau.technique_choisie(chaine, valeurs, techniques)
+        retenus = _noyau.champs_retenus(chaine, technique)
+        options = _options_exposees(c, chaine, technique)
+        for nom, brute in valeurs.items():
+            champ = admis.get(nom)
+            if champ is None:
+                fautes.append((nom, f"« {nom} » : le mode ne l'expose plus"))
+            elif champ.media is not None:
+                fautes.append((nom, f"« {nom} » : une pièce jointe ne s'enregistre pas"))
+            elif nom not in retenus:
+                quelle = technique.nom if technique is not None else "choisie"
+                fautes.append((nom, f"« {nom} » : n'est pas un réglage de la technique "
+                                    f"{quelle} — sans effet sous elle"))
+            else:
+                try:
+                    _noyau.valeur_de(retenus[nom], brute, options.get(nom))
+                except InputValueRefusedError as exc:
+                    fautes.append((nom, exc.detail))
+        return raccourcis.perime(fautes)
+    try:
+        _valeurs_de_raccourci(c, spec, valeurs)
+    except (UnknownWorkflowInputError, InputValueRefusedError) as exc:
+        noms = exc.extensions.get("fields") or [exc.extensions.get("field") or "?"]
+        fautes = [(str(nom), exc.detail) for nom in noms]
+    return raccourcis.perime(fautes)
 
 
 def _raccourcis_vus(c, spec) -> list[dict]:
@@ -1346,12 +1398,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             technique = _noyau.technique_choisie(chaine, valeurs, c.catalog.techniques())
             # Pas de graphe : une chaîne n'en a pas. Ce qu'il y a à voir avant de
             # dépenser, c'est la SUITE des étapes (avec le graphe que la technique
-            # donne à chaque rôle) et les valeurs qu'elles recevront.
+            # donne à chaque rôle) et les valeurs qu'elles recevront — celles de
+            # l'étape ET les entrées que la technique met derrière son rôle,
+            # résolues comme au run : ce que le lanceur montre est ce qui part
+            # (2026-09-19 : l'aperçu taisait tout ce que la technique envoyait).
+            depart = _noyau.resultats_initiaux(chaine, technique)
+
+            def _params(e):
+                params = _noyau.resoudre(e.params, valeurs, depart, strict=False)
+                role = (technique.roles.get(e.role)
+                        if technique is not None and e.role is not None else None)
+                if role is not None:
+                    params["inputs"] = _noyau.entrees_du_role(role, params, valeurs, depart,
+                                                              strict=False)
+                return params
+
             return {"workflow": spec.name, "chaine": True, "params": valeurs,
                     "technique": technique.nom if technique is not None else None,
                     "non_appliques": non_appliques,
-                    "etapes": [{**ligne,
-                                "params": _noyau.resoudre(e.params, valeurs, {}, strict=False)}
+                    "etapes": [{**ligne, "params": _params(e)}
                                for e, ligne in zip(chaine.etapes,
                                                    _etapes_annoncees(chaine, technique))],
                     "livrable": chaine.livrable}
