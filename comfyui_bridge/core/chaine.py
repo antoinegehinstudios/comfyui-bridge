@@ -969,7 +969,10 @@ def controler(controles: list[dict[str, Any]], valeurs_exposees: dict[str, Any],
 
     Rend une ligne par contrôle : ce qui était attendu, ce qui a été MESURÉ, et
     le verdict. Un contrôle qui ne dit pas la valeur mesurée oblige à refaire
-    le run pour savoir de combien on a raté.
+    le run pour savoir de combien on a raté. Un contrôle qui porte une « aide »
+    (ce qu'il mesure, quoi faire quand il tombe) la rend avec sa ligne : un
+    refus qui ne dit que « mesuré, attendu » est juste, et muet (2026-09-19,
+    deux plans refusés sans un mot de plus).
     """
     lignes: list[dict[str, Any]] = []
     for controle in controles:
@@ -978,7 +981,11 @@ def controler(controles: list[dict[str, Any]], valeurs_exposees: dict[str, Any],
             mesure = None                       # rien à ce nom : le contrôle échoue, et le dit
         attendu = resoudre(controle.get("attendu"), valeurs_exposees, resultats, strict=False)
         op = str(controle.get("op"))
-        lignes.append({"id": str(controle.get("id") or controle.get("valeur")),
-                       "op": op, "attendu": attendu, "mesure": mesure,
-                       "ok": evaluer(op, mesure, attendu)})
+        ligne = {"id": str(controle.get("id") or controle.get("valeur")),
+                 "op": op, "attendu": attendu, "mesure": mesure,
+                 "ok": evaluer(op, mesure, attendu)}
+        aide = controle.get("aide")
+        if isinstance(aide, str) and aide.strip():
+            ligne["aide"] = aide.strip()
+        lignes.append(ligne)
     return lignes

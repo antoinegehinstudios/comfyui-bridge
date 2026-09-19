@@ -554,8 +554,12 @@ class RunnerDeChaines:
         lignes = noyau.controler(controles, valeurs, resultats)
         faux = [l for l in lignes if not l["ok"]]
         if faux:
+            # Le refus dit ce qu'il mesure ET quoi faire, quand le contrôle
+            # porte une aide (2026-09-19 : deux plans refusés sur une mesure
+            # et un seuil, sans un mot de plus).
             dit = " ; ".join(f"{l['id']} : mesuré {l['mesure']!r}, attendu "
-                             f"{l['op']} {l['attendu']!r}" for l in faux)
+                             f"{l['op']} {l['attendu']!r}"
+                             + (f" — {l['aide']}" if l.get("aide") else "") for l in faux)
             if exiger:
                 raise ChainControlFailedError(f"contrôle non tenu — {dit}", controles=lignes)
             # UN CONSTAT N'ARRÊTE RIEN. Antoine, 2026-09-17 : « il ne faut plus que
@@ -592,14 +596,19 @@ class RunnerDeChaines:
         reglages.pop("label", None)
         reglages.pop("constraints", None)
         genre = reglages.pop("kind", None)
-        tranches = self._tranches_de(parent_id, etape, nom, reglages, media)
-        if tranches is not None:
-            return self._rendre_par_tranches(parent_id, etape, nom, media, genre, reglages,
-                                             label, etapes, rang, tranches, travail, chaine_nom)
+        # Un montage à un run par tour se rend ainsi, point : ses runs ne se
+        # montent qu'un tour à la fois (ce qu'un run relit vient du relais du
+        # précédent), et le monter d'un seul tenant pour le trancher échouait
+        # en le disant — « pas de tranches (… n'est ni une sortie déclarée …) »
+        # dans le journal de chaque demande (vu le 2026-09-18).
         tours = self._tours_separes(parent_id, etape, nom, reglages)
         if tours is not None:
             return self._rendre_par_tours(parent_id, etape, nom, media, genre, reglages,
                                           label, etapes, rang, tours, travail, chaine_nom)
+        tranches = self._tranches_de(parent_id, etape, nom, reglages, media)
+        if tranches is not None:
+            return self._rendre_par_tranches(parent_id, etape, nom, media, genre, reglages,
+                                             label, etapes, rang, tranches, travail, chaine_nom)
         fini = self._executer_run(parent_id, etape, nom, media, genre, reglages,
                                   f"{label}-{etape.id}"[:40], etapes, rang)
         return self._resultat_du_run(parent_id, etape, nom, fini)
@@ -1601,8 +1610,12 @@ def _resume(resultat: dict[str, Any]) -> dict[str, Any]:
         if cle in resultat:
             garde[cle] = resultat[cle]
     if "controles" in resultat:
+        # …avec l'aide du contrôle quand il en porte une : ce qu'un constat n'a
+        # pas tenu se lit sur la fiche, sans rouvrir la chaîne (2026-09-19).
         garde["controles"] = [{"id": l["id"], "ok": l["ok"], "mesure": l["mesure"],
-                               "attendu": l["attendu"]} for l in resultat["controles"]]
+                               "attendu": l["attendu"],
+                               **({"aide": l["aide"]} if l.get("aide") else {})}
+                              for l in resultat["controles"]]
         # un CONSTAT dit qu'il en est un, et ce qu'il n'a pas tenu : c'est ce
         # qu'un lanceur montre sans en faire une erreur (« c'est l'utilisateur
         # qui juge », 2026-09-17)

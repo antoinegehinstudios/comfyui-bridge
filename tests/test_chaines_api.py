@@ -161,8 +161,11 @@ CHAINE_AU_RECIT = {
                                 "inputs": {"61.fond": "$fond"}}},
         {"id": "temps", "verifier": [
             {"id": "hook_nomme", "valeur": "$un.recit.hook", "op": "exists"},
+            # Un contrôle qui EXPLIQUE son refus : ce qu'il mesure, quoi faire.
             {"id": "hook_vu_a_2_5_s", "valeur": "$un.recit.hook_vu.atteint", "op": "gte",
-             "attendu": 0.1}]},
+             "attendu": 0.1,
+             "aide": "L'accroche doit être vue à 2,5 s. Choisir une image dont "
+                     "l'accroche est un détail net."}]},
     ],
     "livrable": "$un.livrable",
 }
@@ -419,6 +422,10 @@ def test_le_recit_d_un_rendu_se_controle_et_sa_fiche_le_resume(atelier):
     rendu, temps = job["etapes"]
     assert [ctl["ok"] for ctl in temps["resultat"]["controles"]] == [True, True]
     assert temps["resultat"]["controles"][1]["mesure"] == 0.42
+    # La fiche garde l'aide du contrôle qui en porte une, et rien pour l'autre :
+    # ce que l'étape a jugé se relit sans rouvrir la chaîne (2026-09-19).
+    assert temps["resultat"]["controles"][1]["aide"].startswith("L'accroche doit être vue")
+    assert "aide" not in temps["resultat"]["controles"][0]
     # La fiche : les scalaires du premier niveau — ni le calendrier, ni l'objet
     # imbriqué, ni la phrase longue.
     assert rendu["resultat"]["recit"] == {"hook": "la lanterne", "temps_retenue": 3,
@@ -492,6 +499,15 @@ def test_un_recit_qui_ne_tient_pas_la_regle_arrete_la_chaine(atelier):
     faux = [ctl for ctl in job["problem"]["controles"] if not ctl["ok"]]
     assert [ctl["id"] for ctl in faux] == ["hook_vu_a_2_5_s"] and faux[0]["mesure"] == 0.02
     assert [e["statut"] for e in job["etapes"]] == ["done", "failed"]
+    # …ET LE REFUS S'EXPLIQUE (2026-09-19 : deux plans refusés sur « mesuré
+    # 0.245, attendu lte 0.15 », sans un mot de plus). L'aide du contrôle est
+    # jointe au détail — que le lanceur montrait déjà — et à sa ligne dans le
+    # problème ; le contrôle qui n'en porte pas n'a pas la clé.
+    aide = "L'accroche doit être vue à 2,5 s. Choisir une image dont l'accroche est un détail net."
+    assert job["problem"]["detail"].endswith(f"attendu gte 0.1 — {aide}")
+    assert faux[0]["aide"] == aide
+    tenu = [ctl for ctl in job["problem"]["controles"] if ctl["ok"]]
+    assert [ctl["id"] for ctl in tenu] == ["hook_nomme"] and "aide" not in tenu[0]
 
 
 def test_un_recit_illisible_est_dit_et_la_cle_reste_absente(atelier):

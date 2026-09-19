@@ -50,7 +50,13 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   valide, range et fabrique l'image ;
   un job porte `demande`, `etapes` (chaque étape rendue : `resultat`, dont
   `recit`, le récit compact écrit par le nœud — ce sur quoi l'étape `verifier`
-  de la chaîne a jugé), `artifacts[].{kind,path,url}`, `problem`. Un job de
+  de la chaîne a jugé, et `controles[].{id,ok,mesure,attendu,aide}`),
+  `artifacts[].{kind,path,url}`, `problem` — et sur un refus de chaîne
+  (`problem_kind` `controle-echoue`) : `problem.etape` et
+  `problem.controles[].{id,op,attendu,mesure,ok,aide}`, `aide` étant
+  l'explication que le contrôle porte dans sa chaîne ou sa technique (ce qu'il
+  mesure, quoi faire — jointe aussi au `detail` ; le lanceur la montre sous le
+  refus, contrôle par contrôle, depuis le 2026-09-19). Un job de
   CHAÎNE réussi ne livre QUE son livrable (la production finale montée) : les
   produits d'étapes — déroulement recollé, conclusion, appel, clips, récits,
   tranches — restent dans `etapes[].resultat` et dans les sous-jobs

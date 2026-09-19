@@ -168,59 +168,69 @@
           {
             "id": "le_plan_nomme_son_accroche",
             "valeur": "$intention.recit.hook",
-            "op": "exists"
+            "op": "exists",
+            "aide": "Le plan doit nommer son accroche — le premier détail montré, les 2,5 premières secondes. Le réalisateur n'a trouvé aucun élément pour ouvrir la révélation : choisir une image sur laquelle Iconographe relève des éléments nommés (des figures, des détails), ou recadrer sur ce qui est dessiné."
           },
           {
             "id": "le_plan_nomme_son_climax",
             "valeur": "$intention.recit.climax",
-            "op": "exists"
+            "op": "exists",
+            "aide": "Le plan doit nommer son climax — la figure qui porte l'œuvre, révélée en dernier. Le réalisateur n'en a désigné aucune : choisir une image dont le sujet est net (une figure, un motif central), ou recadrer sur lui."
           },
           {
             "id": "l_accroche_ne_devoile_pas_le_climax",
             "valeur": "$intention.recit.hook_recouvre_climax",
             "op": "eq",
-            "attendu": false
+            "attendu": false,
+            "aide": "L'accroche ne doit pas recouvrir la figure du climax (plus d'un dixième de sa boîte) : montrée d'entrée, il ne resterait rien à révéler. Aucun détail hors du climax n'a pu ouvrir la révélation : choisir une image où des détails vivent à l'écart du sujet principal, ou recadrer pour que le sujet ne remplisse pas tout le cadre."
           },
           {
             "id": "le_plan_a_de_quoi_croitre",
             "valeur": "$intention.recit.nb_temps",
             "op": "gte",
-            "attendu": 3
+            "attendu": 3,
+            "aide": "Une révélation a besoin d'au moins trois temps — l'accroche, une montée, le climax — pour croître. Trop peu d'éléments ont été relevés sur cette image : choisir une image plus riche (des figures et leurs parties, des détails nommés)."
           },
           {
             "id": "l_accroche_est_un_detail",
             "valeur": "$intention.recit.hook_aire",
             "op": "lte",
-            "attendu": 0.15
+            "attendu": 0.15,
+            "aide": "L'accroche — le premier détail montré — doit être un détail : au plus 15 % du cadre. Aucune partie assez petite, hors du sujet principal, n'a été relevée sur cette image. Recadrer sur le sujet (le Cadreur propose « Rogner sur le sujet »), ou choisir une image dont le sujet porte des détails."
           },
           {
             "id": "l_accroche_montre_de_la_matiere",
             "valeur": "$intention.recit.hook_est_vide",
             "op": "eq",
-            "attendu": false
+            "attendu": false,
+            "aide": "L'accroche doit montrer de la matière : une zone vide (un ciel, une nuit, un fond nu) n'a rien à révéler. Le réalisateur n'a trouvé que du vide pour ouvrir : recadrer sur ce qui est dessiné, ou choisir une image dont les détails ont du contenu."
           },
           {
             "id": "le_climax_est_la_figure_de_l_oeuvre",
             "valeur": "$intention.recit.climax_est_central",
             "op": "eq",
-            "attendu": true
+            "attendu": true,
+            "aide": "Le climax doit être la figure qui porte l'œuvre : le central que l'ancrage désigne (le sujet attesté quand Iconologue a reconnu l'œuvre), ou à défaut le temps de plus fort poids. Le plan conclut ailleurs, la révélation raterait son sujet : recadrer sur le sujet pour qu'il devienne le central de l'image, ou choisir une image dont le sujet est net."
           },
           {
             "id": "le_climax_garde_un_coeur_pour_la_fin",
             "valeur": "$intention.recit.climax_coeur",
-            "op": "exists"
+            "op": "exists",
+            "aide": "Le climax doit garder un cœur pour la fin : sa partie la plus reconnaissable (un visage, un crâne, une main) — ou la figure elle-même quand aucune partie n'est documentée. Aucun cœur n'a pu être nommé : le climax désigné n'est pas un élément relevé sur l'image. Choisir une image dont le sujet est relevé par l'analyse, ou recadrer sur lui."
           },
           {
             "id": "le_trajet_ne_revient_pas",
             "valeur": "$intention.recit.trajet_retours",
             "op": "lte",
-            "attendu": 2
+            "attendu": 2,
+            "aide": "Le trajet des temps — donc celui de la caméra — fait au plus deux demi-tours ; au-delà, la caméra part dans tous les sens. Ce plan revient sur ses pas : choisir l'approche « Peinture calme » (son chemin est continu, réordonné de proche en proche), ou une image dont les éléments se suivent."
           },
           {
             "id": "le_plan_tient_dans_l_approche",
             "valeur": "$intention.recit.temps_dans_l_approche",
             "op": "eq",
-            "attendu": true
+            "attendu": true,
+            "aide": "Le plan doit tenir dans le nombre de temps que l'approche autorise (« Peinture calme » en garde six au plus, « Visite guidée » dix). Il en compte davantage : choisir une approche qui en tient plus, ou une image aux éléments moins nombreux."
           }
         ],
         "technique": "$technique",
@@ -351,6 +361,7 @@
     "parametres_chez_les_techniques": "Antoine, 2026-09-16 au soir : « les paramètres — le style de tracé, le fond, l'ambiance, la technique de style… — ne vivent pas dans le workflow mais se réconcilient avec le workflow quand le paramètre l'appelle ; ce qui permet de les interchanger, d'en créer de nouvelles, avec un rendu drastiquement différent si le style l'est. » Depuis : « bords » et « conduite », que seule la peinture lit, sont exposés par les techniques qui les tiennent (l'encre les deux, la brume les bords) et plus par le plan ; l'appel final est un RÔLE de plus (« appel »), tenu par chaque technique comme le déroulement et la conclusion ; et le champ « technique » ne porte plus de défaut — c'est la technique qui se dit « par_defaut » dans son fichier. Le plan ne nomme ainsi aucune technique, ni par un graphe, ni par un défaut : une technique de plus est un fichier de plus, qui tient les trois rôles et expose ses propres réglages.",
     "champs_standardises": "Antoine, 2026-09-17 : « les champs doivent être nettoyés pour enlever ceux en doublon ou fantômes ; chacun porte une réconciliation concrète, standardisée par catégorie ; le socle du type de vidéo est stable, il attend des paramètres, il est une base, identifiée, claire ». Depuis : chaque champ exposé — ici pour les réglages du PLAN, chez chaque technique pour les siens — porte sa « categorie » (vocabulaire déclaré une fois dans la réconciliation, « categories_de_champs » : oeuvre, recit, format, technique, matiere, lumiere, avance) et son « aide » ; les aides ne vivent plus sur l'entrée de réconciliation du mode. « style_narratif » ne liste que les structures qui portent une accroche (« requiert »: {« temps »: « hook »}) : le plan l'exige (plan_valide), et dix-neuf structures sur vingt et une faisaient échouer le mode. Les options « d'avant » et « essai » des techniques (bords francs, ambiance selon-le-fond, rendu classique et front-organique, négatif selon-l-oeuvre, conduite la caméra, papier washi-sans-lampe) ne sont plus exposées : les nœuds les gardent comme défauts pour l'identité du rendu classique, les graphes portent en littéral ce que le mode emploie.",
     "le_plan_se_juge_aussi_pour_la_technique": "2026-09-17, après-midi : le plan se juge AVANT de peindre aussi sur ce que la TECHNIQUE exige de lui. « plan_valide » porte les dix contrôles du plan (« controles ») ET la liste « plan » de la technique choisie (« technique », « controles_de_la_technique ») ; chaque technique déclare cette liste, vide si elle n'exige rien. Mesuré ce jour : un plan à un seul tracé sur six temps a été peint trente-deux minutes en 720p avant que « des_traits_et_pas_que_des_blocs » le refuse — la part des tracés est une propriété du plan (les gestes que l'intention écrit, « part_des_traces » de son récit), elle se juge en quelques millisecondes.",
-    "plan_tenu_est_un_constat": "2026-09-17, soir : « plan_tenu » devient un CONSTAT. Antoine : « il ne faut plus que maestro annonce des erreurs quand la vidéo est très bien, c'est l'utilisateur qui juge ». Les contrôles de la technique sur la peinture sont mesurés et écrits au récit et au journal (« constat », « non_tenus »), la chaîne livre, le regard tranche. Ce qui se juge AVANT de peindre (« plan_valide », quelques millisecondes) reste un refus ; le contrôle final du livrable aussi (un fichier absent n'est pas un jugement de goût). Mesuré ce jour : trois encres 720p refusées après 25 à 34 minutes de peinture, dont une que l'auteur juge très bien."
+    "plan_tenu_est_un_constat": "2026-09-17, soir : « plan_tenu » devient un CONSTAT. Antoine : « il ne faut plus que maestro annonce des erreurs quand la vidéo est très bien, c'est l'utilisateur qui juge ». Les contrôles de la technique sur la peinture sont mesurés et écrits au récit et au journal (« constat », « non_tenus »), la chaîne livre, le regard tranche. Ce qui se juge AVANT de peindre (« plan_valide », quelques millisecondes) reste un refus ; le contrôle final du livrable aussi (un fichier absent n'est pas un jugement de goût). Mesuré ce jour : trois encres 720p refusées après 25 à 34 minutes de peinture, dont une que l'auteur juge très bien.",
+    "le_refus_s_explique": "2026-09-19 : deux jobs refusés à « plan_valide » sur « l_accroche_est_un_detail » (0,245 puis 0,225 pour ≤ 0,15) avec pour seule phrase « contrôle non tenu — … : mesuré, attendu » — un refus juste, mais muet sur ce qu'il mesure et sur quoi faire. Antoine : la chaîne explique son refus. Chaque contrôle qui peut refuser porte donc une « aide » : ce qu'il mesure, et quoi faire quand il tombe (recadrer — le Cadreur —, changer d'image, changer d'approche, de technique). La passerelle la joint au détail du refus et à chaque ligne de « problem.controles » ; le lanceur la montre sous le refus, contrôle par contrôle. Aucune étape en plus, aucune image modifiée : « plan_valide » reste le seul juge, et les contrôles de la technique (sa liste « plan ») portent la leur dans son fichier."
   }
 }

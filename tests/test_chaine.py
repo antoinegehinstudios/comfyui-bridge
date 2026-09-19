@@ -159,6 +159,23 @@ def test_les_controles_disent_ce_qui_a_ete_mesure():
     assert lignes[0]["mesure"] == 4.0 and lignes[0]["attendu"] == [1, 3]
 
 
+def test_un_controle_qui_porte_une_aide_la_rend_avec_sa_ligne():
+    """2026-09-19 : deux plans refusés sur « mesuré 0.245, attendu lte 0.15 »
+    — juste, et muet. Un contrôle qui dit ce qu'il mesure et quoi faire le
+    rend avec sa ligne ; celui qui ne dit rien n'a pas la clé (une aide vide
+    n'est pas une aide)."""
+    controles = [
+        {"id": "aire", "valeur": "$un.recit.aire", "op": "lte", "attendu": 0.15,
+         "aide": "  Un détail : au plus 15 % du cadre. Recadrer sur le sujet.  "},
+        {"id": "nom", "valeur": "$un.recit.nom", "op": "exists"},
+        {"id": "vide", "valeur": "$un.recit.nom", "op": "exists", "aide": "   "},
+    ]
+    lignes = noyau.controler(controles, {}, {"un": {"recit": {"aire": 0.245, "nom": "x"}}})
+    assert [l["ok"] for l in lignes] == [False, True, True]
+    assert lignes[0]["aide"] == "Un détail : au plus 15 % du cadre. Recadrer sur le sujet."
+    assert "aide" not in lignes[1] and "aide" not in lignes[2]
+
+
 def test_un_attendu_peut_lui_aussi_renvoyer_a_ce_qui_a_ete_demande():
     lignes = noyau.controler(
         [{"id": "tenue", "valeur": "$un.mesure.duration_s", "op": "gte",

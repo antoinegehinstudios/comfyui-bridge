@@ -91,13 +91,15 @@
         "id": "le_plan_porte_des_traits",
         "valeur": "$intention.recit.part_des_traces",
         "op": "gte",
-        "attendu": 0.25
+        "attendu": 0.25,
+        "aide": "L'encre veut des traits, pas que des taches : au moins un temps sur quatre doit se DESSINER (geste « trace » — une partie de figure, ou une figure qu'on reconnaît à sa silhouette), les autres se tachent. Ce plan n'a presque que des masses : choisir une image dont le sujet a des parties nettes (visages, mains, contours), ou changer de technique — celles qui ne dessinent pas n'exigent rien du geste."
       },
       {
         "id": "l_accroche_n_est_pas_dans_le_temps_suivant",
         "valeur": "$intention.recit.accroche_couverte_par_le_suivant",
         "op": "lte",
-        "attendu": 0.5
+        "attendu": 0.5,
+        "aide": "L'accroche ne doit pas être nichée dans le temps qui la suit (au plus la moitié de sa boîte recouverte) : la saignée de l'encre s'arrête à la porte du temps suivant, et l'accroche ne s'ouvrirait pas à temps. Choisir une image où un détail vit à l'écart des grandes figures, ou recadrer sur le sujet pour que ses parties se détachent."
       }
     ],
     "plan_tenu": [

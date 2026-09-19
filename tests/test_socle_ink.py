@@ -150,6 +150,11 @@ def _brut(nom):
     return json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8"))
 
 
+def _juge(controle):
+    """Ce qu'un contrôle JUGE — sans son aide, qui explique et ne juge pas."""
+    return {k: v for k, v in controle.items() if k != "aide"}
+
+
 @pytest.fixture(scope="module")
 def ink():
     return _brut("video-revelation")
@@ -258,6 +263,10 @@ def test_les_controles_communs_gardent_le_plan_et_le_livrable(ink):
     etapes = {e["id"]: e for e in ink["etapes"]}
     plan = etapes["plan_valide"]["verifier"]
     assert [c["id"] for c in plan["controles"]] == CONTROLES_PLAN_VALIDE
+    # DÉCISION ÉCRITE, 2026-09-19 : chacun des dix dit ce qu'il mesure et quoi
+    # faire quand il tombe (« aide ») — le refus s'explique, le juge ne change pas.
+    assert all(str(c.get("aide", "")).strip() for c in plan["controles"]), \
+        [c["id"] for c in plan["controles"] if not str(c.get("aide", "")).strip()]
     # …ET ce que la technique choisie exige du plan, jugé au même moment :
     # un plan à un tracé sur six temps a été peint trente-deux minutes en 720p
     # avant que l'encre le refuse (2026-09-17, job 464e6a4c).
@@ -336,7 +345,11 @@ def test_l_encre_porte_les_controles_de_la_peinture(technique_encre):
     assert [c["id"] for c in lue.controles["plan_tenu"]] == CONTROLES_PLAN_TENU
     # Et ce que l'encre exige du PLAN, avant de peindre : un quart de temps
     # tracés au moins — la part des tracés que l'intention écrit dans son récit.
-    assert lue.controles["plan"] == (
+    # DÉCISION ÉCRITE, 2026-09-19 (deux plans refusés sur une mesure et un
+    # seuil, sans un mot de plus) : un contrôle qui peut refuser porte une
+    # « aide » — ce qu'il mesure, quoi faire — à côté de ce qu'il juge ; ce
+    # qu'il juge (valeur, opérateur, seuil) n'a pas bougé.
+    assert [_juge(c) for c in lue.controles["plan"]] == [
         {"id": "le_plan_porte_des_traits", "valeur": "$intention.recit.part_des_traces",
          "op": "gte", "attendu": 0.25},
         # …et une accroche que le temps suivant ne recouvre pas : nichée dans
@@ -344,7 +357,10 @@ def test_l_encre_porte_les_controles_de_la_peinture(technique_encre):
         # vingt-cinq minutes de peinture avant le refus).
         {"id": "l_accroche_n_est_pas_dans_le_temps_suivant",
          "valeur": "$intention.recit.accroche_couverte_par_le_suivant",
-         "op": "lte", "attendu": 0.5})
+         "op": "lte", "attendu": 0.5}]
+    for controle in lue.controles["plan"]:
+        assert set(controle) == {"id", "valeur", "op", "attendu", "aide"}, controle["id"]
+        assert controle["aide"].strip(), controle["id"]
     # Chaque technique dit ce qu'elle exige du plan, fût-ce rien (liste vide).
     for fichier in sorted(TECHNIQUES.glob("*.json")):
         autre = noyau.lire_technique(json.loads(fichier.read_text(encoding="utf-8")), fichier.stem)

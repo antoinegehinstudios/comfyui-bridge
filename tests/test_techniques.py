@@ -226,9 +226,11 @@ CHAINE_QUI_JUGE_AUSSI_POUR_LA_TECHNIQUE = {
 TECHNIQUE_MUETTE = {**TECHNIQUE_VOILE, "controles": {"tenue": []}}          # n'exige rien
 TECHNIQUE_EXIGEANTE = {
     **TECHNIQUE_VOILE, "technique": "exigeante", "libelle": "Exigeante",
+    # Un contrôle qui EXPLIQUE ce qu'il mesure et quoi faire (2026-09-19).
     "controles": {"tenue": [{"id": "cinq_temps_au_moins",
                              "valeur": "$peinture.recit.temps_retenue",
-                             "op": "gte", "attendu": 5}]},
+                             "op": "gte", "attendu": 5,
+                             "aide": "Cinq temps au moins. Choisir une image plus riche."}]},
 }
 
 
@@ -318,6 +320,12 @@ def test_le_plan_est_refuse_sur_ce_que_la_technique_exige_avant_la_suite():
         assert "cinq_temps_au_moins" in refus["problem"]["detail"]
         assert [(c["id"], c["ok"]) for c in refus["problem"]["controles"]] == [
             ("la_peinture_est_la", True), ("cinq_temps_au_moins", False)]
+        # …et le refus dit ce que le contrôle de la TECHNIQUE mesure et quoi
+        # faire : son aide voyage avec sa ligne, jusqu'au détail (2026-09-19).
+        aide = "Cinq temps au moins. Choisir une image plus riche."
+        assert refus["problem"]["detail"].endswith(f"attendu gte 5 — {aide}")
+        assert refus["problem"]["controles"][1]["aide"] == aide
+        assert "aide" not in refus["problem"]["controles"][0]
 
 
 def test_un_constat_ecrit_ses_mesures_et_n_arrete_rien():
@@ -365,8 +373,15 @@ def test_un_constat_ecrit_ses_mesures_et_n_arrete_rien():
         assert tenue["resultat"]["non_tenus"] == ["cinq_temps_au_moins"]
         assert [(c["id"], c["ok"]) for c in tenue["resultat"]["controles"]] == [
             ("la_peinture_est_la", True), ("cinq_temps_au_moins", False)]
+        # La fiche du constat garde l'aide du contrôle non tenu — c'est elle
+        # qu'un lanceur montre à côté de la mesure — et rien pour celui qui
+        # n'en porte pas (2026-09-19).
+        aide = "Cinq temps au moins. Choisir une image plus riche."
+        assert tenue["resultat"]["controles"][1]["aide"] == aide
+        assert "aide" not in tenue["resultat"]["controles"][0]
         journal = "\n".join(job["logs"])
         assert "étape tenue : constaté, non tenu — cinq_temps_au_moins" in journal
+        assert f"attendu gte 5 — {aide}" in journal
         # …et le même contrôle, EXIGÉ, arrête toujours (le genre décide).
         refus = _job(client, client.post("/v1/render", json={"workflow": "chaine-a-techniques",
                                                              "technique": "trait"}))
