@@ -146,6 +146,22 @@ def lister(base: Path, workflow: str) -> list[dict[str, Any]]:
                                          str(f.get("cree_le") or ""), str(f.get("id") or "")))
 
 
+def modes(base: Path) -> list[str]:
+    """Les modes qui ont au moins une fiche : les sous-dossiers de
+    `_data/raccourcis/`. Un mode retiré du catalogue garde son dossier — ses
+    fiches ne sont pas perdues, juste plus listées sous une entrée."""
+    d = Path(base) / "raccourcis"
+    if not d.is_dir():
+        return []
+    return sorted(p.name for p in d.iterdir() if p.is_dir())
+
+
+def sans_sources(base: Path, workflow: str) -> list[dict[str, Any]]:
+    """Les fiches d'un mode écrites AVANT les sources (2026-09-20) : sans la
+    clé. C'est la forme de l'ancienne méthode, à compléter une fois."""
+    return [f for f in lister(base, workflow) if "sources" not in f]
+
+
 def _range(titre: Any) -> str:
     plie = unicodedata.normalize("NFD", str(titre or ""))
     return "".join(c for c in plie if not unicodedata.combining(c)).casefold()

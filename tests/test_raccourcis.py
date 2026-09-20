@@ -152,6 +152,58 @@ def test_un_raccourci_garde_les_sources_de_sa_livraison(atelier):
     assert "« image_9 » : le mode n'expose plus cette pièce jointe" in perime["raison"]
 
 
+def test_au_demarrage_une_fiche_d_avant_les_sources_est_completee(atelier):
+    """Une fiche écrite par la passerelle d'AVANT les sources (2026-09-20) n'a
+    pas la clé : au démarrage, elle reprend, une fois, les pièces jointes de sa
+    livraison — `{}` sans livraison, ou quand la livraison a quitté le magasin
+    ou le mode le catalogue, et c'est dit sur /v1/recovered. Rien de l'ancienne
+    méthode ne reste sur le disque ; une fiche déjà complète n'est pas relue."""
+    from fastapi.testclient import TestClient
+    from comfyui_bridge.api.main import create_app
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-piece-au-repos",
+                                                         "image_2": "la-piece.png"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    base = _base(atelier)
+    commun = {"workflow": "chaine-piece-au-repos", "valeurs": {}, "ordre": 100,
+              "cree_le": "2026-09-19T10:00:00+00:00"}
+    raccourcis.ecrire(base, "chaine-piece-au-repos",
+                      {**commun, "id": "d-avant-avec-livraison", "titre": "Avec", "job_id": job["id"]})
+    raccourcis.ecrire(base, "chaine-piece-au-repos",
+                      {**commun, "id": "d-avant-sans-livraison", "titre": "Sans", "job_id": None})
+    raccourcis.ecrire(base, "chaine-piece-au-repos",
+                      {**commun, "id": "d-avant-livraison-perdue", "titre": "Perdue", "job_id": "jamais-vu"})
+    raccourcis.ecrire(base, "chaine-piece-au-repos",
+                      {**commun, "id": "deja-complete", "titre": "Complète", "job_id": job["id"],
+                       "sources": {"image_2": "gardee.png"}})
+    raccourcis.ecrire(base, "mode-disparu",
+                      {**commun, "workflow": "mode-disparu", "id": "d-un-mode-disparu",
+                       "titre": "Disparu", "job_id": job["id"]})
+
+    # La même passerelle, redémarrée sur les mêmes données.
+    with TestClient(create_app(atelier.app.state.container.settings)) as relancee:
+        faits = {f["id"]: f for f in relancee.get("/v1/recovered").json()["raccourcis_completes"]}
+        assert faits["d-avant-avec-livraison"]["sources"] == {"image_2": "la-piece.png"}
+        assert faits["d-avant-avec-livraison"]["raison"].startswith("sources reprises de la livraison")
+        assert faits["d-avant-sans-livraison"]["sources"] == {}
+        assert faits["d-avant-sans-livraison"]["raison"] == "sans livraison : aucune source"
+        assert faits["d-avant-livraison-perdue"]["sources"] == {}
+        assert "a quitté le magasin" in faits["d-avant-livraison-perdue"]["raison"]
+        assert faits["d-un-mode-disparu"]["sources"] == {}
+        assert faits["d-un-mode-disparu"]["workflow"] == "mode-disparu"
+        assert "deja-complete" not in faits
+        # …et la vue publie ce que le disque porte désormais.
+        assert relancee.get("/v1/workflows/chaine-piece-au-repos/raccourcis/d-avant-avec-livraison"
+                            ).json()["sources"] == {"image_2": "la-piece.png"}
+    # Sur le disque : la clé est là, une fois, et ce qui était complet est intact.
+    for ident, attendu in (("d-avant-avec-livraison", {"image_2": "la-piece.png"}),
+                           ("d-avant-sans-livraison", {}), ("d-avant-livraison-perdue", {}),
+                           ("deja-complete", {"image_2": "gardee.png"})):
+        assert raccourcis.lire(base, "chaine-piece-au-repos", ident)["sources"] == attendu, ident
+    assert raccourcis.lire(base, "mode-disparu", "d-un-mode-disparu")["sources"] == {}
+    assert raccourcis.sans_sources(base, "chaine-piece-au-repos") == []
+    assert raccourcis.modes(base) == ["chaine-piece-au-repos", "mode-disparu"]
+
+
 def test_un_raccourci_s_enregistre_sans_livraison(atelier):
     """Régler sans lancer : on enregistre le réglage, pas le résultat. Sans
     livraison, aucune adresse d'aperçu n'est promise — une vignette absente

@@ -1845,8 +1845,8 @@ toute demande.
 passerelle possède elle-même (`workflow`, `label`, `kind`, `media`, `inputs`,
 `constraints`). Les pièces jointes de la livraison sont les **`sources`** du
 raccourci (`{"image": "affiche.png", …}`, par nom de champ média — toujours
-publiées, `{}` sans livraison ou pour une fiche d'avant) : c'est CETTE
-image-là que le raccourci rejoue, pas la dernière déposée (2026-09-20,
+publiées, `{}` sans livraison) : c'est CETTE image-là que le raccourci
+rejoue, pas la dernière déposée (2026-09-20,
 Antoine : « ce n'est pas la bonne source qui est enregistrée, mais la dernière
 produite » — le lanceur comblait l'absence de source avec le dernier dépôt de
 la session, celui d'un autre mode parfois). Une source ne fait pas un écart et
@@ -1854,7 +1854,14 @@ ne se valide pas contre le mode ; le nom est celui du fichier chez le moteur,
 comme pour un rejeu — la passerelle ne sait pas où le moteur range ses
 entrées, une source retirée de là échoue au lancement, comme un rejeu. Une
 source dont le mode n'expose plus la pièce jointe périme le raccourci, nommée.
-`ecarts` est calculé **à la
+**Une fiche d'avant les sources est complétée au démarrage**, une fois
+(`_completer_les_raccourcis`) : elle reprend les pièces jointes de sa
+livraison — `{}` sans livraison, quand la livraison a quitté le magasin ou le
+mode le catalogue —, est réécrite d'un coup, et `GET /v1/recovered` le dit
+(`raccourcis_completes: [{workflow, id, sources, raison}]`) : rien de
+l'ancienne méthode ne reste sur le disque, et ce que la passerelle a fait
+d'elle-même se lit, jamais deviné. Une fiche qui porte la clé n'est pas
+relue. `ecarts` est calculé **à la
 lecture**, contre les défauts d'aujourd'hui : figé dans le fichier, il aurait
 continué d'annoncer « Sépia » comme un choix particulier le jour où le mode en
 fait son défaut. Une liste d'écarts vide se lit « les réglages par défaut ».

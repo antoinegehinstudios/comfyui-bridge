@@ -25,7 +25,7 @@ from ..adapter import raccourcis
 from ..config import Settings
 from ..container import build_container
 from ..core.errors import (DependencyUnavailableError, InputValueRefusedError,
-                           MediaAssemblyError, RaccourciNotFoundError,
+                           JobNotFoundError, MediaAssemblyError, RaccourciNotFoundError,
                            UnknownWorkflowInputError)
 from ..core.jobs import JobStatus
 from ..core.intention import RenderIntent, intent_fields, is_media_param
@@ -61,7 +61,48 @@ async def lifespan(app: FastAPI):
             "la passerelle a redémarré pendant cette chaîne")
     except Exception:
         app.state.chaines_closes = []          # never keep the service from starting
+    # Une fiche de raccourci d'avant les sources (2026-09-20) reprend, une
+    # fois, les pièces jointes de sa livraison : rien de l'ancienne méthode ne
+    # reste sur le disque, et /v1/recovered dit ce qui a été complété.
+    try:
+        app.state.raccourcis_completes = _completer_les_raccourcis(app.state.container)
+    except Exception:
+        app.state.raccourcis_completes = []    # never keep the service from starting
     yield
+
+
+def _completer_les_raccourcis(c) -> list[dict]:
+    """Compléter les fiches écrites AVANT les sources : chacune reprend les
+    pièces jointes de sa livraison (`sources`), ou `{}` sans livraison — ou
+    quand la livraison a quitté le magasin, ou le mode le catalogue : c'est
+    dit, fiche par fiche. Écrite d'un coup, une seule fois : la clé présente,
+    la fiche n'est plus relue ici. Sans cela, un raccourci de l'ancienne
+    méthode s'ouvrait sans image et le lanceur comblait avec le dernier dépôt
+    de la session — la mauvaise source (Antoine, 2026-09-20)."""
+    base = _raccourcis_base(c)
+    faits: list[dict] = []
+    for mode in raccourcis.modes(base):
+        for fiche in raccourcis.sans_sources(base, mode):
+            sources: dict[str, str] = {}
+            job_id = str(fiche.get("job_id") or "")
+            if not job_id:
+                raison = "sans livraison : aucune source"
+            else:
+                try:
+                    spec = c.catalog.get_spec(mode)
+                    job = c.store.get(job_id)
+                    sources = raccourcis.sources_de(job.demande, _medias_du_mode(c, spec))
+                    raison = (f"sources reprises de la livraison {job_id[:8]} : "
+                              f"{', '.join(sources) or 'aucune pièce jointe'}")
+                except JobNotFoundError:
+                    raison = f"la livraison {job_id[:8]} a quitté le magasin : aucune source"
+                except Exception as exc:                          # noqa: BLE001
+                    raison = f"le mode ne se lit plus ({exc}) : aucune source"
+            fiche["sources"] = sources
+            raccourcis.ecrire(base, mode, fiche)
+            faits.append({"workflow": mode, "id": fiche.get("id"), "sources": sources,
+                          "raison": raison})
+    return faits
 
 
 def _recover_inflight(container) -> list[dict]:
@@ -2207,7 +2248,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"recovered": getattr(request.app.state, "recovered", []) or [],
                 "still_in_flight": list((request.app.state.container.inflight.entries()
                                          if getattr(request.app.state.container, "inflight", None)
-                                         else {}).keys())}
+                                         else {}).keys()),
+                # Les fiches de raccourci complétées au démarrage (sources
+                # reprises de leur livraison) : ce que la passerelle a fait
+                # d'elle-même se lit ici, jamais deviné.
+                "raccourcis_completes": getattr(request.app.state, "raccourcis_completes", []) or []}
 
     @app.get("/v1/artifacts/origin", tags=["render"])
     async def artifact_origin(request: Request, name: str) -> dict:

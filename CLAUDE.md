@@ -27,7 +27,9 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   `id`, `titre`, `resume`, `valeurs`, `ecarts[].{champ,libelle,valeur,libelle_valeur}`,
   `sources` (les pièces jointes de la livraison qui l'a fait naître, par nom de
   champ média, toujours publiées — c'est cette image-là que le raccourci
-  rejoue, depuis le 2026-09-20 ; `{}` sans livraison),
+  rejoue, depuis le 2026-09-20 ; `{}` sans livraison ; une fiche d'avant est
+  complétée au démarrage depuis sa livraison, et `GET /v1/recovered` le dit
+  dans `raccourcis_completes`),
   `apercu_url` s'il existe, `job_id`, `ordre`, et `perime: {champs[], raison}`
   quand le raccourci a vieilli — champ que le mode n'expose plus, valeur hors
   menu, réglage d'une autre technique que la sienne, source dont la pièce
