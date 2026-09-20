@@ -1452,7 +1452,7 @@ recule vers l'œuvre entière, découverte par la dernière page) et `LivreClosi
 expose `papier` et porte SES contrôles (pages, couverture, contemplation). Le
 plan lu est celui de l'intention — `beats`, `temps`, `structure` — tel quel.
 
-Trois chaînes sont livrées.
+Quatre chaînes sont livrées (la quatrième, « Révéler une affiche », est un type d'essai du 2026-09-20).
 
 `video-revelation` — « Révéler une image », le seul flux publié de sa
 catégorie, **douze étapes** qui portent les noms du travail (onze du 2026-09-15 au 19 ; la douzième, un constat, le 20) :
@@ -1505,6 +1505,22 @@ la passerelle le DIT au journal.
 
 `video-prolongement` — 17 dernières images → prolongement → mesure du raccord
 → recollage sans le chevauchement.
+
+`video-affiche` — « Révéler une affiche », un TYPE D'ESSAI (Antoine,
+2026-09-20 : « j'envoie une affiche ou un logo et le pipeline me le révèle en
+quelques secondes avec un effet cinématique en prenant en compte les tonalités
+de couleur présentes ; le contenu doit toujours rester inchangé »). Rien de
+« Révéler une image » ici : ni analyse, ni intention, ni encre. Trois étapes —
+`revelation` (le graphe `video-affiche-cinematique`, un seul nœud procédural
+du paquet `comfyui-affiche-cinematique` : il lit les tons de l'affiche, la
+pose ENTIÈRE dans le cadre, la dévoile — `effet` emergence / balayage / iris,
+`fond` tons / sombre / clair — puis la tient intacte `tenue_s` secondes),
+`integrite` (un CONSTAT : `l_affiche_est_intacte` — l'écart de la dernière
+image, mesuré par le nœud, vaut zéro —, `la_tenue_est_tenue`,
+`la_duree_est_exacte`) et `controle` (le fichier pèse). Neuf champs, tous
+lus (`test_chaque_champ_pese`) ; témoin `tests/test_socle_affiche.py`. Mesuré
+le 2026-09-20 : 5 s en 720×1280 livrées en 12 s de job (3,7 s de calcul), un
+logo transparent en 9 s, l'écart de la dernière image à 0 partout.
 
 `video-depuis-un-texte` — « Écrire une vidéo », le mode par défaut de
 **texte → vidéo** : une consigne, un style graphique, une structure de récit,

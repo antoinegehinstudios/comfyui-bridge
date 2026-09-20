@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "chaine": "video-affiche",
+  "resume": "RÉVÉLER UNE AFFICHE — un type de flux d'ESSAI (2026-09-20). Une affiche ou un logo est posé tel quel dans le cadre, ses tons sont lus, et un effet de lumière et de caméra le dévoile en quelques secondes ; puis il se tient, immobile et intact, jusqu'à la fin. Rien n'est repeint, rien n'est rogné, aucun modèle ni aucune analyse externe : un seul nœud procédural, et la chaîne CONSTATE que la dernière image est l'affiche à l'octet près.",
+  "expose": {
+    "image": {
+      "media": "image",
+      "requis": true,
+      "libelle": "L'affiche ou le logo",
+      "categorie": "oeuvre",
+      "aide": "Une affiche, un logo (PNG avec transparence accepté : le fond se voit à travers). Elle est posée ENTIÈRE dans le cadre, jamais rognée, et livrée intacte."
+    },
+    "duration_s": {
+      "type": "FLOAT",
+      "defaut": 5,
+      "min": 3,
+      "max": 15,
+      "step": 0.5,
+      "libelle": "Durée",
+      "unite": "s",
+      "categorie": "plan",
+      "aide": "La durée de la vidéo, exacte : la révélation, puis la tenue finale. De 3 à 15 s — quelques secondes, c'est le mode."
+    },
+    "tenue_s": {
+      "type": "FLOAT",
+      "defaut": 1.5,
+      "min": 0.5,
+      "max": 5,
+      "step": 0.5,
+      "libelle": "Tenue finale",
+      "unite": "s",
+      "categorie": "plan",
+      "aide": "Les dernières secondes : l'affiche immobile, intacte, sans grain ni vignette. Si la révélation n'aurait plus 1 s, la tenue est ramenée et la chaîne le constate."
+    },
+    "effet": {
+      "type": "COMBO",
+      "defaut": "emergence",
+      "options": [
+        "emergence",
+        "balayage",
+        "iris"
+      ],
+      "libelle": "Effet",
+      "categorie": "technique",
+      "aide": "« emergence » : l'affiche émerge par sa luminance — de ses ombres si elle est sombre, de ses lumières sinon — avec une poussée lente et un balayage de lumière ; « balayage » : un volet diagonal à l'arête lumineuse la dévoile ; « iris » : une ouverture circulaire depuis son centre, liserée du ton vif. Tous prennent leurs couleurs dans les tons de l'affiche."
+    },
+    "fond": {
+      "type": "COMBO",
+      "defaut": "tons",
+      "options": [
+        "tons",
+        "sombre",
+        "clair"
+      ],
+      "libelle": "Fond",
+      "categorie": "matiere",
+      "aide": "Ce qui entoure l'affiche : « tons » (le ton dominant assombri, un halo du ton vif — tiré de l'affiche elle-même), « sombre » ou « clair » (neutres)."
+    },
+    "width": {
+      "type": "INT",
+      "defaut": 720,
+      "libelle": "Largeur",
+      "unite": "px",
+      "categorie": "format",
+      "aide": "Le petit côté d'un portrait, le grand d'un paysage. Orientation et résolution le règlent ; il reste réglable ici."
+    },
+    "height": {
+      "type": "INT",
+      "defaut": 1280,
+      "libelle": "Hauteur",
+      "unite": "px",
+      "categorie": "format",
+      "aide": "L'autre côté. Orientation et résolution le règlent ; il reste réglable ici."
+    },
+    "fps": {
+      "type": "INT",
+      "defaut": 30,
+      "min": 1,
+      "libelle": "Images par seconde",
+      "categorie": "format",
+      "aide": "La cadence de la vidéo livrée. 30 images par seconde est celle des réseaux."
+    },
+    "seed": {
+      "type": "INT",
+      "defaut": 71,
+      "libelle": "Graine",
+      "categorie": "avance",
+      "aide": "Le grain et l'ordre d'émergence en dépendent : la même affiche, les mêmes réglages et la même graine donnent la même vidéo, au bit près."
+    }
+  },
+  "etapes": [
+    {
+      "id": "revelation",
+      "rendre": {
+        "workflow": "video-affiche-cinematique",
+        "media": {
+          "image": "$image"
+        },
+        "duration_s": "$duration_s",
+        "fps": "$fps",
+        "width": "$width",
+        "height": "$height",
+        "seed": "$seed",
+        "inputs": {
+          "7.effet": "$effet",
+          "7.tenue_s": "$tenue_s",
+          "7.fond": "$fond"
+        }
+      }
+    },
+    {
+      "id": "integrite",
+      "constater": [
+        {
+          "id": "l_affiche_est_intacte",
+          "valeur": "$revelation.recit.ecart_derniere_image_max",
+          "op": "eq",
+          "attendu": 0,
+          "aide": "La dernière image doit être l'affiche posée dans le cadre, à l'octet près (le nœud mesure l'écart maximal, en 8 bits, sur le rectangle de l'affiche). Non tenu : la tenue finale a été ramenée à zéro et la révélation touche encore l'image — allonger la durée ou la tenue. C'est un constat : la vidéo est livrée, le regard tranche."
+        },
+        {
+          "id": "la_tenue_est_tenue",
+          "valeur": "$revelation.recit.tenue_tenue",
+          "op": "eq",
+          "attendu": true,
+          "aide": "La tenue finale demandée doit être honorée. Non tenu : la révélation n'aurait plus eu 1 s, la tenue a été ramenée (le récit dit à combien : tenue_retenue_s) — allonger la durée, ou demander une tenue plus courte. C'est un constat : la vidéo est livrée."
+        },
+        {
+          "id": "la_duree_est_exacte",
+          "valeur": "$revelation.recit.duree_s",
+          "op": "eq",
+          "attendu": "$duration_s",
+          "aide": "Le nœud rend exactement la durée demandée (images = durée × cadence), jamais allongée. Non tenu : le graphe a reçu autre chose que la demande — dire le job."
+        }
+      ]
+    },
+    {
+      "id": "controle",
+      "verifier": [
+        {
+          "id": "livrable_pese",
+          "valeur": "$revelation.mesure.bytes",
+          "op": "gte",
+          "attendu": 50000,
+          "aide": "Le fichier livré doit peser au moins 50 ko : une vidéo de quelques secondes qui pèse moins n'a pas d'images. Relancer ; si cela se répète, dire le job."
+        }
+      ]
+    }
+  ],
+  "livrable": "$revelation.livrable",
+  "notes": {
+    "pourquoi": "Antoine, 2026-09-20 : « je veux un nouveau type de workflow dans maestro. J'envoie une affiche ou un logo et le pipeline me le révèle en quelques secondes avec un effet cinématique en prenant en compte les tonalités de couleur présentes. Un nouveau type, pour test. Le contenu doit toujours rester inchangé. » Rien de la chaîne « Révéler une image » ici : pas d'analyse (vingt minutes sur une image neuve), pas d'intention, pas d'encre qui repeint. Un nœud procédural (paquet comfyui-affiche-cinematique) : 150 images en 720×1280 en 3,8 s de calcul, mesuré le 2026-09-20.",
+    "ce_qui_ne_change_pas": "LE CONTENU. L'affiche est posée entière (« contain », 5 % de marge), rééchantillonnée une fois pour tenir dans le cadre, jamais rognée ; la tenue finale est cette image posée, pixel pour pixel — sans grain ni vignette — et le nœud mesure l'écart de la dernière image (ecart_derniere_image_max, zéro par construction) : la chaîne le CONSTATE (integrite). Ce mode n'a pas de rognage « plein cadre » : il changerait le contenu.",
+    "les_tons": "L'effet prend ses couleurs dans l'affiche : le nœud lit ses tons (k-means déterministe sur l'image réduite — tons, parts, ton dominant, vif, sombre, clair, clarté, température) et les écrit au récit ; le fond, le halo, la lumière qui balaie et le liseré de l'iris en viennent. Une affiche sombre émerge de ses ombres, une claire de ses lumières.",
+    "ce_qui_se_constate": "integrite est un constat (genre constater), jamais un refus — « mentionner une erreur ne doit pas suicider la livraison » (Antoine, 2026-09-20) : une tenue ramenée, un écart, se disent à la fiche, et la vidéo est livrée. Seul controle (un fichier sans images) refuse.",
+    "essai": "Un type POUR ESSAI : les trois effets sont des premières versions, à régler au regard d'Antoine ; pas de texte incrusté, pas de son, pas d'appel final, pas de raccourci."
+  }
+}
