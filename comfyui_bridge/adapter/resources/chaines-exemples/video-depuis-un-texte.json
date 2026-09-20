@@ -255,6 +255,13 @@
           "valeur": "$livraison.mesure.bytes",
           "op": "gte",
           "attendu": 100000
+        },
+        {
+          "id": "les_blocs_se_raccordent",
+          "valeur": "$rendu.jonctions.pire",
+          "op": "gte",
+          "attendu": 0.6,
+          "aide": "Les blocs doivent se suivre sans saut dans la vidéo LIVRÉE : la ressemblance (SSIM) entre la dernière image gardée d'un bloc et la première gardée du suivant, mesurée par la passerelle après avoir jeté ce que le bloc suivant rejouait (mesuré le 2026-09-20 : 0,42 sans coupe, 0,67 après ; deux images générées ne sont jamais les mêmes au pixel). Un seul bloc : aucune jonction, 1,0. Non tenu : la vidéo est livrée, le regard tranche ; le journal dit combien d'images ont été jetées à chaque raccord."
         }
       ]
     }
@@ -266,6 +273,7 @@
     "styles_a_part": "Le style ne vit pas ici : « style_graphique » et « style_narratif » sont des menus du catalogue du paquet comfyui-direction-de-style (une entrée de plus = une ligne de catalogue de plus), appliqués dans le montage par DirectionDeStyle / DirectionDuBloc. La chaîne reste neutre.",
     "textes_au_recollage": "Les textes s'incrustent à la livraison (ffmpeg drawtext, en flux, police par fichier, fondu, minutage exact) : aucun nœud du moteur n'écrit une police du poste sans tenir toute la vidéo en mémoire. Un temps négatif se compte depuis la fin (« -4 » : quatre secondes avant la fin).",
     "agrandissement": "L'agrandissement ×2 (RealESRGAN) est une constante du montage (« agrandir »), pas un champ : la chaîne n'a pas de moyen de porter un booléen jusqu'au graphe autrement que par une entrée d'intention, et la qualité livrée n'est pas un réglage d'usage. Il a été validé face au lanczos seul par un rendu comparé (voir tasks/todo-ecrire-une-video-outillage.md).",
-    "references_commentees": "Une image jointe (image, image_2, image_3) et son rôle (role_image…) passent au montage : au tour 0, l'amorce devient « texte + références → vidéo » (MiniMaxH3ReferenceToVideo, étiquettes « <Picture i> » dans la consigne, une phrase « <Picture i> is <rôle> » par image) ; les tours suivants repartent de la dernière image, où l'identité est déjà. Les rôles sont des réglages NOMMÉS de l'étape (« parametres »), injectés par les liaisons du montage — la chaîne ne nomme aucun nœud. Sans image, rien ne change : l'amorce ordinaire."
+    "references_commentees": "Une image jointe (image, image_2, image_3) et son rôle (role_image…) passent au montage : au tour 0, l'amorce devient « texte + références → vidéo » (MiniMaxH3ReferenceToVideo, étiquettes « <Picture i> » dans la consigne, une phrase « <Picture i> is <rôle> » par image) ; les tours suivants repartent de la dernière image, où l'identité est déjà. Les rôles sont des réglages NOMMÉS de l'étape (« parametres »), injectés par les liaisons du montage — la chaîne ne nomme aucun nœud. Sans image, rien ne change : l'amorce ordinaire.",
+    "continuite_des_blocs": "Chaque bloc après le premier est CONTINUÉ par référence : les 22 dernières images natives du bloc précédent (préfixe vidéo) et une image d'identité du bloc 0, rendus avec les poids ref2va — une vraie extension (mesuré le 2026-09-18 : SSIM 0,91–0,93 à la couture, caméra et personnage tenus). Chaque bloc a son bruit (graine + bloc) : le même seed rejouait la même trajectoire de caméra. La couture est constatée bloc par bloc (récit « raccord_ssim_min », constat ≥ 0,85) — un constat, jamais un refus."
   }
 }

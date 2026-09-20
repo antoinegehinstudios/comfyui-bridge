@@ -22,6 +22,11 @@
   "    pas l'encodeur de texte. Le bloc 0 rend avec les poids fl2va (8 pas) ; les",
   "    blocs ≥ 1 avec les poids ref2va + LoRA ref2v_turbo_4step (4 pas, fragment",
   "    « modele-ref ») — mesuré le 2026-09-18 (enquête continuité, B2/C2) : avec",
+  "    [2026-09-20 : cette mesure du 18/09 ne tient pas en production — la queue",
+  "    n'était pas relayée ce jour-là (voir le témoin du relais). Relayée pour de",
+  "    bon, la continuation REJOUE la fin du bloc précédent (≈ 1,8 s au ralenti)",
+  "    avant de continuer : le recollage de la passerelle cherche l'image de",
+  "    raccord et jette le rejeu ; MeilleurRaccord reste un constat à la source.]",
   "    ces poids le préfixe vidéo est une VRAIE EXTENSION, la première image suit",
   "    la dernière livrée (SSIM 0,91–0,93), la caméra continue, le personnage garde",
   "    tenue et visage, aucune image perdue, et c'est 30 % plus rapide. Chaque",
@@ -59,13 +64,20 @@
   "négatif) qui écrit le plan ; rien du style n'est écrit ici — le montage est",
   "neutre, le catalogue se réconcilie avec lui par les menus de la chaîne.",
   "",
-  "COMBIEN DE BLOCS : la boucle compte des SECONDES NATIVES (124 images à 24 i/s =",
-  "5,1667 s par bloc, dont 123 nouvelles = 5,125 s ; « deja » est la première",
-  "image, 1/24 s) ; « blocs_total » est calculé par le commun d'après la durée",
-  "avec la même arithmétique (pour DirectionDuBloc). 124 est la borne basse de",
-  "la plage d'entraînement du modèle (124 à 362) et un point de sa grille",
-  "(17k + 5). La durée livrée est ronde au bloc supérieur — au plus ~5 s de",
-  "plus, jamais moins.",
+  "COMBIEN DE BLOCS : l'amorce livre 124 images natives à 24 i/s (5,1667 s,",
+  "« secondes_par_bloc ») ; chaque bloc SUIVANT rejoue la fin du précédent avant",
+  "de continuer — mesuré le 2026-09-20 (job 03e675b0) : 55 images livrées à",
+  "30 i/s, 1,8 s, au ralenti, SSIM 0,45 à sa première image, 0,83 à la 55e — et",
+  "la passerelle jette ce rejeu au recollage (adapter/chaines.py, RACCORD_*).",
+  "Un bloc suivant n'apporte donc que « secondes_nouvelles_par_bloc_suivant »",
+  "(3,0 s : 5,1667 moins jusqu'à 2,17 s de rejeu), et le compte de tours part de",
+  "« avance_de_l_amorce_s » (5,1667 − 3,0 = 2,1667 s : ce que l'amorce apporte",
+  "de plus qu'un bloc suivant) : tours = ceil((durée − 2,1667) / 3,0) ; « blocs_total »",
+  "(nœud 38 du commun, pour DirectionDuBloc) suit la même arithmétique. 8 s → 2",
+  "blocs, 10 s → 3, 15 s → 5 : plus de blocs qu'avant pour la même durée, mais",
+  "la durée demandée est couverte APRÈS les coupes (constat",
+  "la_duree_demandee_est_couverte). 124 est la borne basse de la plage",
+  "d'entraînement du modèle (124 à 362) et un point de sa grille (17k + 5).",
   "",
   "LA TAILLE NATIVE : 0,6 mégapixel au plus (petit côté « petit_cote_natif », 576 :",
   "576×1024 pour un 16:9, multiples de 32), dans la proportion demandée ; la",
@@ -79,7 +91,6 @@
   "images_par_bloc": 124,
   "images_nouvelles_par_bloc": 124,
   "secondes_par_bloc": 5.166667,
-  "secondes_nouvelles_par_bloc": 5.166667,
   "pas": 8,
   "cadence": 24,
   "multiplicateur": 5,
@@ -95,7 +106,9 @@
   "pas_reference": 4,
   "images_de_queue": 22,
   "seuil_raccord": 0.85,
-  "prefixe_recits": "cortex/recits/raccord"
+  "prefixe_recits": "cortex/recits/raccord",
+  "secondes_nouvelles_par_bloc_suivant": 3.0,
+  "avance_de_l_amorce_s": 2.166667
  },
  "exemple": {
   "duration_s": 5,
@@ -432,7 +445,7 @@
     "37": {
      "class_type": "PrimitiveFloat",
      "inputs": {
-      "value": "$const.secondes_nouvelles_par_bloc"
+      "value": "$const.secondes_nouvelles_par_bloc_suivant"
      }
     },
     "38": {
@@ -593,7 +606,7 @@
   {
    "pour": {
     "jusqu_a": "duration_s",
-    "chaque": "secondes_par_bloc",
+    "chaque": "secondes_nouvelles_par_bloc_suivant",
     "max": 12,
     "un_run_par_tour": true,
     "relais": {
@@ -676,7 +689,8 @@
       }
      }
     },
-    "phases": 2
+    "phases": 2,
+    "deja": "avance_de_l_amorce_s"
    },
    "faire": [
     {

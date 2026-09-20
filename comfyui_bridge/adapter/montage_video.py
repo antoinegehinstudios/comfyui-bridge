@@ -34,6 +34,11 @@ from . import morceaux
 
 _IMAGES = (".png", ".jpg", ".jpeg", ".webp")
 _MOTIF_SSIM = re.compile(r"All:\s*([0-9.]+)")
+# Une ligne du fichier de scores du filtre ssim : « n:12 Y:0.9 U:0.9 V:0.9 All:0.9 (10.0) ».
+# C'est la LUMINANCE (Y) qui juge le raccord : la chrominance d'une scène
+# presque unie ressemble toujours (mesuré : Y 0,47 pour All 0,65 sur une
+# première image qui ne raccorde pas).
+_MOTIF_SSIM_IMAGE = re.compile(r"^n:(\d+)\sY:([0-9.]+)", re.M)
 _MOTIF_ERREUR = re.compile(
     r"error|invalid|no such|failed|unable|not found|permission|denied|could not",
     re.IGNORECASE)
@@ -85,11 +90,13 @@ def ligne_decisive(stderr: str) -> str:
     return "aucune sortie d'erreur"
 
 
-def _lancer(binaire: str, args: list[str], quoi: str, brut: bool = False) -> tuple[Any, str]:
+def _lancer(binaire: str, args: list[str], quoi: str, brut: bool = False,
+            cwd: str | Path | None = None) -> tuple[Any, str]:
     try:
         proc = subprocess.run([binaire, *args], capture_output=True,
                               text=not brut, encoding=None if brut else "utf-8",
-                              errors=None if brut else "replace")
+                              errors=None if brut else "replace",
+                              cwd=str(cwd) if cwd else None)
     except OSError as exc:
         raise MediaAssemblyError(f"{quoi} : impossible de lancer {binaire} ({exc})") from exc
     stderr = proc.stderr if isinstance(proc.stderr, str) else (proc.stderr or b"").decode(
@@ -418,6 +425,62 @@ def concatener(parts: Any, sortie: str | Path) -> dict[str, Any]:
         raise MediaAssemblyError(f"concaténation sans ré-encodage : rien n'a été écrit dans {cible}")
     return {"livrable": str(cible.resolve()), "mesure": mesurer(cible), "parts": len(pieces),
             "reencode": False}
+
+
+# La largeur à laquelle un raccord se JUGE : deux images générées ne sont jamais
+# les mêmes au pixel (grain, texture) ; ce qui fait un raccord, c'est la
+# structure. Mesuré le 2026-09-20 sur la même paire d'images qui raccordent :
+# SSIM (luminance) 0,72 en 720 px, 0,83 en 320 px, 0,90 en 160 px — et
+# l'image qui ne raccorde pas reste à 0,45 en 320 px.
+RACCORD_LARGEUR = 320
+
+
+def chercher_raccord(avant: str | Path, apres: str | Path, travail: str | Path,
+                     fenetre: int = 96, seuil: float = 0.75,
+                     sauf_les_dernieres_avant: int = 0) -> dict[str, Any]:
+    """Où la part suivante REJOINT la précédente.
+
+    Parmi les ``fenetre`` premières images de ``apres``, celle qui ressemble le
+    plus (SSIM, filtre ssim d'ffmpeg, image par image contre une image fixe) à
+    la dernière image gardée de ``avant``. Mesuré le 2026-09-20 (job 03e675b0,
+    texte → vidéo) : un bloc continué par référence REJOUE la fin du bloc
+    précédent — environ deux secondes, au ralenti — avant de continuer ; sa
+    première image ressemble à la dernière livrée à 0,30, sa soixante et
+    unième à 0,97. Ce qui précède l'image de raccord est du déjà-vu : c'est ce
+    que le recollage jette (``depuis_image`` = raccord + 1). Rend le rang de
+    l'image de raccord (0 = la première : rien à jeter), sa ressemblance, celle
+    de la première image, si le seuil est tenu, et les scores lus.
+    """
+    dossier = Path(travail)
+    dossier.mkdir(parents=True, exist_ok=True)
+    derniere: Any = "last"
+    if sauf_les_dernieres_avant:
+        derniere = max(0, compter_images(Path(avant)) - int(sauf_les_dernieres_avant) - 1)
+    fin = extraire_image(avant, derniere, dossier / "raccord_fin.png")
+    scores_fichier = dossier / "raccord_scores.txt"
+    scores_fichier.unlink(missing_ok=True)
+    # Le fichier de scores se nomme en RELATIF, ffmpeg lancé dans le dossier de
+    # travail : un chemin absolu dans une option de filtre porte un « : » (le
+    # lecteur), que le filtre lit comme un séparateur — ni l'échappement ni
+    # les apostrophes ne passent (mesuré, ffmpeg 8).
+    _lancer(outil(), ["-y", "-v", "error", "-i", str(Path(apres).resolve()), "-loop", "1",
+                      "-i", str(Path(fin["fichier"]).resolve()),
+                      "-filter_complex",
+                      f"[0:v]scale={RACCORD_LARGEUR}:-2,format=yuv420p[a];"
+                      f"[1:v]scale={RACCORD_LARGEUR}:-2,format=yuv420p[b];"
+                      f"[a][b]ssim=stats_file={scores_fichier.name}",
+                      "-frames:v", str(int(fenetre)), "-f", "null", "-"],
+            "recherche du raccord", cwd=dossier)
+    try:
+        texte = scores_fichier.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise MediaAssemblyError(f"recherche du raccord : scores illisibles ({exc})")
+    scores = [float(m.group(2)) for m in _MOTIF_SSIM_IMAGE.finditer(texte)][:int(fenetre)]
+    if not scores:
+        raise MediaAssemblyError("recherche du raccord : aucun score lu")
+    rang = max(range(len(scores)), key=lambda i: scores[i])
+    return {"image": rang, "ssim": round(scores[rang], 4), "premiere": round(scores[0], 4),
+            "tenu": scores[rang] >= float(seuil), "scores": [round(s, 4) for s in scores]}
 
 
 def mesurer_raccords(parts: Any, travail: str | Path, chevauchement: int = 0,

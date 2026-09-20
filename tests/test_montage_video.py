@@ -92,6 +92,35 @@ def test_mesurer_raccords_compare_les_images_GARDEES(tmp_path):
     assert proche["pire"] == proche["moyenne"] == proche["meilleure"]
 
 
+def _extrait(chemin, source, depuis, nombre, cadence=25, taille="160x120"):
+    """Les images [depuis, depuis + nombre) du motif testsrc, en un clip."""
+    subprocess.run([montage_video.outil(), "-y", "-v", "error", "-f", "lavfi",
+                    "-i", f"testsrc=size={taille}:rate={cadence}:duration=10",
+                    "-vf", f"select='between(n,{depuis},{depuis + nombre - 1})',setpts=N/{cadence}/TB",
+                    "-r", str(cadence), "-pix_fmt", "yuv420p", str(chemin)], check=True)
+    return chemin
+
+
+def test_chercher_raccord_trouve_l_image_qui_rejoint_la_precedente(tmp_path):
+    """Un tour qui REJOUE la fin du précédent (2026-09-20, texte → vidéo : deux
+    secondes au ralenti avant de continuer) : parmi ses premières images, celle
+    qui ressemble le plus à la dernière image livrée est l'image de raccord ;
+    ce qui la précède, elle comprise, est du déjà-vu."""
+    avant = _extrait(tmp_path / "a.mp4", "testsrc", 0, 25)           # images 0..24
+    apres = _extrait(tmp_path / "b.mp4", "testsrc", 15, 35)          # 15..49 : rejoue 15..24, puis 25..49
+    r = montage_video.chercher_raccord(avant, apres, tmp_path / "r", fenetre=30)
+    assert r["image"] == 9 and r["tenu"] is True and r["ssim"] > 0.95
+    assert r["premiere"] < r["ssim"] and len(r["scores"]) == 30
+    # une suite qui ne rejoue rien : le raccord est sa première image (rien à jeter)
+    suite = _extrait(tmp_path / "c.mp4", "testsrc", 25, 25)
+    r2 = montage_video.chercher_raccord(avant, suite, tmp_path / "r2", fenetre=30)
+    assert r2["image"] in (0, 1) and r2["scores"][0] >= 0.9
+    # un tour d'un autre motif ne rejoint rien : dit, pas coupé
+    autre = _video(tmp_path / "d.mp4", secondes=1, motif="smptebars")
+    r3 = montage_video.chercher_raccord(avant, autre, tmp_path / "r3", fenetre=30)
+    assert r3["tenu"] is False
+
+
 def test_un_fichier_absent_se_dit_plutot_que_de_planter(tmp_path):
     with pytest.raises(MediaAssemblyError) as refus:
         montage_video.recoller([str(tmp_path / "fantome.mp4")], tmp_path / "x.mp4")

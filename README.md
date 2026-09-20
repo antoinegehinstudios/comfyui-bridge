@@ -1263,6 +1263,28 @@ de la dernière image d'une part à la première de la suivante) et dites :
 « jonctions mesurées : pire …, moyenne … ». Une jonction qui ne se mesure pas
 n'invalide pas le livrable — elle se dit au journal.
 
+**Le raccord des tours** (depuis le 2026-09-20, Antoine : « une coupure se
+fait mal, l'image semble revenir en arrière et puis continuer »). Un bloc
+continué par référence (texte → vidéo) REJOUE la fin du bloc précédent avant de
+continuer — mesuré sur le job `03e675b0` : 55 images à 30 i/s, 1,8 s au
+ralenti, ressemblance à la dernière image livrée de 0,45 à sa première image
+et de 0,83 à la 55e. Le recollage d'un rendu **par tours** cherche donc, dans
+les `RACCORD_FENETRE_S` (3,5 s) premières images de chaque tour, celle qui
+rejoint la dernière image livrée du tour d'avant (`montage_video.chercher_raccord`
+: SSIM en luminance à 320 px de large, filtre ssim d'ffmpeg contre une image
+fixe), et jette ce qui la précède quand elle ressemble à `RACCORD_SEUIL`
+(0,75) au moins — les tours sont alors ré-encodés une fois (`recoller`, un
+rognage de tête), la coupe est dite (« le tour 2 rejoue la fin du tour 1 — ses
+55 premières images sont jetées (ressemblance … 0,45 à la première, 0,83 à
+l'image 55) ») et `jonctions.coupes` la garde. Rien n'est coupé — et c'est dit
+— quand aucune image ne rejoint (« ne rejoint le tour … nulle part »), ni quand
+le raccord tomberait au-delà de la moitié du tour (« plus de la moitié de
+lui-même »). `jonctions` est toujours écrit (un seul tour : `nombre` 0,
+`pire` 1,0) et se mesure sur le montage RÉEL, après les coupes (0,42 avant,
+0,67 après, sur ce job) : c'est ce que la chaîne « Écrire une vidéo » constate
+(`les_blocs_se_raccordent` : `$rendu.jonctions.pire` ≥ 0,6). Les tranches
+d'une seule simulation, elles, ne rejouent rien.
+
 **Les récits fusionnent.** Une étape `verifier` contrôle le récit sans savoir
 qu'il a été rendu en N fois. Ce qui est **identique** d'une tranche à l'autre
 est un fait du plan (la même simulation l'a écrit) et reste tel quel ; ce qui
@@ -1574,10 +1596,15 @@ cite), échantillonne, décode ; puis `livrer`. Mesuré le 2026-09-18 : encodé
 dans le même prompt que le rendu, l'encodeur (Qwen3-VL 32B, 14,6 Go) restait
 en mémoire tout le bloc — 60 Go de commit pour le moteur seul, et la garde de
 place ne trouvait plus ses 6 Gio. La passerelle attend la place avant chaque
-run et recolle les runs en copie de flux. Le nombre de blocs se
-déduit de la durée demandée, en secondes natives : `pour { jusqu_a:
-duration_s, chaque: 5,167 s }` — un bloc fait 124 images à
-24 i/s, la borne basse de la plage d'entraînement du modèle (124 à 362) ; au
+run et recolle les runs — en copie de flux quand rien n'est coupé, ré-encodés
+une fois quand un tour rejoue la fin du précédent (voir « Le raccord des
+tours »). Le nombre de blocs se déduit de la durée demandée, en secondes
+natives, en comptant ce qu'un bloc apporte APRÈS sa coupe : `pour { jusqu_a:
+duration_s, chaque: secondes_nouvelles_par_bloc_suivant (3,0 s), deja:
+avance_de_l_amorce_s (2,167 s) }` — l'amorce fait 124 images à 24 i/s
+(5,167 s), un bloc suivant en rejoue jusqu'à 2,17 s ; 8 s → 2 blocs, 10 s → 3,
+15 s → 5 (depuis le 2026-09-20 ; avant, 15 s faisaient 3 blocs, dont deux
+rejeux). 124 est la borne basse de la plage d'entraînement du modèle (124 à 362) ; au
 bloc 0 la première image est l'ancre du film, ensuite les 124 sont neuves.
 
 La LIVRAISON d'un bloc (`_data/blocs/livrer.json`, réutilisable par tout

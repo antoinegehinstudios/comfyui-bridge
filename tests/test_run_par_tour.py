@@ -11,6 +11,7 @@ bout, avec un vrai ffmpeg et un backend qui MONTE le graphe de chaque run.
 """
 
 import contextlib
+import re
 import json
 import pathlib
 import subprocess
@@ -135,6 +136,25 @@ class BackendQuiTourne(BackendQuiLivre):
         return BackendResult(artifacts=artefacts, raw_stdout="essai", execution_s=0.5)
 
 
+class BackendQuiRejoue(BackendQuiTourne):
+    """Le même banc, mais chaque tour ≥ 2 REJOUE les 10 dernières images du
+    tour précédent avant de continuer — ce qu'un bloc continué par référence
+    fait en vrai (mesuré le 2026-09-20). Le motif testsrc compte les images :
+    le tour t livre les images [25·t − 10, 25·t + 25) pour t ≥ 1, [0, 25) pour
+    le premier."""
+
+    def submit(self, plan, on_enqueued=None, on_progress=None, on_note=None, on_started=None):
+        resultat = super().submit(plan, on_enqueued, on_progress, on_note, on_started)
+        tour = int(plan.params.get("tour") or 0)
+        fichier = pathlib.Path(resultat.artifacts[0].path)
+        depuis, nombre = (0, 25) if tour == 0 else (25 * tour - 10, 35)
+        subprocess.run([montage_video.outil(), "-y", "-v", "error", "-f", "lavfi",
+                        "-i", f"testsrc=size={LARGEUR}x{HAUTEUR}:rate={CADENCE}:duration=10",
+                        "-vf", f"select='between(n,{depuis},{depuis + nombre - 1})',setpts=N/{CADENCE}/TB",
+                        "-r", str(CADENCE), "-pix_fmt", "yuv420p", str(fichier)], check=True)
+        return resultat
+
+
 @pytest.fixture()
 def banc(monkeypatch):
     pile = contextlib.ExitStack()
@@ -142,7 +162,7 @@ def banc(monkeypatch):
     monkeypatch.setattr("comfyui_bridge.adapter.neutral.upload_image",
                         lambda base, nom, contenu, *reste, **autres: nom)
 
-    def batir(**plus) -> TestClient:
+    def batir(backend=None, **plus) -> TestClient:
         tmp = pathlib.Path(tempfile.mkdtemp(prefix="comfybridge_tours_"))
         (tmp / "video-par-tours.json").write_text(json.dumps(MONTAGE_PAR_TOURS), encoding="utf-8")
         (tmp / "chaine-par-tours.json").write_text(json.dumps(CHAINE_PAR_TOURS), encoding="utf-8")
@@ -161,7 +181,7 @@ def banc(monkeypatch):
                             hermes_db=tmp / "hermes.sqlite3", comfy_output_dir=tmp / "out",
                             hermes_mode="local", workflows_dir=tmp / "workflows", **plus)
         app = create_app(settings)
-        faux = BackendQuiTourne(settings.comfy_output_dir, app.state.container.catalog)
+        faux = (backend or BackendQuiTourne)(settings.comfy_output_dir, app.state.container.catalog)
         app.state.container.orchestrator._backend = faux
         client = pile.enter_context(TestClient(app))
         client.faux = faux
@@ -203,6 +223,9 @@ def test_chaque_tour_est_un_run_et_le_relais_passe_de_l_un_a_l_autre(banc):
     journal = "\n".join(job["logs"])
     assert "rendu en 3 runs, un par tour de boucle" in journal
     assert "relais « derniere_image » du tour 1" in journal
+    # Un montage à un run par tour ne se monte pas d'un seul tenant pour être
+    # tranché : la question ne se pose pas, et le journal n'en parle pas.
+    assert "tranches" not in journal
     # Trois runs ordinaires, visibles, qui disent de qui ils sont.
     for sous_id in rendu["job_ids"]:
         sous = atelier.get(f"/v1/jobs/{sous_id}").json()
@@ -248,6 +271,32 @@ def test_les_tours_sont_recolles_sans_reencodage_et_les_jonctions_mesurees(banc)
     # UN TOUR N'EST JAMAIS UNE LIVRAISON : le job ne porte que le recollé.
     assert len(job["artifacts"]) == 1
     assert _etape(job, "rendu")["resultat"]["jonctions"]["nombre"] == 2
+
+
+@SANS_FFMPEG
+def test_un_tour_qui_rejoue_la_fin_du_precedent_est_coupe_au_recollage(banc):
+    """Antoine, 2026-09-20 : « une coupure se fait mal, l'image semble revenir
+    en arrière et puis continuer ». Mesuré (job 03e675b0) : un bloc continué
+    par référence rejoue la fin du bloc précédent. Le recollage cherche l'image
+    de raccord dans chaque tour et jette ce qui la précède ; les tours sont
+    alors ré-encodés une fois, la coupe est dite, et la jonction se mesure sur
+    le montage réel."""
+    atelier = banc(BackendQuiRejoue)
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-par-tours",
+                                                         "secondes": 3, "label": "rejoue"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    journal = "\n".join(job["logs"])
+    # le motif testsrc bouge peu d'une image à l'autre : le raccord tombe sur
+    # l'image rejouée à une image près (mesuré : 10 puis 9)
+    assert re.search(r"le tour 2 rejoue la fin du tour 1 — ses (9|10|11) premières images sont jetées", journal)
+    assert re.search(r"le tour 3 rejoue la fin du tour 2 — ses (9|10|11) premières images sont jetées", journal)
+    assert "3 tours recollés en ré-encodant" in journal and "images jetées aux raccords : " in journal
+    jonctions = _etape(job, "rendu")["resultat"]["jonctions"]
+    assert all(9 <= c <= 11 for c in jonctions["coupes"]) and len(jonctions["coupes"]) == 2
+    assert jonctions["nombre"] == 2 and jonctions["pire"] > 0.9
+    livrable = pathlib.Path(job["artifacts"][0]["path"])
+    # 25 + ~25 + ~25 images gardées à 25 i/s : ≈ 3 s, pas 3,8
+    assert 2.8 <= montage_video.mesurer(livrable)["duration_s"] <= 3.3
 
 
 @SANS_FFMPEG

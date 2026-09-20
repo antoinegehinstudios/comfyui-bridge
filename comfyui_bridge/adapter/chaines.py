@@ -1386,41 +1386,96 @@ class RunnerDeChaines:
                 workflow=nom)
 
         sortie = self._sortie(parent_id, label, etape.id, ".mp4", chaine=chaine_nom)
-        try:
-            fait = montage_video.concatener(parts, sortie)
-        except MediaAssemblyError as exc:
-            # repli: des tours que la copie de flux ne sait pas joindre sont
-            # recollés en ré-encodant — une génération de perte de plus, jamais
-            # silencieuse.
-            store.append_log(parent_id, f"étape {etape.id} : copie de flux impossible "
-                                        f"({exc.detail}) — recollage ré-encodé")
-            fait = montage_video.recoller(parts, sortie, fps=(pic or {}).get("fps"),
+        # LE RACCORD DE CHAQUE TOUR SE CHERCHE, ET CE QUI EST REJOUÉ SE JETTE
+        # (voir RACCORD_FENETRE_S). Les parts deviennent des rognages de tête.
+        pieces: list[Any] = [parts[0]] if parts else []
+        coupes: list[dict[str, Any]] = []
+        for i in range(1, len(parts)):
+            depuis = 0
+            if travail is not None:
+                try:
+                    fenetre = int(round(RACCORD_FENETRE_S * float((pic or {}).get("fps") or
+                                                                 montage_video.mesurer(parts[i]).get("fps") or 25)))
+                    r = montage_video.chercher_raccord(
+                        parts[i - 1], parts[i], Path(travail) / f"{etape.id}-raccord-{i}",
+                        fenetre=fenetre, seuil=RACCORD_SEUIL)
+                    total = montage_video.compter_images(Path(parts[i]))
+                    if r["tenu"] and r["image"] > 0 and (r["image"] + 1) * 2 > total:
+                        # un tour qui rejouerait plus de la moitié de lui-même
+                        # n'est pas un tour rejoué : rien n'est coupé, et c'est dit
+                        store.append_log(
+                            parent_id,
+                            f"étape {etape.id} : le tour {i + 1} ressemble au tour {i} jusqu'à "
+                            f"son image {r['image'] + 1} sur {total} — plus de la moitié de "
+                            f"lui-même, rien n'est coupé")
+                    elif r["tenu"] and r["image"] > 0:
+                        depuis = int(r["image"]) + 1
+                        store.append_log(
+                            parent_id,
+                            f"étape {etape.id} : le tour {i + 1} rejoue la fin du tour {i} — "
+                            f"ses {depuis} premières images sont jetées (ressemblance à la "
+                            f"dernière image livrée : {r['premiere']:.2f} à la première, "
+                            f"{r['ssim']:.2f} à l'image {r['image'] + 1})")
+                    elif not r["tenu"]:
+                        store.append_log(
+                            parent_id,
+                            f"étape {etape.id} : le tour {i + 1} ne rejoint le tour {i} nulle "
+                            f"part dans ses {fenetre} premières images (au mieux {r['ssim']:.2f} "
+                            f"à l'image {r['image'] + 1}, seuil {RACCORD_SEUIL}) — rien n'est coupé")
+                    coupes.append({"tour": i + 1, "jetees": depuis, "ssim": r["ssim"],
+                                   "premiere": r["premiere"], "tenu": bool(r["tenu"])})
+                except MediaAssemblyError as exc:
+                    # repli: un raccord qui ne se cherche pas ne coupe rien —
+                    # et se dit au journal.
+                    store.append_log(parent_id, f"étape {etape.id} : raccord du tour {i + 1} "
+                                                f"non cherché ({exc.detail}) — rien n'est coupé")
+            pieces.append({"fichier": parts[i], "depuis_image": depuis} if depuis else parts[i])
+        if any(isinstance(piece, dict) for piece in pieces):
+            # un rognage de tête ne se copie pas : les tours sont ré-encodés une fois
+            fait = montage_video.recoller(pieces, sortie, fps=(pic or {}).get("fps"),
                                           largeur=(pic or {}).get("largeur"),
                                           hauteur=(pic or {}).get("hauteur"))
-        jonctions: dict[str, Any] | None = None
-        if travail is not None:
+        else:
             try:
-                mesure = montage_video.mesurer_raccords(parts, Path(travail) / f"{etape.id}-jonctions")
-                jonctions = {"pire": mesure["pire"], "moyenne": mesure["moyenne"],
-                             "nombre": mesure["nombre"]}
+                fait = montage_video.concatener(pieces, sortie)
+            except MediaAssemblyError as exc:
+                # repli: des tours que la copie de flux ne sait pas joindre sont
+                # recollés en ré-encodant — une génération de perte de plus, jamais
+                # silencieuse.
+                store.append_log(parent_id, f"étape {etape.id} : copie de flux impossible "
+                                            f"({exc.detail}) — recollage ré-encodé")
+                fait = montage_video.recoller(pieces, sortie, fps=(pic or {}).get("fps"),
+                                              largeur=(pic or {}).get("largeur"),
+                                              hauteur=(pic or {}).get("hauteur"))
+        # Les jonctions du montage RÉEL (après les coupes) — toujours écrites :
+        # un seul tour n'a pas de jonction, et une chaîne qui les constate lit
+        # alors « aucune, parfaite » plutôt que « rien à désigner ».
+        jonctions: dict[str, Any] = {"pire": 1.0, "moyenne": 1.0, "nombre": 0,
+                                     "coupes": [c["jetees"] for c in coupes]}
+        if travail is not None and len(pieces) > 1:
+            try:
+                mesure = montage_video.mesurer_raccords(pieces, Path(travail) / f"{etape.id}-jonctions")
+                jonctions.update({"pire": mesure["pire"], "moyenne": mesure["moyenne"],
+                                  "nombre": mesure["nombre"]})
             except MediaAssemblyError as exc:
                 # repli: une jonction qui ne se mesure pas n'invalide pas le
-                # livrable — elle se dit au journal.
+                # livrable — elle se dit au journal, et « pire » reste absent.
                 store.append_log(parent_id, f"étape {etape.id} : jonctions non mesurées "
                                             f"({exc.detail})")
+                jonctions = {"nombre": len(pieces) - 1, "coupes": jonctions["coupes"]}
         comment = "sans ré-encodage" if fait.get("reencode") is False else "en ré-encodant"
         store.append_log(
             parent_id,
             f"étape {etape.id} : {n} tours recollés {comment}"
             + (f" — jonctions mesurées : pire {jonctions['pire']:.4f}, "
-               f"moyenne {jonctions['moyenne']:.4f}" if jonctions else ""))
+               f"moyenne {jonctions['moyenne']:.4f}" if "pire" in jonctions else "")
+            + (f" ; images jetées aux raccords : {', '.join(str(j) for j in jonctions['coupes'])}"
+               if any(jonctions["coupes"]) else ""))
         chemin = Path(fait["livrable"])
         resultat: dict[str, Any] = {
             "livrable": str(chemin), "job_id": sous_ids[-1], "job_ids": sous_ids, "tours": n,
             "mesure": {**(fait.get("mesure") or {}), "bytes": chemin.stat().st_size},
-            "artefacts": artefacts, "_duree": duree}
-        if jonctions is not None:
-            resultat["jonctions"] = jonctions
+            "artefacts": artefacts, "_duree": duree, "jonctions": jonctions}
         if recits:
             resultat["recit"] = {**fusionner_recits(recits), "tours": n,
                                  "tours_au_recit": len(recits)}
@@ -1613,6 +1668,16 @@ TRANCHES_MAX = 64
 # avoir attendu que la place revienne. Trois : au-delà, ce n'est plus le poste
 # qui change, c'est quelque chose qui ne passera pas.
 REPRISES_MAX = 3
+# LE RACCORD DES TOURS. Un bloc continué par référence rejoue la fin du bloc
+# précédent avant de continuer (mesuré le 2026-09-20, job 03e675b0 : deux
+# secondes au ralenti, SSIM 0,30 à la première image, 0,97 à la 61e). Le
+# recollage cherche, parmi les RACCORD_FENETRE_S premières secondes de chaque
+# tour, l'image qui rejoint la dernière du tour d'avant, et jette ce qui la
+# précède — quand elle ressemble au moins à RACCORD_SEUIL ; sinon rien n'est
+# coupé, et c'est dit. Antoine : « une coupure se fait mal, l'image semble
+# revenir en arrière et puis continuer ».
+RACCORD_FENETRE_S = 3.5
+RACCORD_SEUIL = 0.75          # en luminance, à 320 px de large (montage_video.RACCORD_LARGEUR)
 
 
 def _images_rendues(livrable: Artifact) -> int:

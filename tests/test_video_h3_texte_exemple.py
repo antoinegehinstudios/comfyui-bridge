@@ -6,7 +6,10 @@ premier bloc naît du texte (fl2va, 8 pas), chaque bloc suivant CONTINUE le
 précédent par référence (ref2va, 4 pas : la queue du bloc précédent en vidéo de
 référence, une image du milieu en image d'identité), la graine avance d'un bloc
 à l'autre (même graine = même trajectoire de caméra rejouée), et la couture est
-constatée (MeilleurRaccord) sans rien couper.
+constatée (MeilleurRaccord) sans rien couper à la source — c'est le recollage
+de la passerelle qui, depuis le 2026-09-20, cherche l'image de raccord de chaque
+bloc et jette le rejeu (un bloc continué par référence rejoue ≈ 1,8 s de la fin
+du précédent) ; le compte de blocs en tient compte (3,0 s par bloc suivant).
 
 C'est la recette elle-même qui est éprouvée ici — pas un montage d'essai —
 pour que la copie livrée avec le paquet reste montable le jour où le mécanisme
@@ -68,8 +71,12 @@ def test_la_boucle_demande_deux_runs_par_bloc_et_cinq_relais():
     pour = noyau.boucle_par_run(_resolu())
     assert pour is not None and pour["phases"] == 2
     assert sorted(pour["relais"]) == ["conditionnement", "derniere_image", "identite", "latent", "queue"]
-    assert noyau.tours_separes(_resolu(), {**brut["constantes"], **BASE}) == 6
+    # 15 s : l'amorce (5,1667 s) puis des blocs qui n'apportent que 3,0 s chacun
+    # une fois leur rejeu jeté (2026-09-20) → 5 blocs, 10 runs ; 5 s → 1 bloc, 2 runs.
+    assert noyau.tours_separes(_resolu(), {**brut["constantes"], **BASE}) == 10
     assert noyau.tours_separes(_resolu(), {**brut["constantes"], **BASE, "duration_s": 5}) == 2
+    assert noyau.tours_separes(_resolu(), {**brut["constantes"], **BASE, "duration_s": 8}) == 4
+    assert noyau.tours_separes(_resolu(), {**brut["constantes"], **BASE, "duration_s": 10}) == 6
 
 
 def test_l_encodage_ne_charge_que_l_encodeur_et_le_rendu_que_le_modele():
@@ -118,7 +125,7 @@ def test_le_bloc_suivant_continue_le_precedent_par_sa_queue_et_son_identite():
     # Ce run n'écrit que ce qu'il produit : le conditionnement et le latent.
     assert sorted(t for t in _types(encodage) if t in ("SaveImage", "SauverImages", "SauverConditionnement",
                                                        "SauverLatent")) == ["SauverConditionnement", "SauverLatent"]
-    dernier = _monter(BASE, tour=5, relais=RELAIS)
+    dernier = _monter(BASE, tour=9, relais=RELAIS)                  # le dernier des 10 runs
     assert not any(t in ("SaveImage", "SauverImages", "SauverConditionnement", "SauverLatent")
                    for t in _types(dernier))
 
