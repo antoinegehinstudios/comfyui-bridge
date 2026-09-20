@@ -445,7 +445,22 @@ rien n'est avalé en silence.
 
 **Connaître le coût avant** — `POST /v1/estimate` avec l'intention entière
 renvoie la charge lue sur le graphe, l'estimation ajustée sur les runs mesurés,
-et `ignored` : ce que ce workflow ne recevra pas.
+et `ignored` : ce que ce workflow ne recevra pas. **Une chaîne s'estime par
+ses propres livraisons** (depuis le 2026-09-20), jamais par la somme de ses
+runs : les runs d'un montage par tours ne sont pas d'une seule nature (un
+bloc échantillonné ≈ 660 s, sa livraison ≈ 25 s) et le graphe de l'estimation
+n'est pas celui d'un tour — la somme annonçait 27 s, 345 s ou 41 573 s pour
+un job mesuré à 720 s (« Écrire une vidéo », 5 s). Trois lectures, dites dans
+`estimate.dit` : la **même configuration** (`basis: chaine-meme-config`, la
+médiane) ; **d'autres durées** (`chaine-runs-fit` : une droite sur le NOMBRE
+DE RUNS que chaque livraison a fait faire, relu depuis son étiquette — 5 s en
+font 2, 8 s en font 4, 15 s en feront 12 —, avec `runs`) ; **une seule taille
+mesurée** (`chaine-autre-config`, la médiane, en le disant). Rien de mesuré :
+la somme des étapes reste (`somme des étapes`), muette dès qu'une étape n'a
+pas de mesure (`manque`). Chaque étape est montée à blanc : une demande que
+son montage refuse — un rôle d'image sans son image — échouerait au run, et
+l'estimation le dit (`impraticable`, avec le réglage nommé) sans annoncer de
+durée.
 
 **Lancer et suivre** — `POST /v1/render` renvoie `202` + un identifiant ;
 `GET /v1/jobs/{id}` (ou le flux `…/events` en SSE) jusqu'à un état terminal

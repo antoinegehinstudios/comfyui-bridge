@@ -380,8 +380,15 @@ def test_une_liaison_vers_une_variante_absente_ne_gene_que_si_son_parametre_est_
     sans["montage"][1]["alors"][0]["fragment"] = "autre"
     (wf / "m.json").write_text(json.dumps(sans), encoding="utf-8")
     cat = load_catalog(rec, workflows_dir=wf)
-    with pytest.raises(WorkflowMappingError, match="references"):
+    with pytest.raises(WorkflowMappingError, match="references") as e:
         cat.monter(cat.get_spec("m"), {"n": 1, "image": "photo.png"})
+    # Le refus nomme le RÉGLAGE et ce qui lui manque, pas seulement le nœud :
+    # « le nœud '22' n'existe pas dans 'amorce' » ne disait rien à qui avait
+    # retiré une image en laissant son rôle (2026-09-20).
+    assert "« image » n'a pas de place dans ce dépliage" in e.value.detail
+    assert "ne s'applique pas avec les pièces jointes fournies" in e.value.detail
+    assert e.value.extensions["field"] == "image"
+    assert e.value.extensions["cible"] == "$references.1"
 
 
 def test_le_catalogue_compte_les_tours_et_monte_la_fenetre_d_un_tour(tmp_path):

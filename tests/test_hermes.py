@@ -288,6 +288,51 @@ def test_the_compute_floor_is_kept_not_only_the_slope(tmp_path):
         assert abs(est["seconds"] - mesuré) < 3, (work, est["seconds"], mesuré)
 
 
+def test_les_durees_mesurees_se_relisent_avec_leur_etiquette(reg):
+    """Ce qu'il faut pour estimer une chaîne par ses propres livraisons : les
+    durées réussies, les plus récentes d'abord, chacune avec l'étiquette de sa
+    configuration — un échec, ou un autre workflow, n'y sont pas."""
+    reg.record("h", "chaine", {"width": 720, "height": 1280, "duration_s": 5.0},
+               status="succeeded", duration_s=720.0)
+    reg.record("h", "chaine", {"width": 720, "height": 1280, "duration_s": 8.0},
+               status="succeeded", duration_s=1234.0)
+    reg.record("h", "chaine", {"width": 720, "height": 1280, "duration_s": 8.0},
+               status="failed", problem=P.OOM, detail="x", duration_s=9.0)
+    reg.record("h", "autre", {"duration_s": 8.0}, status="succeeded", duration_s=1.0)
+    lues = reg.durees("h", "chaine")
+    assert [(d["config"], d["duration_s"]) for d in lues] == [("720x1280-8s", 1234.0),
+                                                              ("720x1280-5s", 720.0)]
+    assert all(d["ts"] for d in lues)
+    assert reg.durees("h", "jamais-vu") == []
+
+
+def test_un_ajustement_public_sur_des_tailles_quelconques():
+    """La droite du registre, publiée : une chaîne se mesure en runs, pas en
+    travail de graphe — deux tailles au moins, une pente à l'endroit."""
+    from comfyui_bridge.hermes.registry import ajuster
+    points = [(2.0, 720.0), (2.0, 700.0), (4.0, 1230.0), (4.0, 1240.0)]
+    a = ajuster(points, 12.0)
+    assert a["samples"] == 4 and a["per_unit_s"] > 200 and a["setup_s"] >= 0
+    # 12 runs : la droite passe par ≈ 710 à 2 et ≈ 1235 à 4 → ≈ 3300 s.
+    assert 3100 <= a["seconds"] <= 3500 and a["min"] <= a["seconds"] <= a["max"]
+    assert ajuster([(2.0, 720.0), (2.0, 700.0)], 12.0) is None       # une seule taille
+    assert ajuster([(2.0, 1000.0), (4.0, 500.0)], 6.0) is None         # pente à l'envers
+
+
+def test_une_empreinte_se_relit():
+    """L'étiquette d'une livraison de chaîne est tout ce que la mémoire en
+    garde : pour comparer une demande neuve à d'autres durées mesurées, il
+    faut la relire — et ce qui ne se relit pas rend vide, jamais inventé."""
+    from comfyui_bridge.core.cost import config_fingerprint, config_lue
+    for params in ({"width": 720, "height": 1280, "duration_s": 5.0},
+                   {"duration_s": 6.0}, {"width": 704, "latent_batch": 16},
+                   {"duration_s": 6.0, "latent_batch": 1}, {"height": 512}):
+        lu = config_lue(config_fingerprint(params))
+        assert lu == params, (params, lu)
+    assert config_lue("workflow-default") == {}
+    assert config_lue("n'importe quoi") == {}
+
+
 def test_a_pinned_duration_is_part_of_the_configuration():
     """Two audio runs of 6 s and 30 s were both labelled "workflow-default":
     the memory of one then answered for the other."""

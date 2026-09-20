@@ -9,9 +9,36 @@ configuration", so two runs that pin nothing are correctly the same key.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 WORKFLOW_DEFAULT = "workflow-default"
+
+_EMPREINTE = re.compile(r"^(?:(\d+)x(\d+)|w(\d+)|h(\d+))?(?:x(\d+))?(?:-?([\d.]+)s)?$")
+
+
+def config_lue(empreinte: str) -> dict[str, Any]:
+    """Ce qu'une empreinte ÉPINGLAIT, relu : largeur, hauteur, lot, durée —
+    ceux qui y sont. La mémoire d'une chaîne ne garde que cette étiquette de
+    ses livraisons ; pour comparer une demande neuve à ce qui a été mesuré à
+    d'autres durées, il faut la relire. Une étiquette qui ne se relit pas
+    (« workflow-default », une forme inconnue) rend un dict vide."""
+    m = _EMPREINTE.match(str(empreinte or ""))
+    if not m or not any(m.groups()):
+        return {}
+    w, h, seul_w, seul_h, lot, duree = m.groups()
+    lu: dict[str, Any] = {}
+    if w and h:
+        lu["width"], lu["height"] = int(w), int(h)
+    elif seul_w:
+        lu["width"] = int(seul_w)
+    elif seul_h:
+        lu["height"] = int(seul_h)
+    if lot:
+        lu["latent_batch"] = int(lot)
+    if duree:
+        lu["duration_s"] = float(duree)
+    return lu
 
 
 def config_fingerprint(params: dict[str, Any]) -> str:

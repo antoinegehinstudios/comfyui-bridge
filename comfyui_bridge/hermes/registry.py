@@ -41,6 +41,24 @@ CREATE INDEX IF NOT EXISTS ix_runs_lookup ON runs(scope, host, workflow, config)
 from ..core.cost import config_fingerprint  # single definition, owned by the core
 
 
+def ajuster(points: list[tuple[float, float]], x: float) -> dict[str, Any] | None:
+    """L'estimation en ``x`` d'une droite ajustée sur des mesures (taille,
+    durée) : secondes, et l'écart le plus grand entre la droite et une mesure
+    en guise de fourchette. None quand les mesures ne portent pas de droite
+    (une seule taille, ou une pente à l'envers) — la même règle que
+    `_affine_fit`, publiée pour qui mesure autre chose que le travail d'un
+    graphe (le nombre de runs d'une chaîne, par exemple)."""
+    fitted = _affine_fit(points)
+    if fitted is None:
+        return None
+    ordonnee, pente = fitted
+    secondes = ordonnee + pente * x
+    ecart = max((abs(d - (ordonnee + pente * w)) for w, d in points), default=0.0)
+    return {"seconds": max(1, round(secondes)), "samples": len(points),
+            "min": max(1, round(secondes - ecart)), "max": max(1, round(secondes + ecart)),
+            "setup_s": round(ordonnee), "per_unit_s": round(pente, 2)}
+
+
 def _affine_fit(points: list[tuple[float, float]]) -> tuple[float, float] | None:
     """Least-squares ``duration = setup + per_unit x work``.
 
@@ -189,6 +207,19 @@ class ProblemRegistry:
         return {"revised": revises, "at": at if revises else None, "cause": cause}
 
     # -- experience: how long does this usually take? -------------------------
+
+    def durees(self, host: str, workflow: str, limit: int = 40) -> list[dict[str, Any]]:
+        """Les durées MESURÉES d'un workflow ici, les plus récentes d'abord,
+        avec l'étiquette de configuration de chacune — ce qu'il faut pour
+        estimer une chaîne par ses propres livraisons, à cette configuration
+        ou, relue, à d'autres (voir `_estimation_chaine`)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT config, duration_s, ts FROM runs WHERE scope=? AND host=? AND workflow=?"
+                " AND status='succeeded' AND duration_s IS NOT NULL ORDER BY id DESC LIMIT ?",
+                (self._scope, host, workflow, int(limit))).fetchall()
+        return [{"config": r["config"], "duration_s": float(r["duration_s"]), "ts": r["ts"]}
+                for r in rows]
 
     def estimate_duration(self, host: str, workflow: str, work: float | None = None,
                           config: str | None = None,

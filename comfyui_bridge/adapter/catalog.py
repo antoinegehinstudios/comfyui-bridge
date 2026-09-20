@@ -218,7 +218,11 @@ class WorkflowCatalog:
         self._default = default
         self._specs = specs
         self._workflows_dir = Path(workflows_dir) if workflows_dir else None
-        self._templates: dict[str, dict[str, Any]] = {}
+        # Les gabarits lus, chacun avec l'EMPREINTE de son fichier au moment de
+        # la lecture (date d'écriture, taille) : un gabarit est relu dès que
+        # son fichier change, voir `_brut`. Gardé sans empreinte, il restait
+        # figé depuis le démarrage à côté de blocs relus à chaque assemblage.
+        self._templates: dict[str, tuple[tuple[int, int] | None, dict[str, Any]]] = {}
         self._chaines: dict[str, Any] = {}
         # Noms servis par une entrée déclarée alors qu'un graphe enregistré
         # porte le même : ce qui est masqué doit pouvoir être dit.
@@ -308,7 +312,7 @@ class WorkflowCatalog:
             path = Path(f"{name}.json")
         spec = _spec_from_graph(name, path, graph, meta)
         self._specs[name] = spec
-        self._templates[name] = graph
+        self._templates[name] = (_empreinte(path), graph)
         return spec
 
     def unregister(self, name: str) -> dict[str, Any]:
@@ -425,13 +429,20 @@ class WorkflowCatalog:
                 continue
             try:
                 liaisons[k] = Binding(node=assembleur.adresse(b.node, table, sorties), input=b.input)
-            except WorkflowMappingError:
+            except WorkflowMappingError as exc:
                 # Une liaison vers un fragment que CE dépliage n'a pas posé (une
                 # variante sous « si », les références d'image quand aucune
                 # n'est jointe) n'est une faute que si le paramètre est fourni :
-                # sans lui, elle n'a rien à écrire.
+                # sans lui, elle n'a rien à écrire. Fourni, le refus nomme le
+                # RÉGLAGE et ce qui lui manque — « le nœud '22' n'existe pas
+                # dans 'amorce' » ne disait rien à qui avait retiré une image
+                # en laissant son rôle (2026-09-20).
                 if (params or {}).get(k) is not None:
-                    raise
+                    raise WorkflowMappingError(
+                        f"« {k} » n'a pas de place dans ce dépliage du montage ({b.node}) : "
+                        f"ce réglage ne s'applique pas avec les pièces jointes fournies — "
+                        f"le retirer, ou joindre ce qu'il accompagne",
+                        workflow=spec.name, field=k, cible=b.node, cause=exc.detail) from exc
         if (params or {}).get(blocs.TOUR) is not None:
             # Le run d'UN tour ne porte pas tout le montage : une liaison qui
             # vise un fragment d'un autre run (l'amorce, au tour 2) a été
@@ -498,14 +509,44 @@ class WorkflowCatalog:
                 for k, v in (brut.get("livrable") or {}).items()}
 
     def _brut(self, spec: WorkflowSpec) -> dict[str, Any]:
-        if spec.name not in self._templates:
-            try:
-                self._templates[spec.name] = json.loads(spec.workflow_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                raise WorkflowMappingError(
-                    f"workflow {spec.name!r}: cannot read {spec.workflow_path}: {exc}"
-                ) from exc
-        return self._templates[spec.name]
+        """Le gabarit de cette entrée, tel qu'il est SUR DISQUE.
+
+        Lu une fois, puis RELU dès que son fichier change (date d'écriture ou
+        taille) — jamais figé en mémoire. Les blocs qu'un montage inclut sont
+        relus à chaque assemblage (`bibliotheque.charger`) ; un gabarit gardé
+        depuis le démarrage à côté de blocs frais faisait assembler un tour
+        avec l'ANCIEN montage et les NOUVEAUX blocs (2026-09-18, 21:06 : un
+        montage et l'un de ses blocs modifiés ensemble pendant une chaîne, et
+        le tour suivant refusé pour un port que le montage sur disque servait).
+        Montage et blocs sont donc lus au même moment, celui de l'assemblage :
+        une chaîne en cours assemble ses tours suivants sur ce qui est sur
+        disque à cet instant — c'est la règle choisie, plutôt que de refuser
+        un montage changé en route. Un fichier disparu ou illisible est refusé
+        en le nommant, pas remplacé par ce qu'on en gardait.
+        """
+        empreinte = _empreinte(spec.workflow_path)
+        connu = self._templates.get(spec.name)
+        if connu is not None and connu[0] == empreinte:
+            return connu[1]
+        try:
+            brut = json.loads(spec.workflow_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise WorkflowMappingError(
+                f"workflow {spec.name!r}: cannot read {spec.workflow_path}: {exc}"
+            ) from exc
+        self._templates[spec.name] = (empreinte, brut)
+        return brut
+
+
+def _empreinte(chemin: Path) -> tuple[int, int] | None:
+    """Ce à quoi un fichier se reconnaît changé sans être relu : sa date
+    d'écriture et sa taille. None quand il n'est pas sur disque — un graphe
+    ingéré sans dossier de dépôt ne vit qu'en mémoire, et le reste."""
+    try:
+        st = Path(chemin).stat()
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size)
 
 
 def _carried_media(graph: dict[str, Any], bindings: dict[str, Binding]) -> dict[str, Any]:

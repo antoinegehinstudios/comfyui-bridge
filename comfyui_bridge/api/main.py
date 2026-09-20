@@ -26,7 +26,7 @@ from ..config import Settings
 from ..container import build_container
 from ..core.errors import (DependencyUnavailableError, InputValueRefusedError,
                            JobNotFoundError, MediaAssemblyError, RaccourciNotFoundError,
-                           UnknownWorkflowInputError)
+                           UnknownWorkflowInputError, WorkflowMappingError)
 from ..core.jobs import JobStatus
 from ..core.intention import RenderIntent, intent_fields, is_media_param
 from ..core.orchestrator import Orchestrator, derivable_params
@@ -173,14 +173,24 @@ def _with_engine_state(container, out: dict) -> dict:
     return out
 
 
-def _with_work(container, plan):
-    """Attach the effective size of the job, read from the injected graph."""
+def _with_work(container, plan, silencieux: bool = True):
+    """Attach the effective size of the job, read from the injected graph.
+
+    ``silencieux`` : un graphe qui ne se monte pas ne prive pas la réponse de
+    son travail (rien à lire, c'est tout). L'estimation d'une chaîne le passe
+    à False : un montage qui REFUSE la demande (`WorkflowMappingError`) la
+    refusera au run aussi, et c'est à dire — pas à taire.
+    """
     from ..adapter.work import WORK_MODEL, effective_values, work_units
     try:
         values = effective_values(container.catalog, plan)
         plan.work = work_units(values)
         plan.work_model = WORK_MODEL
         return values
+    except WorkflowMappingError:
+        if not silencieux:
+            raise
+        return {}
     except Exception:
         return {}
 
@@ -681,35 +691,124 @@ def _intention_detape(params: dict, label: str = "") -> Any:
                         kind=MediaKind(genre) if genre else None, **reglages)
 
 
-def _estimation_chaine(c, chaine, valeurs: dict) -> dict:
-    """La somme des étapes « rendre ». Muette dès qu'une seule ne se mesure pas.
-
-    Additionner ce qui est connu en taisant ce qui ne l'est pas donnerait une
-    estimation plus courte que la réalité — pire qu'une absence d'estimation.
-    """
+def _etapes_a_rendre(c, chaine, valeurs: dict) -> list[tuple[Any, dict, str]]:
+    """Les étapes « rendre » d'une chaîne, résolues pour CETTE demande :
+    (étape, paramètres du run, workflow visé). Le workflow d'une étape peut
+    être CHOISI à l'appel — par un renvoi (« $mode ») ou par la TECHNIQUE qui
+    tient son rôle : c'est le nom résolu qui a une mesure, pas le rôle."""
+    from ..adapter.chaines import workflow_annonce
     from ..core import chaine as _noyau
-    lignes: list[dict] = []
-    total = bas = haut = 0.0
-    manque: str | None = None
     technique = _noyau.technique_choisie(chaine, valeurs, c.catalog.techniques())
     depart = _noyau.resultats_initiaux(chaine, technique)
+    sortie = []
     for etape in chaine.rendus:
         params = _noyau.resoudre(etape.params, valeurs, depart, strict=False)
-        # Le workflow d'une étape peut être CHOISI à l'appel — par un renvoi
-        # (« $mode ») ou par la TECHNIQUE qui tient son rôle : c'est le nom
-        # résolu qui a une mesure, pas le rôle ni le renvoi.
-        from ..adapter.chaines import workflow_annonce
         vise = str(params.get("workflow") or workflow_annonce(etape, technique) or "")
         if etape.role is not None:
             params = {k: v for k, v in params.items() if k not in ("role", "technique")}
             params["workflow"] = vise
+        sortie.append((etape, params, vise))
+    return sortie
+
+
+def _runs_de_la_chaine(c, chaine, valeurs: dict) -> int:
+    """Combien de runs du moteur cette demande fait faire à la chaîne : un par
+    tour pour un montage à un run par tour (le compte dépend de la durée
+    demandée), un sinon. C'est la TAILLE d'une livraison de chaîne — ce qui
+    fait qu'une vidéo de 15 s coûte plus qu'une de 5 s —, la même pour une
+    demande et pour les livraisons mesurées relues à leur configuration."""
+    runs = 0
+    for _etape, params, vise in _etapes_a_rendre(c, chaine, valeurs):
+        tours = None
+        try:
+            tours = c.catalog.tours_separes(c.catalog.get_spec(vise), params)
+        except Exception:                            # noqa: BLE001 — un montage illisible compte un
+            tours = None
+        runs += int(tours) if tours else 1
+    return runs
+
+
+def _estimation_par_la_chaine(c, chaine, valeurs: dict) -> dict | None:
+    """La chaîne estimée par SES livraisons mesurées ici — jamais par la somme
+    de ses runs.
+
+    Mesuré le 2026-09-20 sur « Écrire une vidéo » (5 s, 720 s de livraison) :
+    la somme des étapes annonçait 27 s ou 345 s (la médiane des runs d'UN
+    tour : un bloc échantillonné ≈ 660 s, sa livraison ≈ 25 s — pas le job)
+    ou 41 573 s (un ajustement sur un « travail » compté autrement à
+    l'estimation, 914 unités, qu'aux runs, 3,7 à 114). Les runs d'un montage
+    par tours ne sont pas d'une seule nature, et le graphe de l'estimation
+    n'est pas celui d'un tour : la somme ne dit rien du job. La chaîne, elle,
+    est enregistrée à chaque livraison, à sa configuration.
+
+    Trois lectures, dites : la même configuration (la médiane) ; d'autres
+    configurations, ajustées sur le NOMBRE DE RUNS que chaque demande fait
+    faire (relu depuis l'étiquette de chaque livraison — 5 s font 2 runs,
+    8 s en font 4, 15 s en feront 12) ; une seule taille mesurée (la médiane,
+    en le disant). Rien de mesuré : None, et la somme des étapes reste.
+    """
+    from ..core.cost import config_fingerprint, config_lue
+    host = c.settings.host_id
+    mesures = c.registry.durees(host, chaine.nom)
+    if not mesures:
+        return None
+    config = config_fingerprint(valeurs)
+    memes = sorted(m["duration_s"] for m in mesures if m["config"] == config)
+    if memes:
+        n = len(memes)
+        mediane = memes[n // 2] if n % 2 else (memes[n // 2 - 1] + memes[n // 2]) / 2
+        return {"seconds": round(mediane), "min": round(memes[0]), "max": round(memes[-1]),
+                "samples": n, "basis": "chaine-meme-config",
+                "dit": f"d'après {n} livraison{'s' if n > 1 else ''} de ce mode à cette configuration"}
+    from ..hermes.registry import ajuster
+    attendus = _runs_de_la_chaine(c, chaine, valeurs)
+    points: list[tuple[float, float]] = []
+    for m in mesures:
+        lu = config_lue(m["config"])
+        if "duration_s" not in lu:
+            continue
+        try:
+            runs = _runs_de_la_chaine(c, chaine, {**valeurs, **lu})
+        except Exception:                            # noqa: BLE001 — une étiquette qui ne se rejoue pas
+            continue
+        points.append((float(runs), m["duration_s"]))
+    ajuste = ajuster(points, float(attendus)) if points else None
+    if ajuste is not None:
+        return {**ajuste, "basis": "chaine-runs-fit", "runs": attendus,
+                "dit": (f"d'après {ajuste['samples']} livraisons de ce mode à d'autres durées "
+                        f"({attendus} runs prévus, {ajuste['per_unit_s']:g} s par run)")}
+    durees = sorted(m["duration_s"] for m in mesures)
+    n = len(durees)
+    mediane = durees[n // 2] if n % 2 else (durees[n // 2 - 1] + durees[n // 2]) / 2
+    return {"seconds": round(mediane), "min": round(durees[0]), "max": round(durees[-1]),
+            "samples": n, "basis": "chaine-autre-config",
+            "dit": f"d'après {n} livraison{'s' if n > 1 else ''} de ce mode, à une autre configuration"}
+
+
+def _estimation_chaine(c, chaine, valeurs: dict) -> dict:
+    """La chaîne par ses propres livraisons d'abord (`_estimation_par_la_chaine`),
+    la somme des étapes « rendre » sinon — muette dès qu'une seule ne se
+    mesure pas : additionner ce qui est connu en taisant ce qui ne l'est pas
+    donnerait une estimation plus courte que la réalité, pire qu'une absence.
+
+    Dans les deux cas chaque étape est MONTÉE ici, à blanc : une demande qu'un
+    montage refuse (un rôle d'image sans son image, 2026-09-20) échouerait au
+    run — l'estimation le dit (`impraticable`), et n'annonce pas de durée.
+    """
+    lignes: list[dict] = []
+    total = bas = haut = 0.0
+    manque: str | None = None
+    impraticable: str | None = None
+    for etape, params, vise in _etapes_a_rendre(c, chaine, valeurs):
         estimation = None
         try:
             plan = c.orchestrator.build_plan(_intention_detape(params, label="estimation"))
-            _with_work(c, plan)
+            _with_work(c, plan, silencieux=False)
             estimation = c.registry.estimate_duration(
                 c.settings.host_id, plan.workflow, plan.work, plan.config,
                 work_model=plan.work_model)
+        except WorkflowMappingError as exc:
+            impraticable = impraticable or f"étape {etape.id} : {exc.detail}"
         except Exception as exc:            # noqa: BLE001 — un refus se dit, il n'arrête pas
             manque = manque or f"étape {etape.id} : {exc}"
         lignes.append({"id": etape.id, "workflow": vise, "estimate": estimation})
@@ -720,12 +819,21 @@ def _estimation_chaine(c, chaine, valeurs: dict) -> dict:
             bas += estimation.get("min") or estimation.get("seconds") or 0
             haut += estimation.get("max") or estimation.get("seconds") or 0
     sortie: dict[str, Any] = {"workflow": chaine.nom, "chaine": True, "etapes": lignes}
+    if impraticable:
+        sortie["estimate"] = None
+        sortie["impraticable"] = impraticable
+        return sortie
+    propre = _estimation_par_la_chaine(c, chaine, valeurs)
+    if propre is not None:
+        sortie["estimate"] = propre
+        return sortie
     if manque:
         sortie["estimate"] = None
         sortie["manque"] = manque
     else:
         sortie["estimate"] = {"seconds": round(total), "min": round(bas), "max": round(haut),
-                              "basis": "somme des étapes"}
+                              "basis": "somme des étapes",
+                              "dit": "d'après les runs mesurés de chaque étape"}
     return sortie
 
 

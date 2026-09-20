@@ -51,7 +51,10 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   `categorie`, `aide` quand la chaîne les déclare) — le formulaire est bâti
   uniquement dessus ;
 - `POST /v1/render` (corps plat, `label` = nom de la production),
-  `POST /v1/estimate`, `GET /v1/jobs`, `GET /v1/jobs/{id}` + `/events`,
+  `POST /v1/estimate` (une chaîne : par ses propres livraisons, `dit` la
+  source — même configuration, droite sur le nombre de runs, autre
+  configuration —, `impraticable` quand un montage refuse la demande),
+  `GET /v1/jobs`, `GET /v1/jobs/{id}` + `/events`,
   `POST /v1/jobs/{id}/cancel`, `/rejouer` et `/reprendre` (une chaîne échouée
   repart à l'étape en échec, ses étapes abouties reprises), `PUT /v1/workflows/{nom}/apercu`,
   `GET|POST /v1/workflows/{nom}/raccourcis` et

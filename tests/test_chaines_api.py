@@ -727,6 +727,41 @@ def test_estimer_une_chaine_se_tait_quand_une_etape_n_a_pas_de_mesure(atelier):
     assert d["estimate"] is None and "jamais été mesurée" in d["manque"]
 
 
+@SANS_FFMPEG
+def test_une_chaine_livree_s_estime_par_ses_propres_livraisons(atelier):
+    """Une chaîne est enregistrée à chaque livraison : c'est elle qu'on lit,
+    jamais la somme de ses runs (2026-09-20 : 27 s, 345 s ou 41 573 s annoncés
+    pour un job de 720 s, selon ce que la somme trouvait)."""
+    for _ in range(2):
+        job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-recollee",
+                                                             "secondes": 2}))
+        assert job["status"] == "succeeded", job.get("problem")
+    d = atelier.post("/v1/estimate", json={"workflow": "chaine-recollee", "secondes": 2}).json()
+    e = d["estimate"]
+    assert e["basis"] == "chaine-meme-config" and e["samples"] == 2
+    assert e["min"] <= e["seconds"] <= e["max"]
+    assert e["dit"] == "d'après 2 livraisons de ce mode à cette configuration"
+    # Les étapes restent décrites — c'est ainsi qu'une demande impraticable se voit.
+    assert [x["id"] for x in d["etapes"]] == ["un", "deux"]        # « final » recolle, ne rend pas
+
+
+def test_une_demande_qu_un_montage_refuse_est_dite_impraticable(atelier, monkeypatch):
+    """Un montage qui refuse la demande (un rôle d'image sans son image) la
+    refusera au run : l'estimation le dit, nomme le réglage, et n'annonce
+    aucune durée — plutôt que de se taire ou d'estimer un run qui n'aura pas lieu."""
+    from comfyui_bridge.api import main as _main
+    from comfyui_bridge.core.errors import WorkflowMappingError
+
+    def refuse(container, plan, silencieux=True):
+        raise WorkflowMappingError("« role_image_2 » n'a pas de place dans ce dépliage du "
+                                   "montage ($amorce.22)", field="role_image_2")
+    monkeypatch.setattr(_main, "_with_work", refuse)
+    d = atelier.post("/v1/estimate", json={"workflow": "chaine-simple"}).json()
+    assert d["estimate"] is None and "manque" not in d
+    assert d["impraticable"] == ("étape un : « role_image_2 » n'a pas de place dans ce dépliage "
+                                 "du montage ($amorce.22)")
+
+
 def test_les_fichiers_de_travail_ne_sont_pas_des_livrables(tmp_path):
     """Ce sont de vrais .mp4 : sans dossier réservé, la liste des livrables
     offrait cinquante images de travail avant la vidéo commandée."""
