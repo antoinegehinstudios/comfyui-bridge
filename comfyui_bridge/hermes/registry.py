@@ -54,8 +54,14 @@ def ajuster(points: list[tuple[float, float]], x: float) -> dict[str, Any] | Non
     ordonnee, pente = fitted
     secondes = ordonnee + pente * x
     ecart = max((abs(d - (ordonnee + pente * w)) for w, d in points), default=0.0)
+    # Le bas de la fourchette ne descend pas sous la mesure la plus courte :
+    # un écart large (des livraisons d'un montage d'avant, à d'autres tailles)
+    # annonçait « entre 1 s et 73 min » — rien n'a jamais pris moins que le
+    # plus rapide des jobs mesurés.
+    plancher = min(d for _, d in points)
     return {"seconds": max(1, round(secondes)), "samples": len(points),
-            "min": max(1, round(secondes - ecart)), "max": max(1, round(secondes + ecart)),
+            "min": max(1, round(max(secondes - ecart, plancher))),
+            "max": max(1, round(secondes + ecart)),
             "setup_s": round(ordonnee), "per_unit_s": round(pente, 2)}
 
 

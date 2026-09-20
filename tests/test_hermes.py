@@ -315,6 +315,9 @@ def test_un_ajustement_public_sur_des_tailles_quelconques():
     assert a["samples"] == 4 and a["per_unit_s"] > 200 and a["setup_s"] >= 0
     # 12 runs : la droite passe par ≈ 710 à 2 et ≈ 1235 à 4 → ≈ 3300 s.
     assert 3100 <= a["seconds"] <= 3500 and a["min"] <= a["seconds"] <= a["max"]
+    # Un écart énorme ne fait pas descendre le bas sous la mesure la plus courte.
+    large = ajuster([(2.0, 700.0), (4.0, 1230.0), (4.0, 3000.0), (6.0, 2000.0)], 2.0)
+    assert large["min"] == 700 and large["max"] > large["seconds"] > 700
     assert ajuster([(2.0, 720.0), (2.0, 700.0)], 12.0) is None       # une seule taille
     assert ajuster([(2.0, 1000.0), (4.0, 500.0)], 6.0) is None         # pente à l'envers
 
