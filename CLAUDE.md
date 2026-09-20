@@ -101,7 +101,7 @@ n'importe quelle vidéo). Une chaîne ne recopie donc jamais une liste ni une
 documentation : elle dit d'où elles viennent.
 
 **Le socle ink est figé** (2026-09-15, « c'est parfait — assure cette
-standardisation ») : le plan des onze étapes est agnostique, tout le reste est un
+standardisation ») : le plan des douze étapes (onze jusqu'au 2026-09-20) est agnostique, tout le reste est un
 paramètre dont le DÉFAUT est celui du rendu ink livré ce jour-là ; un style de plus
 est une entrée de plus dans un catalogue ou une table, jamais un défaut de moins.
 Depuis le 2026-09-16, **la chaîne ne nomme aucune TECHNIQUE** (Antoine : « la
@@ -161,10 +161,16 @@ paramètres fantômes sont à bannir »). Dans « Révéler une image », l'inte
 reçoit le budget — `62.duree_s`, `62.contemplation_s`, `62.queue_s` (la fin
 fixe que le nœud de la technique choisie impose, lue dans SON fichier par le
 renvoi `$technique.budget.queue_s`) — et la graine, et se taille dedans ;
-`plan_valide` refuse en chiffrant un plan dont le minimum dépasse la demande
-(`le_plan_tient_dans_la_duree`) ; le déroulement n'allonge que dans la marge
-que son graphe déclare (`61.allonge_max_s`, 5 s) et `plan_tenu` le CONSTATE
-(`la_duree_est_tenue`). Le plan est gardé par clé (`memoire` de l'étape
+`plan_dans_la_duree` CONSTATE en chiffrant un plan dont le minimum dépasse la
+demande (`le_plan_tient_dans_la_duree` — un refus de `plan_valide` jusqu'au
+2026-09-20 au matin ; Antoine : « mentionner une erreur ne doit pas suicider la
+livraison ! les erreurs mentionnées ne tuent pas la livraison, elles émettent
+seulement »), le déroulement reçoit la durée que le plan demande
+(`$intention.recit.duree_prevue_s`), n'allonge que dans la marge que son
+graphe déclare (`61.allonge_max_s`, 5 s) et `plan_tenu` le CONSTATE
+(`la_duree_est_tenue`). Ce qui refuse encore : `plan_valide` (une inconformité
+de l'image ou du plan, que le nœud ne saurait pas peindre) et `controle` (le
+fichier final) ; tout écart chiffré se constate. Le plan est gardé par clé (`memoire` de l'étape
 `intention` : même image, réglages, graine, technique → repris sans run).
 Trois grammaires génériques portent cela, sans un nom de flux dans le code :
 le renvoi `$<champ de technique>.<chemin>` (`core/chaine.py`), la clé

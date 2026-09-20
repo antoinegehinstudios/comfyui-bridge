@@ -11,7 +11,7 @@ d'essai ne sait rien des techniques : il lit le nom du graphe qu'on lui donne,
 les réglages et les entrées de nœud qu'on lui pousse, et note tout.
 
 Ce qui doit être IDENTIQUE d'une technique à l'autre est mesuré identique :
-les onze étapes et leur ordre, l'amont (analyse, culture, intention), les
+les douze étapes et leur ordre, l'amont (analyse, culture, intention), les
 entrées du plan qui atteignent le nœud de rôle, le découpage en tranches, les
 contrôles du plan, le montage, un seul livrable, la durée livrée. Ce qui doit
 DIFFÉRER est mesuré différent : les nœuds appelés, les réglages qui atteignent
@@ -46,7 +46,8 @@ from comfyui_bridge.config import Settings  # noqa: E402
 from comfyui_bridge.core import chaine as noyau  # noqa: E402
 from comfyui_bridge.core.plan import Artifact, BackendResult  # noqa: E402
 from test_chaines_api import SANS_FFMPEG, BackendQuiLivre, _job  # noqa: E402
-from test_socle_ink import (CONTROLES_PLAN_TENU_DU_PLAN, CONTROLES_PLAN_VALIDE,  # noqa: E402
+from test_socle_ink import (CONTROLES_PLAN_DANS_LA_DUREE, CONTROLES_PLAN_TENU_DU_PLAN,  # noqa: E402
+                            CONTROLES_PLAN_VALIDE,
                             EXEMPLES, PLAN, TECHNIQUES)
 from test_tranches import LARGE  # noqa: E402
 
@@ -478,8 +479,8 @@ def _sans_segments(overrides):
 # -- ce qui est identique --------------------------------------------------------
 
 
-def test_les_onze_etapes_sont_les_memes_et_toutes_tenues(atelier, productions):
-    """Le plan est le même fichier pour toutes : les onze étapes, dans cet
+def test_les_douze_etapes_sont_les_memes_et_toutes_tenues(atelier, productions):
+    """Le plan est le même fichier pour toutes : les douze étapes, dans cet
     ordre, avec leurs genres — et sous chaque technique, toutes sont tenues."""
     for nom, (job, _) in productions.items():
         assert [(e["id"], e["genre"]) for e in job["etapes"]] == PLAN, nom
@@ -643,6 +644,11 @@ def test_les_controles_du_plan_sont_les_memes_et_ceux_de_la_peinture_sont_a_la_t
                                ("controle", ["le_montage_a_ses_parts", "livrable_pese"])):
             lignes = _etape(job, ident)["resultat"]["controles"]
             assert [c["id"] for c in lignes] == attendu and all(c["ok"] for c in lignes), (nom, ident)
+        # Avant de peindre, la durée se CONSTATE (2026-09-20 : « mentionner une
+        # erreur ne doit pas suicider la livraison ») — ici le plan tient.
+        dans_la_duree = _etape(job, "plan_dans_la_duree")["resultat"]
+        assert dans_la_duree["constat"] is True and dans_la_duree["non_tenus"] == [], nom
+        assert [c["id"] for c in dans_la_duree["controles"]] == CONTROLES_PLAN_DANS_LA_DUREE, nom
         # La peinture se CONSTATE sur le constat commun du plan (la durée
         # tenue, 2026-09-19) PUIS sur la liste de sa technique.
         lignes = _etape(job, "plan_tenu")["resultat"]["controles"]
@@ -686,6 +692,62 @@ def test_sans_appel_chaque_technique_retombe_a_deux_parts(atelier):
         assert _etape(job, "montage")["resultat"]["parts"] == 2, nom
         assert [g for g, _, _ in recus][-1] == atelier.techniques[nom].roles["conclusion"].workflow
         assert len(job["artifacts"]) == 1, nom
+
+
+# -- mentionner ne tue pas la livraison ------------------------------------------
+
+
+def test_un_plan_qui_ne_tient_pas_dans_la_duree_se_constate_et_la_chaine_livre(atelier):
+    """DÉCISION ÉCRITE, 2026-09-20 au matin. « Sépia au trait sec, à la
+    chandelle » demandé à 12 s sous Peinture calme : le plan taillé à trois
+    temps demandait 31,58 s, et « plan_valide » a REFUSÉ — Antoine : « mentionner
+    une erreur ne doit pas suicider la livraison ! Les erreurs mentionnées ne
+    tuent pas la livraison, elles émettent seulement. » Depuis : l'écart se
+    CONSTATE avant de peindre (étape plan_dans_la_duree, chiffrée, avec son
+    aide, au journal et à la fiche), le déroulement reçoit la durée que le plan
+    demande, et la chaîne livre."""
+    if not montage_video.disponible():
+        pytest.skip("ffmpeg/ffprobe absents de ce poste : le recollage ne peut pas être éprouvé")
+    faux = atelier.faux
+    garde = faux.recits["image-intention"]
+    # Le plan a reçu 12 s, s'est taillé à trois temps, et il lui en faut 31,58.
+    faux.recits["image-intention"] = {**garde, "duree_s": DUREE_S, "duree_minimale_s": 31.58,
+                                      "duree_prevue_s": 31.58, "temps_retires_pour_la_duree": 2,
+                                      "duree_detail": "3 temps : accroche 2,8 s + tenues 8,6 s "
+                                                      "+ trajets 9,2 s + fin 11,0 s"}
+    try:
+        debut = len(faux.recus)
+        # Une autre graine que « productions » : l'intention est gardée par clé,
+        # et la même clé reprendrait le plan qui tenait.
+        r = atelier.post("/v1/render", json={**DEMANDE, "technique": "encre", "seed": 72,
+                                             "label": "sepia-12s"})
+        assert r.status_code == 202, r.text
+        job = _job(atelier, r)
+        recus = faux.recus[debut:]
+    finally:
+        faux.recits["image-intention"] = garde
+    # LA CHAÎNE LIVRE.
+    assert job["status"] == "succeeded", (job.get("problem"), job["logs"][-8:])
+    assert job["problem"] is None and len(job["artifacts"]) == 1
+    assert [e["statut"] for e in job["etapes"]] == ["done"] * len(PLAN)
+    # …et l'écart est ÉMIS : le plan se juge tenu (plan_valide, tous verts),
+    # puis la durée se constate non tenue, chiffrée, avec son aide.
+    assert all(c["ok"] for c in _etape(job, "plan_valide")["resultat"]["controles"])
+    constat = _etape(job, "plan_dans_la_duree")["resultat"]
+    assert constat["constat"] is True and constat["non_tenus"] == ["le_plan_tient_dans_la_duree"]
+    ligne = constat["controles"][0]
+    assert (ligne["ok"], ligne["op"], ligne["mesure"], ligne["attendu"]) == (False, "lte", 31.58, DUREE_S)
+    assert "constat" in ligne["aide"].lower() and "Visite guidée" in ligne["aide"]
+    journal = "\n".join(job["logs"])
+    assert ("étape plan_dans_la_duree : constaté, non tenu — le_plan_tient_dans_la_duree : "
+            "mesuré 31.58, attendu lte 12.0 — Le plan ne tient pas") in journal
+    # Le déroulement a reçu la durée que le PLAN demande (ses trois tranches,
+    # toutes), pas la demande brute — et la fiche garde la demande de
+    # l'utilisateur telle qu'elle est.
+    runs = _runs(recus, atelier.techniques["encre"].roles["deroulement"].workflow)
+    assert len(runs) == 3 and all(p["duration_s"] == 31.58 for p, _ in runs), runs
+    assert job["demande"]["duration_s"] == DUREE_S and job["params"]["duration_s"] == DUREE_S
+    assert _etape(job, "deroulement")["resultat"]["mesure"]["duration_s"] == pytest.approx(31.58, abs=0.4)
 
 
 # -- les graphes de ce poste ---------------------------------------------------

@@ -10,7 +10,7 @@ Antoine, 2026-09-16 : LA CHAÎNE NE NOMME AUCUNE TECHNIQUE — « la mention de
 brume ne doit pas être tenue par le workflow de la passerelle : cela veut dire
 qu'il porte une dépendance à la brume et devra se faire doublon pour faire
 autrement ». Le socle se lit donc à deux endroits depuis ce jour : le PLAN dans
-la chaîne (onze étapes, leurs genres, les rôles qu'elle nomme, ses contrôles
+la chaîne (douze étapes, leurs genres, les rôles qu'elle nomme, ses contrôles
 communs) et l'ENCRE dans sa technique (défauts, options, quel graphe tient
 chaque rôle et ce qu'il reçoit, ses contrôles « plan_tenu »). Rien n'a bougé
 dans ce qui est épinglé : ce qui était écrit dans la chaîne est écrit dans la
@@ -34,7 +34,15 @@ TECHNIQUES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "techniques-e
 
 # LE PLAN AGNOSTIQUE : les étapes et leurs genres, dans cet ordre.
 PLAN = [("analyse", "rendre"), ("culture", "rendre"), ("intention", "rendre"),
-        ("plan_valide", "verifier"), ("deroulement", "rendre"),
+        ("plan_valide", "verifier"),
+        # DÉCISION ÉCRITE, 2026-09-20 au matin (Antoine : « mentionner une erreur
+        # ne doit pas suicider la livraison ! — les erreurs mentionnées ne tuent
+        # pas la livraison, elles émettent seulement ») : un plan qui ne tient
+        # pas dans la durée demandée se CONSTATE avant de peindre, chiffré, et
+        # la peinture se fait à la durée que le plan demande. Douze étapes
+        # depuis ce jour ; onze du 15 au 19.
+        ("plan_dans_la_duree", "constater"),
+        ("deroulement", "rendre"),
         # DÉCISION ÉCRITE, 2026-09-17 au soir (Antoine : « il ne faut plus que
         # maestro annonce des erreurs quand la vidéo est très bien, c'est
         # l'utilisateur qui juge ») : la peinture se CONSTATE, elle ne se refuse
@@ -166,10 +174,11 @@ CONTROLES_PLAN_VALIDE = [
     "l_accroche_ne_devoile_pas_le_climax", "le_plan_a_de_quoi_croitre",
     "l_accroche_est_un_detail", "l_accroche_montre_de_la_matiere",
     "le_climax_est_la_figure_de_l_oeuvre", "le_climax_garde_un_coeur_pour_la_fin",
-    "le_trajet_ne_revient_pas", "le_plan_tient_dans_l_approche",
-    # …et le plan tient dans la DURÉE demandée (2026-09-19) : refusé chiffré
-    # avant de peindre, jamais d'allonge silencieuse.
-    "le_plan_tient_dans_la_duree"]
+    "le_trajet_ne_revient_pas", "le_plan_tient_dans_l_approche"]
+# …et le plan tient dans la DURÉE demandée : un REFUS le 2026-09-19, un CONSTAT
+# depuis le 2026-09-20 (« mentionner une erreur ne doit pas suicider la
+# livraison ») — porté par sa propre étape, avant de peindre.
+CONTROLES_PLAN_DANS_LA_DUREE = ["le_plan_tient_dans_la_duree"]
 # Le constat COMMUN de la peinture, porté par la chaîne devant la liste de la
 # technique : le rendu a-t-il tenu la durée que le plan prévoyait (2026-09-19).
 CONTROLES_PLAN_TENU_DU_PLAN = ["la_duree_est_tenue"]
@@ -207,7 +216,7 @@ def technique_encre():
 
 
 def test_le_plan_est_agnostique_et_ne_nomme_aucune_technique(ink):
-    """Les onze étapes, dans cet ordre, avec leurs genres — et les deux étapes
+    """Les douze étapes, dans cet ordre, avec leurs genres — et les deux étapes
     qui peignent nomment un RÔLE, jamais un graphe. C'est ce qui fait qu'une
     technique de plus est un fichier de plus, et non une chaîne de plus."""
     chaine = noyau.lire(ink, "video-revelation")
@@ -317,11 +326,22 @@ def test_les_controles_communs_gardent_le_plan_et_le_livrable(ink):
     # un plan à un tracé sur six temps a été peint trente-deux minutes en 720p
     # avant que l'encre le refuse (2026-09-17, job 464e6a4c).
     assert (plan["technique"], plan["controles_de_la_technique"]) == ("$technique", "plan")
-    # Le contrôle de la durée est CHIFFRÉ par la demande elle-même : mesuré
-    # (le minimum du plan écrit) ≤ attendu (la durée demandée).
-    duree = [c for c in plan["controles"] if c["id"] == "le_plan_tient_dans_la_duree"][0]
+    # Le constat de la durée est CHIFFRÉ par la demande elle-même : mesuré
+    # (le minimum du plan écrit) ≤ attendu (la durée demandée) — et il n'arrête
+    # rien : c'est une étape « constater », pas un contrôle de « plan_valide »
+    # (2026-09-20 : un refus a tué une livraison pour 31,58 s demandées à 12).
+    dans_la_duree = etapes["plan_dans_la_duree"]["constater"]
+    assert isinstance(dans_la_duree, list)
+    assert [c["id"] for c in dans_la_duree] == CONTROLES_PLAN_DANS_LA_DUREE
+    duree = dans_la_duree[0]
     assert (duree["valeur"], duree["op"], duree["attendu"]) == (
         "$intention.recit.duree_minimale_s", "lte", "$duration_s")
+    assert "constat" in str(duree.get("aide", "")).lower()
+    # …et le déroulement peint la durée que le PLAN demande (max(demande,
+    # minimum estimé)), pas la demande brute : c'est ce que le nœud rend et ce
+    # sur quoi la passerelle compte ses tranches — jamais moins d'images que
+    # le nœud n'en rendra.
+    assert etapes["deroulement"]["rendre"]["duration_s"] == "$intention.recit.duree_prevue_s"
     # …et « plan_tenu » CONSTATE la durée tenue, devant la liste de la technique.
     tenu = etapes["plan_tenu"]["constater"]
     assert (tenu["technique"], tenu["controles_de_la_technique"]) == ("$technique", "plan_tenu")

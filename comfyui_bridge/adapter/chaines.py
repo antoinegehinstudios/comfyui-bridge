@@ -1785,8 +1785,11 @@ def _resume(resultat: dict[str, Any]) -> dict[str, Any]:
     if "controles" in resultat:
         # …avec l'aide du contrôle quand il en porte une : ce qu'un constat n'a
         # pas tenu se lit sur la fiche, sans rouvrir la chaîne (2026-09-19).
-        garde["controles"] = [{"id": l["id"], "ok": l["ok"], "mesure": l["mesure"],
-                               "attendu": l["attendu"],
+        # …et son opérateur : la ligne d'un constat se lit comme celle d'un
+        # refus (« mesuré 31.58, attendu lte 12.0 »), un lanceur la rend telle
+        # quelle (2026-09-20 : sans lui, maestro écrivait « attendu undefined 12 »).
+        garde["controles"] = [{"id": l["id"], "ok": l["ok"], "op": l.get("op"),
+                               "mesure": l["mesure"], "attendu": l["attendu"],
                                **({"aide": l["aide"]} if l.get("aide") else {})}
                               for l in resultat["controles"]]
         # un CONSTAT dit qu'il en est un, et ce qu'il n'a pas tenu : c'est ce
