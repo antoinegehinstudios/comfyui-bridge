@@ -1510,16 +1510,29 @@ la passerelle le DIT au journal.
 2026-09-20 : « j'envoie une affiche ou un logo et le pipeline me le révèle en
 quelques secondes avec un effet cinématique en prenant en compte les tonalités
 de couleur présentes ; le contenu doit toujours rester inchangé »). Rien de
-« Révéler une image » ici : ni analyse, ni intention, ni encre. Trois étapes —
-`revelation` (le graphe `video-affiche-cinematique`, un seul nœud procédural
-du paquet `comfyui-affiche-cinematique` : il lit les tons de l'affiche, la
-pose ENTIÈRE dans le cadre, la dévoile — `effet` emergence / balayage / iris,
-`fond` tons / sombre / clair — puis la tient intacte `tenue_s` secondes),
-`integrite` (un CONSTAT : `l_affiche_est_intacte` — l'écart de la dernière
-image, mesuré par le nœud, vaut zéro —, `la_tenue_est_tenue`,
-`la_duree_est_exacte`) et `controle` (le fichier pèse). Neuf champs, tous
-lus (`test_chaque_champ_pese`) ; témoin `tests/test_socle_affiche.py`. Mesuré
-le 2026-09-20 : 5 s en 720×1280 livrées en 12 s de job (3,7 s de calcul), un
+« Révéler une image » ici : ni analyse, ni intention, ni encre. Quatre étapes —
+`lecture` (depuis le même jour, « il serait bien de pouvoir déclarer un fond,
+ou autre élément supplémentaire avec un commentaire, pour qu'il pèse » : le
+graphe `affiche-lecture`, nœud `AfficheLecture` — le RÉALISATEUR, passerelle
+LLM `role/texte-claude`, lit jusqu'à trois éléments `image_2/3/4` déclarés
+avec un `commentaire_2/3/4` libre, chacun PRÉSENT PAR SON NOM, et les traduit
+en réglages fermés : fond ou élément, flou, assombrissement, teinte, place,
+taille, opacité, moment, au-dessus ; gardée par clé ; rien à lire = aucun
+appel ; un réalisateur muet = repli DIT), `revelation` (le graphe
+`video-affiche-cinematique`, nœud `AfficheCinematique` : il lit les tons de
+l'affiche, la pose ENTIÈRE dans le cadre, applique les éléments — un fond
+COUVRE le cadre, traité ; un élément est posé à sa place, sous l'affiche sauf
+demande —, la dévoile — `effet` emergence / balayage / iris, `fond` tons /
+sombre / clair — puis la tient intacte `tenue_s` secondes), `integrite` (un
+CONSTAT : `l_affiche_est_intacte` — l'écart de la dernière image, mesuré par
+le nœud hors des zones couvertes à la demande, vaut zéro —,
+`la_tenue_est_tenue`, `la_duree_est_exacte`, `la_lecture_a_eu_lieu`,
+`chaque_element_pese`, `l_affiche_n_est_pas_couverte`) et `controle` (le
+fichier pèse). Quinze champs, tous lus (`test_chaque_champ_pese`) ; témoin
+`tests/test_socle_affiche.py`. Un point de grammaire pour cela : une entrée de
+nœud dont le renvoi vaut None (une pièce jointe facultative au repos) ne part
+pas — le littéral du graphe reste, et le journal le dit. Mesuré le
+2026-09-20 : 5 s en 720×1280 livrées en 12 s de job (3,7 s de calcul), un
 logo transparent en 9 s, l'écart de la dernière image à 0 partout.
 
 `video-depuis-un-texte` — « Écrire une vidéo », le mode par défaut de

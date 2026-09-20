@@ -724,6 +724,20 @@ class RunnerDeChaines:
         reglages = dict(params)
         nom = str(reglages.pop("workflow"))
         media = {k: str(v) for k, v in (reglages.pop("media", None) or {}).items() if v}
+        # UNE PIÈCE JOINTE AU REPOS NE PART PAS DANS UN NŒUD. Un champ média
+        # facultatif laissé vide vaut None (core/chaine.py::valeurs) ; une
+        # entrée de nœud qui le renvoie (« 7.image_2_nom »: « $image_2 » — c'est
+        # ainsi qu'un nœud SAIT qu'un élément est absent, sans deviner sur les
+        # pixels de l'image neutre) écrirait null dans le graphe. Elle est
+        # retirée, le littéral du graphe reste, et c'est dit (2026-09-20).
+        entrees = reglages.get("inputs")
+        if isinstance(entrees, dict):
+            au_repos = sorted(k for k, v in entrees.items() if v is None)
+            if au_repos:
+                reglages["inputs"] = {k: v for k, v in entrees.items() if v is not None}
+                c.store.append_log(
+                    parent_id, f"étape {etape.id} : {', '.join('« %s »' % k for k in au_repos)} — "
+                               f"renvoi sans valeur (pièce jointe absente), le littéral du graphe reste")
         for cle, valeur in media.items():
             fichier = Path(valeur)
             if fichier.is_file():

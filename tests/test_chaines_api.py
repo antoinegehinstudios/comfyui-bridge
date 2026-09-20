@@ -259,6 +259,21 @@ CHAINE_QUI_SE_SOUVIENT = {
 # qui le reprend en média (ici « deux » lit « $une.livrable ») ne doit jamais
 # le voir tel quel. « image_2 » n'est déjà pas un fichier d'ici : rien à
 # déposer, elle passe telle quelle.
+# Une pièce jointe FACULTATIVE au repos, renvoyée par une entrée de nœud : c'est
+# ainsi qu'un nœud sait qu'un élément est absent (la passerelle lui envoie une
+# image neutre à la place — il ne doit rien deviner sur ses pixels). L'entrée ne
+# part pas, le littéral du graphe reste, et c'est dit (2026-09-20).
+CHAINE_PIECE_AU_REPOS = {
+    "version": 1, "chaine": "chaine-piece-au-repos",
+    "resume": "une pièce jointe facultative au repos ne part pas dans une entrée de nœud",
+    "expose": {"image_2": {"media": "image", "requis": False, "libelle": "Une pièce (facultatif)"}},
+    "etapes": [
+        {"id": "une", "rendre": {"workflow": "sd15-txt2img", "prompt": "une",
+                                 "inputs": {"3.sampler_name": "$image_2"}}},
+    ],
+    "livrable": "$une.livrable",
+}
+
 CHAINE_MEDIA_LIVRABLE = {
     "version": 1, "chaine": "chaine-media-livrable",
     "resume": "un rendu qui reprend en média le livrable d'un rendu précédent",
@@ -282,6 +297,8 @@ def atelier():
     (tmp / "chaine-au-menu.json").write_text(json.dumps(CHAINE_AU_MENU), encoding="utf-8")
     (tmp / "chaine-media-livrable.json").write_text(json.dumps(CHAINE_MEDIA_LIVRABLE),
                                                      encoding="utf-8")
+    (tmp / "chaine-piece-au-repos.json").write_text(json.dumps(CHAINE_PIECE_AU_REPOS),
+                                                     encoding="utf-8")
     (tmp / "chaine-facultative.json").write_text(json.dumps(CHAINE_FACULTATIVE),
                                                  encoding="utf-8")
     (tmp / "chaine-facultative-reglee.json").write_text(
@@ -301,6 +318,9 @@ def atelier():
         "workflows": {
             "chaine-au-menu": {"kind": "image", "chaine": str(tmp / "chaine-au-menu.json"),
                                "titre": "Chaîne au menu", "categorie": "essais", "ordre": 5},
+            "chaine-piece-au-repos": {"kind": "image",
+                                      "chaine": str(tmp / "chaine-piece-au-repos.json"),
+                                      "titre": "Pièce au repos", "categorie": "essais", "ordre": 9},
             "chaine-media-livrable": {"kind": "image",
                                       "chaine": str(tmp / "chaine-media-livrable.json"),
                                       "titre": "Chaîne média livrable",
@@ -447,6 +467,24 @@ def test_un_rendre_qui_reprend_un_livrable_le_depose_chez_le_moteur(atelier, mon
     assert any(attendu in ligne for ligne in job["logs"])
     # « image_2 » n'était déjà pas un fichier d'ici : rien à déposer.
     assert vus[1]["image_2"] == "deja-depose.png"
+
+
+def test_une_piece_jointe_au_repos_ne_part_pas_dans_une_entree_de_noeud(atelier):
+    """Absente, la pièce facultative vaut None : l'entrée de nœud qui la
+    renvoie est retirée (le littéral du graphe reste) et le journal le dit ;
+    présente, son nom part tel quel."""
+    vus = []
+    atelier.faux.avant = lambda plan: vus.append(dict(plan.overrides))
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-piece-au-repos"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    assert "3.sampler_name" not in vus[0], vus[0]
+    assert any("« 3.sampler_name » — renvoi sans valeur (pièce jointe absente), le littéral "
+               "du graphe reste" in ligne for ligne in job["logs"]), job["logs"]
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-piece-au-repos",
+                                                         "image_2": "ma-piece.png"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    assert vus[1]["3.sampler_name"] == "ma-piece.png"
+    assert not any("pièce jointe absente" in ligne for ligne in job["logs"])
 
 
 def test_un_controle_faux_arrete_la_chaine_et_garde_les_fichiers(atelier):

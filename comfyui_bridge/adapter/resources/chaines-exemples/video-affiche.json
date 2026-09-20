@@ -10,6 +10,48 @@
       "categorie": "oeuvre",
       "aide": "Une affiche, un logo (PNG avec transparence accepté : le fond se voit à travers). Elle est posée ENTIÈRE dans le cadre, jamais rognée, et livrée intacte."
     },
+    "image_2": {
+      "media": "image",
+      "requis": false,
+      "libelle": "Élément 1 (facultatif)",
+      "categorie": "elements",
+      "aide": "Une image de plus : un fond (une photo, une texture), un logo, une signature… Dites dans son commentaire ce qu'elle est, où elle va, comment la traiter ; le réalisateur le lit et règle. Sans commentaire, il décide d'après ce qu'elle est."
+    },
+    "commentaire_2": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Commentaire de l'élément 1",
+      "categorie": "elements",
+      "aide": "Texte libre, lu par le réalisateur : « en fond, floutée et sombre », « mon logo en bas à droite, petit, quand l'affiche est là », « par-dessus l'affiche, au centre »… Il le traduit en réglages fermés (rôle, flou, assombrissement, teinte, place, taille, opacité, moment, au-dessus) que le récit répète. Sans élément joint, ce champ ne sert pas."
+    },
+    "image_3": {
+      "media": "image",
+      "requis": false,
+      "libelle": "Élément 2 (facultatif)",
+      "categorie": "elements",
+      "aide": "Une image de plus : un fond (une photo, une texture), un logo, une signature… Dites dans son commentaire ce qu'elle est, où elle va, comment la traiter ; le réalisateur le lit et règle. Sans commentaire, il décide d'après ce qu'elle est."
+    },
+    "commentaire_3": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Commentaire de l'élément 2",
+      "categorie": "elements",
+      "aide": "Texte libre, lu par le réalisateur : « en fond, floutée et sombre », « mon logo en bas à droite, petit, quand l'affiche est là », « par-dessus l'affiche, au centre »… Il le traduit en réglages fermés (rôle, flou, assombrissement, teinte, place, taille, opacité, moment, au-dessus) que le récit répète. Sans élément joint, ce champ ne sert pas."
+    },
+    "image_4": {
+      "media": "image",
+      "requis": false,
+      "libelle": "Élément 3 (facultatif)",
+      "categorie": "elements",
+      "aide": "Une image de plus : un fond (une photo, une texture), un logo, une signature… Dites dans son commentaire ce qu'elle est, où elle va, comment la traiter ; le réalisateur le lit et règle. Sans commentaire, il décide d'après ce qu'elle est."
+    },
+    "commentaire_4": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Commentaire de l'élément 3",
+      "categorie": "elements",
+      "aide": "Texte libre, lu par le réalisateur : « en fond, floutée et sombre », « mon logo en bas à droite, petit, quand l'affiche est là », « par-dessus l'affiche, au centre »… Il le traduit en réglages fermés (rôle, flou, assombrissement, teinte, place, taille, opacité, moment, au-dessus) que le récit répète. Sans élément joint, ce champ ne sert pas."
+    },
     "duration_s": {
       "type": "FLOAT",
       "defaut": 5,
@@ -90,11 +132,59 @@
   },
   "etapes": [
     {
+      "id": "lecture",
+      "rendre": {
+        "workflow": "affiche-lecture",
+        "media": {
+          "image": "$image",
+          "image_2": "$image_2",
+          "image_3": "$image_3",
+          "image_4": "$image_4"
+        },
+        "seed": "$seed",
+        "inputs": {
+          "5.image_2_nom": "$image_2",
+          "5.image_3_nom": "$image_3",
+          "5.image_4_nom": "$image_4",
+          "5.commentaire_2": "$commentaire_2",
+          "5.commentaire_3": "$commentaire_3",
+          "5.commentaire_4": "$commentaire_4",
+          "5.effet": "$effet",
+          "5.fond": "$fond",
+          "5.duree_s": "$duration_s",
+          "5.tenue_s": "$tenue_s",
+          "5.out_width": "$width",
+          "5.out_height": "$height"
+        },
+        "memoire": {
+          "cle": [
+            "$image",
+            "$image_2",
+            "$image_3",
+            "$image_4",
+            "$commentaire_2",
+            "$commentaire_3",
+            "$commentaire_4",
+            "$effet",
+            "$fond",
+            "$duration_s",
+            "$tenue_s",
+            "$width",
+            "$height",
+            "$seed"
+          ]
+        }
+      }
+    },
+    {
       "id": "revelation",
       "rendre": {
         "workflow": "video-affiche-cinematique",
         "media": {
-          "image": "$image"
+          "image": "$image",
+          "image_2": "$image_2",
+          "image_3": "$image_3",
+          "image_4": "$image_4"
         },
         "duration_s": "$duration_s",
         "fps": "$fps",
@@ -104,7 +194,11 @@
         "inputs": {
           "7.effet": "$effet",
           "7.tenue_s": "$tenue_s",
-          "7.fond": "$fond"
+          "7.fond": "$fond",
+          "7.image_2_nom": "$image_2",
+          "7.image_3_nom": "$image_3",
+          "7.image_4_nom": "$image_4",
+          "7.reglages_json": "$lecture.recit.reglages_json"
         }
       }
     },
@@ -131,6 +225,27 @@
           "op": "eq",
           "attendu": "$duration_s",
           "aide": "Le nœud rend exactement la durée demandée (images = durée × cadence), jamais allongée. Non tenu : le graphe a reçu autre chose que la demande — dire le job."
+        },
+        {
+          "id": "la_lecture_a_eu_lieu",
+          "valeur": "$lecture.recit.repli",
+          "op": "eq",
+          "attendu": false,
+          "aide": "Quand des éléments sont déclarés, le réalisateur (passerelle LLM, rôle texte) doit les avoir lus. Non tenu : il n'a pas répondu (passerelle éteinte, refus, réponse sans JSON — le récit dit la raison) et des réglages de repli ont servi : un commentaire qui parle de fond fait un fond, le reste va en bas à droite, petit. Vérifier la passerelle LLM (4000) et relancer. C'est un constat : la vidéo est livrée."
+        },
+        {
+          "id": "chaque_element_pese",
+          "valeur": "$revelation.recit.elements_places",
+          "op": "eq",
+          "attendu": "$lecture.recit.elements_fournis",
+          "aide": "Chaque élément déclaré doit avoir été posé (en fond ou dans le cadre) : le récit du déroulement les compte (elements_dits les décrit). Non tenu : dire le job."
+        },
+        {
+          "id": "l_affiche_n_est_pas_couverte",
+          "valeur": "$revelation.recit.affiche_couverte_part",
+          "op": "lte",
+          "attendu": 0,
+          "aide": "Aucun élément ne couvre l'affiche, sauf si le commentaire l'a demandé (« par-dessus »). Non tenu : un élément passe au-dessus — le récit dit quelle part de l'affiche il couvre (affiche_couverte_part) ; l'intégrité est mesurée hors de cette zone. C'est un constat."
         }
       ]
     },
@@ -150,9 +265,10 @@
   "livrable": "$revelation.livrable",
   "notes": {
     "pourquoi": "Antoine, 2026-09-20 : « je veux un nouveau type de workflow dans maestro. J'envoie une affiche ou un logo et le pipeline me le révèle en quelques secondes avec un effet cinématique en prenant en compte les tonalités de couleur présentes. Un nouveau type, pour test. Le contenu doit toujours rester inchangé. » Rien de la chaîne « Révéler une image » ici : pas d'analyse (vingt minutes sur une image neuve), pas d'intention, pas d'encre qui repeint. Un nœud procédural (paquet comfyui-affiche-cinematique) : 150 images en 720×1280 en 3,8 s de calcul, mesuré le 2026-09-20.",
-    "ce_qui_ne_change_pas": "LE CONTENU. L'affiche est posée entière (« contain », 5 % de marge), rééchantillonnée une fois pour tenir dans le cadre, jamais rognée ; la tenue finale est cette image posée, pixel pour pixel — sans grain ni vignette — et le nœud mesure l'écart de la dernière image (ecart_derniere_image_max, zéro par construction) : la chaîne le CONSTATE (integrite). Ce mode n'a pas de rognage « plein cadre » : il changerait le contenu.",
+    "ce_qui_ne_change_pas": "LE CONTENU. L'affiche est posée entière (« contain », 5 % de marge), rééchantillonnée une fois pour tenir dans le cadre, jamais rognée ; la tenue finale est cette image posée, pixel pour pixel — sans grain ni vignette — et le nœud mesure l'écart de la dernière image (ecart_derniere_image_max, zéro par construction) : la chaîne le CONSTATE (integrite). Ce mode n'a pas de rognage « plein cadre » : il changerait le contenu. Un élément demandé PAR-DESSUS l'affiche la couvre : c'est dit (affiche_couverte_part, constat l_affiche_n_est_pas_couverte) et l'intégrité se mesure hors de cette zone ; par défaut, les éléments passent sous l'affiche.",
     "les_tons": "L'effet prend ses couleurs dans l'affiche : le nœud lit ses tons (k-means déterministe sur l'image réduite — tons, parts, ton dominant, vif, sombre, clair, clarté, température) et les écrit au récit ; le fond, le halo, la lumière qui balaie et le liseré de l'iris en viennent. Une affiche sombre émerge de ses ombres, une claire de ses lumières.",
     "ce_qui_se_constate": "integrite est un constat (genre constater), jamais un refus — « mentionner une erreur ne doit pas suicider la livraison » (Antoine, 2026-09-20) : une tenue ramenée, un écart, se disent à la fiche, et la vidéo est livrée. Seul controle (un fichier sans images) refuse.",
-    "essai": "Un type POUR ESSAI : les trois effets sont des premières versions, à régler au regard d'Antoine ; pas de texte incrusté, pas de son, pas d'appel final, pas de raccourci."
+    "essai": "Un type POUR ESSAI : les trois effets sont des premières versions, à régler au regard d'Antoine ; pas de texte incrusté, pas de son, pas d'appel final, pas de raccourci.",
+    "les_elements": "2026-09-20, Antoine : « il serait bien de pouvoir déclarer un fond, ou autre élément supplémentaire avec un commentaire, pour qu'il pèse ». Jusqu'à trois images (image_2, image_3, image_4 — les noms de médias de la passerelle), chacune avec un commentaire libre. Un nœud procédural ne lit pas un texte : l'étape LECTURE (graphe affiche-lecture, nœud AfficheLecture) pose la question au réalisateur (passerelle LLM, rôle role/texte-claude, la même porte que le plan de « Révéler une image ») avec les FAITS mesurés de chaque élément (taille, transparence, tons, aplat ou photo) et un schéma FERMÉ : rôle fond ou élément, flou, assombrissement, teinte par les tons, cx, cy, largeur, opacité, moment (dès le début / avec l'affiche / à la fin), au-dessus. La révélation applique ces réglages mécaniquement et mesure ; le récit répète ce qui a été compris (compris, elements_dits, fond_source). Un élément est PRÉSENT PAR SON NOM (7.image_N_nom : $image_N ; une pièce absente vaut None et l'entrée ne part pas — la passerelle envoie alors une image neutre au LoadImage, que le nœud ne lit pas). La lecture est gardée par clé (mémoire) : la même demande ne rappelle pas le réalisateur. Rien à lire (aucun élément) : aucun appel, le mode reste en quelques secondes. Le réalisateur qui ne répond pas : repli déterministe DIT (repli, raison) et constaté (la_lecture_a_eu_lieu)."
   }
 }
