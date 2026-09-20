@@ -1841,9 +1841,20 @@ lancement tel quel reste ce qu'il était : refusé (422) pour un champ inconnu
 ou hors menu ; un réglage d'une autre technique est écarté et dit, comme pour
 toute demande.
 
-`valeurs` porte TOUS les réglages, jamais les pièces jointes (l'image se
-redépose à chaque fois) ni ce que la passerelle possède elle-même (`workflow`,
-`label`, `kind`, `media`, `inputs`, `constraints`). `ecarts` est calculé **à la
+`valeurs` porte TOUS les réglages, jamais les pièces jointes ni ce que la
+passerelle possède elle-même (`workflow`, `label`, `kind`, `media`, `inputs`,
+`constraints`). Les pièces jointes de la livraison sont les **`sources`** du
+raccourci (`{"image": "affiche.png", …}`, par nom de champ média — toujours
+publiées, `{}` sans livraison ou pour une fiche d'avant) : c'est CETTE
+image-là que le raccourci rejoue, pas la dernière déposée (2026-09-20,
+Antoine : « ce n'est pas la bonne source qui est enregistrée, mais la dernière
+produite » — le lanceur comblait l'absence de source avec le dernier dépôt de
+la session, celui d'un autre mode parfois). Une source ne fait pas un écart et
+ne se valide pas contre le mode ; le nom est celui du fichier chez le moteur,
+comme pour un rejeu — la passerelle ne sait pas où le moteur range ses
+entrées, une source retirée de là échoue au lancement, comme un rejeu. Une
+source dont le mode n'expose plus la pièce jointe périme le raccourci, nommée.
+`ecarts` est calculé **à la
 lecture**, contre les défauts d'aujourd'hui : figé dans le fichier, il aurait
 continué d'annoncer « Sépia » comme un choix particulier le jour où le mode en
 fait son défaut. Une liste d'écarts vide se lit « les réglages par défaut ».
@@ -1859,9 +1870,9 @@ absente fait une image cassée par carte.
 | Route | Corps | Réponse |
 |---|---|---|
 | `GET /v1/workflows/{nom}/raccourcis` | — | `{"workflow", "raccourcis": [vue…]}`, triés par `ordre` puis titre |
-| `POST /v1/workflows/{nom}/raccourcis` | `{"titre"` requis`, "resume"?, "job_id"?, "valeurs"?, "ordre"?}` — au moins `job_id` ou `valeurs` | **201** la vue |
+| `POST /v1/workflows/{nom}/raccourcis` | `{"titre"` requis`, "resume"?, "job_id"?, "valeurs"?, "sources"?, "ordre"?}` — au moins `job_id` ou `valeurs` ; `sources` recouvre celles de la livraison (une valeur vide en retire une) | **201** la vue |
 | `GET /v1/workflows/{nom}/raccourcis/{id}` | — | la vue ; inconnu → **404** problem+json |
-| `PUT /v1/workflows/{nom}/raccourcis/{id}` | les mêmes champs ; seuls ceux PRÉSENTS changent, `valeurs` remplace tout, `job_id` refait l'aperçu | **200** la vue |
+| `PUT /v1/workflows/{nom}/raccourcis/{id}` | les mêmes champs ; seuls ceux PRÉSENTS changent, `valeurs` et `sources` remplacent tout, `job_id` refait l'aperçu et reprend les sources de cette livraison | **200** la vue |
 | `DELETE /v1/workflows/{nom}/raccourcis/{id}` | — | `{"workflow", "id", "removed"}` — 200 même s'il n'existait pas |
 | `GET /v1/workflows/{nom}/raccourcis/{id}/apercu` | — | le fichier (`image/webp` ou `image/gif`) ; sans fichier → **404** |
 | `GET /v1/workflows` | — | chaque entrée porte `"raccourcis": [vue…]` (vide sinon) |

@@ -823,9 +823,9 @@ def _raccourcis_base(c) -> Path:
 def _medias_du_mode(c, spec) -> list[str]:
     """Les pièces jointes d'un mode, par leur nom de champ.
 
-    Ce sont exactement les champs qu'une fiche ne garde PAS : le nom du fichier
-    déposé chez le moteur ne veut plus rien dire demain, et l'image se redépose
-    à chaque fois.
+    Ce sont exactement les champs qu'une fiche ne garde PAS parmi ses réglages :
+    ce sont ses SOURCES, à part (``raccourcis.sources_de``) — un réglage se
+    juge contre les défauts du mode, une source ne se juge pas.
     """
     if spec.est_chaine:
         return [nom for nom, champ in c.catalog.chaine(spec).champs.items()
@@ -903,31 +903,41 @@ def _vue_raccourci(c, spec, fiche: dict) -> dict:
     vue["ecarts"] = raccourcis.ecarts(fiche.get("valeurs") or {}, defauts,
                                       _decrire_champ(c, spec, chaine, technique),
                                       getattr(c.catalog, "formats", None))
+    # Les sources sont toujours publiées, même vides : une fiche d'avant le
+    # 2026-09-20 n'en a pas, et un lanceur lit une clé, pas son absence.
+    vue["sources"] = dict(fiche.get("sources") or {})
     ident = str(fiche.get("id") or "")
     if raccourcis.apercu_fichier(_raccourcis_base(c), spec.name, ident):
         vue["apercu_url"] = f"/v1/workflows/{spec.name}/raccourcis/{ident}/apercu"
     # Un raccourci est jugé À LA LECTURE par la validation d'une demande :
     # périmé, il est publié périmé — ses champs et la raison —, jamais tu ni
     # retiré (2026-09-19 : trois raccourcis sur cinq partaient en 422).
-    perime = _perime_de_raccourci(c, spec, fiche.get("valeurs") or {})
+    perime = _perime_de_raccourci(c, spec, fiche.get("valeurs") or {}, vue["sources"])
     if perime is not None:
         vue["perime"] = perime
     return vue
 
 
-def _perime_de_raccourci(c, spec, valeurs: dict) -> dict | None:
+def _perime_de_raccourci(c, spec, valeurs: dict, sources: dict | None = None) -> dict | None:
     """Ce qui rend un raccourci PÉRIMÉ, champ par champ : un champ que le mode
-    n'expose plus, une pièce jointe, un réglage d'une AUTRE technique que celle
-    du raccourci, une valeur hors de son menu ou de ses bornes.
+    n'expose plus, une pièce jointe parmi les réglages, un réglage d'une AUTRE
+    technique que celle du raccourci, une valeur hors de son menu ou de ses
+    bornes — et une source dont le mode n'expose plus la pièce jointe.
 
     C'est la validation d'une demande (`core/chaine.py::valeurs`, `valeur_de`),
     lue champ par champ pour TOUT nommer — une demande s'arrête au premier
     refus ; un raccourci doit dire tout ce qui a vieilli. Ce qu'une demande
-    exige et qu'un raccourci ne porte jamais (la pièce jointe requise) ne le
-    périme pas.
+    exige et qu'un raccourci ne porte pas (la pièce jointe requise d'un
+    raccourci sans source) ne le périme pas ; une source dont le fichier a
+    quitté le moteur non plus — la passerelle ne sait pas où il range ses
+    entrées, et c'est le lancement qui le dira, comme pour un rejeu.
     """
     from ..core import chaine as _noyau
     fautes: list[tuple[str, str]] = []
+    if sources:
+        medias = set(_medias_du_mode(c, spec))
+        fautes.extend((nom, f"« {nom} » : le mode n'expose plus cette pièce jointe")
+                      for nom in sources if nom not in medias)
     if spec.est_chaine:
         chaine = c.catalog.chaine(spec)
         techniques = c.catalog.techniques()
@@ -940,7 +950,8 @@ def _perime_de_raccourci(c, spec, valeurs: dict) -> dict | None:
             if champ is None:
                 fautes.append((nom, f"« {nom} » : le mode ne l'expose plus"))
             elif champ.media is not None:
-                fautes.append((nom, f"« {nom} » : une pièce jointe ne s'enregistre pas"))
+                fautes.append((nom, f"« {nom} » : une pièce jointe n'est pas un réglage "
+                                    f"— c'est une source, à part"))
             elif nom not in retenus:
                 quelle = technique.nom if technique is not None else "choisie"
                 fautes.append((nom, f"« {nom} » : n'est pas un réglage de la technique "
@@ -955,7 +966,7 @@ def _perime_de_raccourci(c, spec, valeurs: dict) -> dict | None:
         _valeurs_de_raccourci(c, spec, valeurs)
     except (UnknownWorkflowInputError, InputValueRefusedError) as exc:
         noms = exc.extensions.get("fields") or [exc.extensions.get("field") or "?"]
-        fautes = [(str(nom), exc.detail) for nom in noms]
+        fautes.extend((str(nom), exc.detail) for nom in noms)
     return raccourcis.perime(fautes)
 
 
@@ -985,8 +996,8 @@ def _valeurs_de_raccourci(c, spec, valeurs: dict) -> dict:
         pieces = sorted(k for k in valeurs if champs[k].media is not None)
         if pieces:
             raise UnknownWorkflowInputError(
-                f"{spec.name!r} : une pièce jointe ne s'enregistre pas dans un raccourci "
-                f"({', '.join(pieces)}) — elle se redépose à chaque fois",
+                f"{spec.name!r} : une pièce jointe n'est pas un réglage de raccourci "
+                f"({', '.join(pieces)}) — c'est une source, à nommer dans « sources »",
                 workflow=spec.name, fields=pieces)
         # Les options de la technique CHOISIE : « fond » n'accepte pas la même
         # chose d'une technique à l'autre, et c'est ce que le raccourci
@@ -1006,10 +1017,32 @@ def _valeurs_de_raccourci(c, spec, valeurs: dict) -> dict:
         refuses = inconnus + pieces
         raise UnknownWorkflowInputError(
             f"{spec.name!r} n'enregistre pas " + ", ".join(repr(k) for k in refuses)
-            + (" (une pièce jointe se redépose à chaque fois)" if pieces else "")
+            + (" (une pièce jointe est une source, à nommer dans « sources »)" if pieces else "")
             + f" — il accepte : {', '.join(sorted(a for a in admis if not is_media_param(a)))}",
             workflow=spec.name, fields=refuses)
     return dict(valeurs)
+
+
+def _sources_de_raccourci(c, spec, sources: dict) -> dict[str, str]:
+    """Les sources qu'un corps nomme, validées PAR LE MODE : chaque clé est une
+    pièce jointe qu'il expose, chaque valeur un nom de fichier chez le moteur.
+    Une valeur vide RETIRE la source (le raccourci devient un réglage sans
+    image : celle qu'on dépose). Le fichier lui-même n'est pas vérifié — la
+    passerelle ne sait pas où le moteur range ses entrées ; c'est le lancement
+    qui le dira, comme pour un rejeu."""
+    medias = _medias_du_mode(c, spec)
+    inconnus = sorted(str(k) for k in sources if str(k) not in medias)
+    if inconnus:
+        raise UnknownWorkflowInputError(
+            f"{spec.name!r} : pas une pièce jointe de ce mode : {', '.join(inconnus)}"
+            f" — il expose : {', '.join(medias) or 'aucune'}",
+            workflow=spec.name, fields=inconnus, accepts=list(medias))
+    for nom, valeur in sources.items():
+        if not isinstance(valeur, str):
+            raise InputValueRefusedError(
+                f"la source « {nom} » est un nom de fichier chez le moteur, reçu {valeur!r}",
+                field=str(nom))
+    return {str(k): v.strip() for k, v in sources.items() if str(v).strip()}
 
 
 async def _apercu_de_raccourci(c, spec, ident: str, job) -> None:
@@ -1706,10 +1739,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Enregistrer un ensemble de réglages, depuis une livraison ou tel quel.
 
         C'est le geste que le lanceur relaie après un run réussi : « garde ça ».
-        Les valeurs viennent de la DEMANDE du run (sans les pièces jointes, qui
-        se redéposent), recouvertes par ce que le corps nomme ; l'aperçu est
-        fabriqué ici, depuis la vidéo livrée — un lanceur ne manipule pas
-        d'images, il désigne.
+        Les valeurs viennent de la DEMANDE du run, ses pièces jointes à part
+        (les SOURCES : c'est cette image-là que le raccourci rejoue, pas la
+        dernière déposée — 2026-09-20), recouvertes par ce que le corps nomme ;
+        l'aperçu est fabriqué ici, depuis la vidéo livrée — un lanceur ne
+        manipule pas d'images, il désigne.
         """
         c = request.app.state.container
         spec = c.catalog.get_spec(name)
@@ -1719,10 +1753,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "un raccourci part d'une livraison (« job_id ») ou de réglages "
                 "(« valeurs ») : il en faut au moins un", field="job_id")
         job = _livraison_du_mode(c, spec, corps.job_id) if corps.job_id else None
-        brutes = raccourcis.filtrer_demande(job.demande if job else {},
-                                            _medias_du_mode(c, spec))
+        medias = _medias_du_mode(c, spec)
+        brutes = raccourcis.filtrer_demande(job.demande if job else {}, medias)
         brutes.update(corps.valeurs or {})
         valeurs = _valeurs_de_raccourci(c, spec, brutes)
+        sources = raccourcis.sources_de(job.demande if job else {}, medias)
+        if corps.sources is not None:
+            sources = _sources_de_raccourci(c, spec, corps.sources)
         base = _raccourcis_base(c)
         ident = raccourcis.identifiant(
             titre, [f["id"] for f in raccourcis.lister(base, spec.name)])
@@ -1732,7 +1769,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         fiche = {
             "id": ident, "workflow": spec.name, "titre": titre,
             "resume": str(corps.resume or "").strip(), "valeurs": valeurs,
-            "job_id": job.id if job else None,
+            "sources": sources, "job_id": job.id if job else None,
             "cree_le": datetime.now(timezone.utc).isoformat(),
             "ordre": corps.ordre if corps.ordre is not None else raccourcis.ORDRE_PAR_DEFAUT,
         }
@@ -1754,9 +1791,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                           request: Request) -> dict:
         """Modifier un raccourci : seuls les champs PRÉSENTS dans le corps changent.
 
-        Sauf ``valeurs``, qui remplace tout : des réglages fusionnés auraient
-        gardé un champ que l'utilisateur venait justement d'effacer. L'identifiant
-        ne bouge pas, même renommé — c'est l'adresse que le lanceur a en main.
+        Sauf ``valeurs`` et ``sources``, qui remplacent tout : des réglages
+        fusionnés auraient gardé un champ que l'utilisateur venait justement
+        d'effacer. Une nouvelle livraison (``job_id``) apporte son aperçu ET ses
+        sources. L'identifiant ne bouge pas, même renommé — c'est l'adresse que
+        le lanceur a en main.
         """
         c = request.app.state.container
         spec = c.catalog.get_spec(name)
@@ -1778,6 +1817,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             job = _livraison_du_mode(c, spec, corps.job_id)
             await _apercu_de_raccourci(c, spec, ident, job)
             fiche["job_id"] = job.id
+            fiche["sources"] = raccourcis.sources_de(job.demande, _medias_du_mode(c, spec))
+        if "sources" in donnes and corps.sources is not None:
+            fiche["sources"] = _sources_de_raccourci(c, spec, dict(corps.sources))
         raccourcis.ecrire(base, spec.name, fiche)
         return _vue_raccourci(c, spec, fiche)
 

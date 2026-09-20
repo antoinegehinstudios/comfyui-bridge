@@ -25,9 +25,13 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   `ordre`, `apercu_url`), `runnable`, `warned`, `chaine`, `etapes[].workflow`,
   et `raccourcis[]` (les ensembles de réglages enregistrés sous ce mode :
   `id`, `titre`, `resume`, `valeurs`, `ecarts[].{champ,libelle,valeur,libelle_valeur}`,
+  `sources` (les pièces jointes de la livraison qui l'a fait naître, par nom de
+  champ média, toujours publiées — c'est cette image-là que le raccourci
+  rejoue, depuis le 2026-09-20 ; `{}` sans livraison),
   `apercu_url` s'il existe, `job_id`, `ordre`, et `perime: {champs[], raison}`
   quand le raccourci a vieilli — champ que le mode n'expose plus, valeur hors
-  menu, réglage d'une autre technique que la sienne ; ABSENT quand il tient ;
+  menu, réglage d'une autre technique que la sienne, source dont la pièce
+  jointe n'est plus exposée ; ABSENT quand il tient ;
   le lanceur grise la carte et dit la raison (depuis le 2026-09-19) — liste
   vide sinon ; le MODE lui-même, avec ses défauts, est le raccourci implicite,
   affiché en premier),

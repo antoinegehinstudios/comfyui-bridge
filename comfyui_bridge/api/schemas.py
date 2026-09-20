@@ -221,9 +221,12 @@ class RaccourciIn(BaseModel):
 
     Les valeurs viennent d'une LIVRAISON (``job_id`` : sa demande, sans les
     pièces jointes) ou sont données telles quelles (``valeurs``), ou les deux —
-    ce qui est nommé recouvre alors ce que la livraison portait. Le modèle
-    refuse ce qu'il ne connaît pas, comme ``RejeuIn`` : un champ mal
-    orthographié repartait sinon avec un 201 et n'enregistrait rien.
+    ce qui est nommé recouvre alors ce que la livraison portait. Les pièces
+    jointes de la livraison sont ses SOURCES, gardées à part : c'est cette
+    image-là que le raccourci rejoue ; ``sources`` (par nom de champ média) les
+    recouvre, et une valeur vide en retire une. Le modèle refuse ce qu'il ne
+    connaît pas, comme ``RejeuIn`` : un champ mal orthographié repartait sinon
+    avec un 201 et n'enregistrait rien.
 
     À la modification, seuls les champs PRÉSENTS dans le corps changent
     (``model_fields_set``) : sans cela, renommer un raccourci effaçait son
@@ -236,4 +239,5 @@ class RaccourciIn(BaseModel):
     resume: str = Field("", examples=["Un papier ambré, plus de trait, une flamme étroite."])
     job_id: str | None = None
     valeurs: dict[str, Any] | None = Field(None, examples=[{"duration_s": 45, "fond": "sepia"}])
+    sources: dict[str, str] | None = Field(None, examples=[{"image": "affiche.png"}])
     ordre: int | None = None

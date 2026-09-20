@@ -83,6 +83,75 @@ def test_une_livraison_devient_un_raccourci_avec_son_apercu(atelier):
     assert not [f for f in dossier.iterdir() if ".part" in f.name]
 
 
+def test_un_raccourci_garde_les_sources_de_sa_livraison(atelier):
+    """Un raccourci enregistré depuis une livraison rejoue CETTE livraison :
+    ses pièces jointes sont ses sources, à part de ses réglages. Sans elles, le
+    lanceur ouvrait le formulaire sur la dernière image déposée dans la session
+    — celle d'un autre mode, parfois — et c'est elle qui partait (2026-09-20,
+    Antoine : « ce n'est pas la bonne source qui est enregistrée, mais la
+    dernière produite »)."""
+    job = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-piece-au-repos",
+                                                         "image_2": "la-piece.png"}))
+    assert job["status"] == "succeeded", job.get("problem")
+    vue = _poser(atelier, "chaine-piece-au-repos", job_id=job["id"], titre="Avec sa pièce")
+    assert vue["sources"] == {"image_2": "la-piece.png"}
+    assert "image_2" not in vue["valeurs"]                # une source n'est pas un réglage
+    assert vue["ecarts"] == []                            # …et ne fait pas un écart
+    assert "perime" not in vue
+    # Relu seul et listé sous le mode : les mêmes sources.
+    assert atelier.get(f"/v1/workflows/chaine-piece-au-repos/raccourcis/{vue['id']}"
+                       ).json()["sources"] == {"image_2": "la-piece.png"}
+    liste = atelier.get("/v1/workflows").json()["workflows"]["chaine-piece-au-repos"]["raccourcis"]
+    assert [r["sources"] for r in liste] == [{"image_2": "la-piece.png"}]
+
+    # Une livraison sans pièce jointe : aucune source — la clé est là, vide.
+    nu = _job(atelier, atelier.post("/v1/render", json={"workflow": "chaine-piece-au-repos"}))
+    assert _poser(atelier, "chaine-piece-au-repos", job_id=nu["id"], titre="Sans pièce"
+                  )["sources"] == {}
+
+    # Le corps recouvre : une source nommée, validée par le mode (une pièce
+    # jointe qu'il expose, un nom de fichier) ; vide, elle est retirée.
+    autre = _poser(atelier, "chaine-piece-au-repos", job_id=job["id"], titre="Autre pièce",
+                   sources={"image_2": "une-autre.png"})
+    assert autre["sources"] == {"image_2": "une-autre.png"}
+    detachee = _poser(atelier, "chaine-piece-au-repos", job_id=job["id"], titre="Sans image",
+                      sources={"image_2": ""})
+    assert detachee["sources"] == {}
+    refus = atelier.post("/v1/workflows/chaine-piece-au-repos/raccourcis",
+                         json={"titre": "Pas une pièce", "job_id": job["id"],
+                               "sources": {"largeur": "x.png"}})
+    assert refus.status_code == 422 and "largeur" in refus.json()["detail"]
+    assert "image_2" in refus.json()["detail"]            # ce que le mode expose est nommé
+
+    # À la modification : une nouvelle livraison apporte ses sources, et
+    # « sources » remplace tout.
+    r = atelier.put(f"/v1/workflows/chaine-piece-au-repos/raccourcis/{vue['id']}",
+                    json={"job_id": nu["id"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["sources"] == {} and r.json()["job_id"] == nu["id"]
+    r = atelier.put(f"/v1/workflows/chaine-piece-au-repos/raccourcis/{vue['id']}",
+                    json={"sources": {"image_2": "reprise.png"}})
+    assert r.status_code == 200 and r.json()["sources"] == {"image_2": "reprise.png"}
+    assert atelier.put(f"/v1/workflows/chaine-piece-au-repos/raccourcis/{vue['id']}",
+                       json={"sources": {"image_9": "x.png"}}).status_code == 422
+
+    # Une fiche d'avant les sources n'en a pas : publiée avec la clé, vide.
+    raccourcis.ecrire(_base(atelier), "chaine-piece-au-repos", {
+        "id": "d-avant", "workflow": "chaine-piece-au-repos", "titre": "D'avant",
+        "valeurs": {}, "ordre": 100})
+    assert atelier.get("/v1/workflows/chaine-piece-au-repos/raccourcis/d-avant"
+                       ).json()["sources"] == {}
+    # Une source dont le mode n'expose plus la pièce jointe : publié PÉRIMÉ,
+    # nommée — jamais tu.
+    raccourcis.ecrire(_base(atelier), "chaine-piece-au-repos", {
+        "id": "piece-disparue", "workflow": "chaine-piece-au-repos", "titre": "Pièce disparue",
+        "valeurs": {}, "sources": {"image_9": "x.png"}, "ordre": 100})
+    perime = atelier.get("/v1/workflows/chaine-piece-au-repos/raccourcis/piece-disparue"
+                         ).json()["perime"]
+    assert perime["champs"] == ["image_9"]
+    assert "« image_9 » : le mode n'expose plus cette pièce jointe" in perime["raison"]
+
+
 def test_un_raccourci_s_enregistre_sans_livraison(atelier):
     """Régler sans lancer : on enregistre le réglage, pas le résultat. Sans
     livraison, aucune adresse d'aperçu n'est promise — une vignette absente
@@ -90,7 +159,7 @@ def test_un_raccourci_s_enregistre_sans_livraison(atelier):
     vue = _poser(atelier, "chaine-simple", titre="Large et second",
                  valeurs={"largeur": 96, "mode": "b"})
     assert "apercu_url" not in vue and vue["job_id"] is None
-    assert vue["valeurs"] == {"largeur": 96, "mode": "b"}
+    assert vue["valeurs"] == {"largeur": 96, "mode": "b"} and vue["sources"] == {}
     ecarts = {e["champ"]: e for e in vue["ecarts"]}
     assert ecarts["largeur"]["libelle"] == "Largeur"
     assert ecarts["largeur"]["libelle_valeur"] == "96 px"       # l'unité du champ
@@ -238,14 +307,18 @@ def test_l_identifiant_se_lit_dans_l_adresse_et_ne_s_ecrase_pas():
 
 def test_la_demande_d_un_run_perd_ce_qui_n_est_pas_un_reglage():
     """Un raccourci enregistre des RÉGLAGES, pas une requête : le mode visé et
-    l'étiquette de sortie appartiennent à la passerelle, et la pièce jointe se
-    redépose (son nom chez le moteur ne veut plus rien dire demain)."""
-    garde = raccourcis.filtrer_demande(
-        {"workflow": "un-mode", "label": "essai", "kind": "video", "inputs": {"7.x": 1},
-         "constraints": [], "media": {"image": "a.png"}, "image": "a.png",
-         "duration_s": 45, "fond": "sepia"},
-        medias=["image"])
+    l'étiquette de sortie appartiennent à la passerelle, et la pièce jointe
+    n'est pas un réglage — c'est une SOURCE, gardée à part."""
+    demande = {"workflow": "un-mode", "label": "essai", "kind": "video", "inputs": {"7.x": 1},
+               "constraints": [], "media": {"image": "a.png"}, "image": "a.png",
+               "image_2": "  ", "duration_s": 45, "fond": "sepia"}
+    garde = raccourcis.filtrer_demande(demande, medias=["image", "image_2"])
     assert garde == {"duration_s": 45, "fond": "sepia"}
+    # Les sources : les pièces jointes NOMMÉES, par champ ; une pièce au repos
+    # (vide) n'en est pas une, un réglage non plus.
+    assert raccourcis.sources_de(demande, medias=["image", "image_2"]) == {"image": "a.png"}
+    assert raccourcis.sources_de(demande, medias=[]) == {}
+    assert raccourcis.sources_de(None, medias=["image"]) == {}
 
 
 def test_les_ecarts_ne_disent_que_ce_qui_change():

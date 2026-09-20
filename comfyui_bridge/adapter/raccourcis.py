@@ -3,8 +3,10 @@
 Un mode publie des champs et leurs défauts ; un utilisateur qui a trouvé SON
 réglage (le fond, le tracé, l'ambiance, les durées) n'avait aucun moyen de le
 garder — il le retapait, et le retapait faux. Un raccourci est ce réglage-là,
-nommé, avec l'aperçu de la livraison qui l'a fait naître. Le mode lui-même,
-avec ses défauts, reste le raccourci implicite : il n'est écrit nulle part.
+nommé, avec l'aperçu de la livraison qui l'a fait naître — et ses SOURCES, les
+pièces jointes de cette livraison, gardées à part des réglages. Le mode
+lui-même, avec ses défauts, reste le raccourci implicite : il n'est écrit nulle
+part.
 
 Ici, le STOCKAGE et la LECTURE, sans HTTP : un fichier JSON par raccourci, à
 côté des aperçus des modes (`_data/raccourcis/<mode>/<id>.json`), et l'image
@@ -29,10 +31,11 @@ from typing import Any, Callable, Iterable
 # `image/gif` annoncé `image/webp`.
 FORMATS: tuple[tuple[str, str], ...] = ((".webp", "image/webp"), (".gif", "image/gif"))
 
-# Ce que la fiche garde d'une DEMANDE : tout sauf ce que la passerelle possède
-# elle-même (le mode visé, l'étiquette de sortie), la forme du média, les
-# entrées de nœud brutes et les contraintes — un raccourci enregistre des
-# RÉGLAGES, pas une requête.
+# Ce que la fiche garde d'une DEMANDE comme réglages : tout sauf ce que la
+# passerelle possède elle-même (le mode visé, l'étiquette de sortie), la forme
+# du média, les entrées de nœud brutes et les contraintes — un raccourci
+# enregistre des RÉGLAGES, pas une requête. Les pièces jointes, elles, sont ses
+# sources (``sources_de``), à part.
 RESERVES: tuple[str, ...] = ("workflow", "label", "kind", "media", "inputs", "constraints")
 
 # Le rang par défaut d'un raccourci dans la liste d'un mode. Cent, comme les
@@ -77,11 +80,30 @@ def identifiant(titre: str, existants: Iterable[str] = ()) -> str:
 def filtrer_demande(demande: dict[str, Any] | None, medias: Iterable[str] = ()) -> dict[str, Any]:
     """La demande d'un run, ramenée aux RÉGLAGES qu'un raccourci rejoue.
 
-    Les pièces jointes en sont retirées : l'image se redépose à chaque fois, et
-    le nom du fichier déposé chez le moteur ne veut plus rien dire demain.
+    Les pièces jointes en sont retirées : ce sont les SOURCES du raccourci,
+    gardées à part (``sources_de``) — un réglage se juge contre les défauts du
+    mode et se valide par lui, une source ne se juge pas.
     """
     exclus = set(RESERVES) | {str(m) for m in medias}
     return {k: v for k, v in (demande or {}).items() if k not in exclus}
+
+
+def sources_de(demande: dict[str, Any] | None, medias: Iterable[str] = ()) -> dict[str, str]:
+    """Les pièces jointes d'une demande, par nom de champ : les SOURCES qu'un
+    raccourci rejoue, à part de ses réglages.
+
+    Un raccourci enregistré depuis une livraison rejoue CETTE livraison : sans
+    ses sources, le lanceur ouvrait le formulaire sur la dernière image déposée
+    dans la session — celle d'un autre mode, parfois — et c'est elle qui
+    partait (2026-09-20, Antoine : « ce n'est pas la bonne source qui est
+    enregistrée, mais la dernière produite »). Le nom est celui du fichier chez
+    le moteur, comme pour un rejeu : une source retirée de là échoue au
+    lancement, comme un rejeu — la passerelle ne sait pas où le moteur range
+    ses entrées. Une pièce au repos (vide) n'est pas une source.
+    """
+    noms = {str(m) for m in medias}
+    return {k: str(v).strip() for k, v in (demande or {}).items()
+            if k in noms and isinstance(v, str) and v.strip()}
 
 
 def _fichier(base: Path, workflow: str, ident: str) -> Path:
