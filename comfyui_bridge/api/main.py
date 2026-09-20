@@ -173,26 +173,45 @@ def _with_engine_state(container, out: dict) -> dict:
     return out
 
 
-def _with_work(container, plan, silencieux: bool = True):
-    """Attach the effective size of the job, read from the injected graph.
-
-    ``silencieux`` : un graphe qui ne se monte pas ne prive pas la réponse de
-    son travail (rien à lire, c'est tout). L'estimation d'une chaîne le passe
-    à False : un montage qui REFUSE la demande (`WorkflowMappingError`) la
-    refusera au run aussi, et c'est à dire — pas à taire.
-    """
+def _with_work(container, plan):
+    """Attach the effective size of the job, read from the injected graph."""
     from ..adapter.work import WORK_MODEL, effective_values, work_units
     try:
         values = effective_values(container.catalog, plan)
         plan.work = work_units(values)
         plan.work_model = WORK_MODEL
         return values
-    except WorkflowMappingError:
-        if not silencieux:
-            raise
-        return {}
     except Exception:
         return {}
+
+
+def _montage_refuse(container, plan) -> str | None:
+    """Ce que le montage de cette étape REFUSE de la demande, monté à blanc —
+    un tour à la fois quand il va par tours : monté d'un seul tenant, un
+    montage à un run par tour refuse toujours (« 'derniere_image' n'est ni une
+    sortie déclarée… »), ce qui ne dit rien de la demande ; l'amorce (tour 0)
+    est là où les pièces jointes et leurs rôles se posent. Un refus ici est
+    un refus au run (un rôle d'image sans son image, 2026-09-20) : à dire
+    avant de lancer, jamais à taire. None : rien à reprocher, ou pas un montage."""
+    from ..core import blocs as _blocs
+    try:
+        spec = container.catalog.get_spec(plan.workflow)
+    except Exception:                                    # noqa: BLE001 — un mode inconnu se dit ailleurs
+        return None
+    params = dict(plan.params)
+    try:
+        tours = container.catalog.tours_separes(spec, params)
+    except Exception:                                    # noqa: BLE001
+        tours = None
+    if tours:
+        params[_blocs.TOUR] = 0
+    try:
+        container.catalog.monter(spec, params)
+    except WorkflowMappingError as exc:
+        return exc.detail
+    except Exception:                                    # noqa: BLE001 — pas un montage, ou illisible : rien à dire ici
+        return None
+    return None
 
 
 def _analyse_workflow(container, spec) -> dict:
@@ -803,12 +822,13 @@ def _estimation_chaine(c, chaine, valeurs: dict) -> dict:
         estimation = None
         try:
             plan = c.orchestrator.build_plan(_intention_detape(params, label="estimation"))
-            _with_work(c, plan, silencieux=False)
+            refus = _montage_refuse(c, plan)
+            if refus:
+                impraticable = impraticable or f"étape {etape.id} : {refus}"
+            _with_work(c, plan)
             estimation = c.registry.estimate_duration(
                 c.settings.host_id, plan.workflow, plan.work, plan.config,
                 work_model=plan.work_model)
-        except WorkflowMappingError as exc:
-            impraticable = impraticable or f"étape {etape.id} : {exc.detail}"
         except Exception as exc:            # noqa: BLE001 — un refus se dit, il n'arrête pas
             manque = manque or f"étape {etape.id} : {exc}"
         lignes.append({"id": etape.id, "workflow": vise, "estimate": estimation})

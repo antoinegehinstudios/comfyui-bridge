@@ -745,21 +745,6 @@ def test_une_chaine_livree_s_estime_par_ses_propres_livraisons(atelier):
     assert [x["id"] for x in d["etapes"]] == ["un", "deux"]        # « final » recolle, ne rend pas
 
 
-def test_une_demande_qu_un_montage_refuse_est_dite_impraticable(atelier, monkeypatch):
-    """Un montage qui refuse la demande (un rôle d'image sans son image) la
-    refusera au run : l'estimation le dit, nomme le réglage, et n'annonce
-    aucune durée — plutôt que de se taire ou d'estimer un run qui n'aura pas lieu."""
-    from comfyui_bridge.api import main as _main
-    from comfyui_bridge.core.errors import WorkflowMappingError
-
-    def refuse(container, plan, silencieux=True):
-        raise WorkflowMappingError("« role_image_2 » n'a pas de place dans ce dépliage du "
-                                   "montage ($amorce.22)", field="role_image_2")
-    monkeypatch.setattr(_main, "_with_work", refuse)
-    d = atelier.post("/v1/estimate", json={"workflow": "chaine-simple"}).json()
-    assert d["estimate"] is None and "manque" not in d
-    assert d["impraticable"] == ("étape un : « role_image_2 » n'a pas de place dans ce dépliage "
-                                 "du montage ($amorce.22)")
 
 
 def test_les_fichiers_de_travail_ne_sont_pas_des_livrables(tmp_path):

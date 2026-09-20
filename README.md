@@ -457,10 +457,11 @@ DE RUNS que chaque livraison a fait faire, relu depuis son étiquette — 5 s en
 font 2, 8 s en font 4, 15 s en feront 12 —, avec `runs`) ; **une seule taille
 mesurée** (`chaine-autre-config`, la médiane, en le disant). Rien de mesuré :
 la somme des étapes reste (`somme des étapes`), muette dès qu'une étape n'a
-pas de mesure (`manque`). Chaque étape est montée à blanc : une demande que
-son montage refuse — un rôle d'image sans son image — échouerait au run, et
-l'estimation le dit (`impraticable`, avec le réglage nommé) sans annoncer de
-durée.
+pas de mesure (`manque`). Chaque étape est montée à blanc — l'amorce seule
+(tour 0) quand le montage va par tours, un montage à un run par tour ne se
+montant pas d'un seul tenant — : une demande que son montage refuse — un rôle
+d'image sans son image — échouerait au run, et l'estimation le dit
+(`impraticable`, avec le réglage nommé) sans annoncer de durée.
 
 **Lancer et suivre** — `POST /v1/render` renvoie `202` + un identifiant ;
 `GET /v1/jobs/{id}` (ou le flux `…/events` en SSE) jusqu'à un état terminal
