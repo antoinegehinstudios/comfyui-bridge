@@ -473,6 +473,23 @@ appelant n'avait que deux mauvais choix — renoncer à une production, ou la
 lancer deux fois. Les clés vivent dans le processus, une demi-heure (le temps
 d'un réessai, pas de rejouer hier) ; un redémarrage les oublie.
 
+**Une pièce jointe que le moteur ne sait pas ouvrir n'entre pas** (2026-09-22).
+Un dessin vectoriel déposé comme image de référence (`retarus_2025_RGB.svg`) a
+fait tomber le moteur ENTIER : le nœud qui charge une image ne sait pas
+l'ouvrir, se rabat sur le chemin VIDÉO, et le démultiplexeur meurt d'une
+violation d'accès (`Windows fatal exception: access violation`, `av/stream.pyd`,
+quatre fois ce jour-là) — vingt et un des vingt-quatre échecs de la journée
+citent ce fichier, et entre deux crashes tout ce qui partait échouait
+« moteur injoignable », « run perdu » ou après une heure d'attente. Deux
+gardes désormais (`core/pieces_jointes.py`, `adapter/juger_media.py`) : au
+DÉPÔT le contenu décide (Pillow ouvre le fichier, ou `POST /v1/inputs/media`
+refuse en disant quoi faire — même sous un nom déguisé en `.png`) ; au
+LANCEMENT le NOM décide (`.svg`, `.svgz`, `.eps`, `.ai`, `.pdf`, `.doc(x)`,
+`.txt`, `.json` en champ image sont refusés avant que le moteur y touche, ce
+qui couvre le rejeu d'un run d'hier et un raccourci qui porte ses sources).
+Hors catégorie image, rien n'est jugé sur cette liste : une vidéo est une
+vidéo.
+
 **Un moteur mort ne se confond pas avec un moteur occupé** (2026-09-22). Un
 ComfyUI saturé ne répond pas ; un ComfyUI arrêté REFUSE la connexion. Après
 `MOTEUR_ABSENT_S` (60 s) de connexions refusées, le run s'arrête en le disant

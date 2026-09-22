@@ -26,6 +26,7 @@ from typing import Any, Iterator
 
 from .errors import InputValueRefusedError, UnknownWorkflowInputError, WorkflowMappingError
 from .intention import RenderIntent, media_category
+from .pieces_jointes import refus_par_le_nom
 
 # Ce qu'une étape sait faire. Chaque genre est une opération que la passerelle
 # tient déjà ou qu'elle porte pour la chaîne ; il n'y a pas de genre « exécuter
@@ -1018,7 +1019,14 @@ def _nombre(champ: Champ, valeur: Any) -> Any:
 def valeur_de(champ: Champ, brute: Any, options: tuple[Any, ...] | None = None) -> Any:
     """Une valeur reçue, ramenée à ce que le champ déclare accepter."""
     if champ.media is not None:
-        return str(brute)
+        nom = str(brute)
+        # Le fichier est déjà chez le moteur (un dépôt d'il y a une minute, un
+        # rejeu, un raccourci d'hier) : son NOM est tout ce qu'on a, et il
+        # suffit à écarter ce qui ferait tomber le moteur (2026-09-22).
+        pourquoi = refus_par_le_nom(nom, champ.media)
+        if pourquoi is not None:
+            raise _refus(champ, pourquoi)
+        return nom
     if champ.type == "BOOLEAN":
         if isinstance(brute, bool):
             return brute

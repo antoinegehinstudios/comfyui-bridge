@@ -1393,6 +1393,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             info["probe"] = {"available": None, "reason": "backend has no server to probe"}
         return info
 
+    def _pieces_jointes_admises(corps: dict) -> None:
+        """Refuser, AVANT d'y toucher, une pièce jointe que le moteur ne sait pas
+        ouvrir — pour un graphe comme pour une chaîne, au lancement comme au
+        rejeu d'un run d'hier.
+
+        Le fichier est déjà chez le moteur : son nom est tout ce qu'on a. C'est
+        assez pour écarter ce qui le ferait tomber (2026-09-22 : un dessin
+        vectoriel déposé comme image a tué le moteur vingt et une fois)."""
+        from ..core.intention import media_category
+        from ..core.pieces_jointes import refus_par_le_nom
+        for nom, valeur in (corps or {}).items():
+            categorie = media_category(str(nom))
+            if categorie is None or not isinstance(valeur, str) or not valeur:
+                continue
+            pourquoi = refus_par_le_nom(valeur, categorie)
+            if pourquoi is not None:
+                raise InputValueRefusedError(pourquoi, field=str(nom), fichier=valeur)
+
     def _job_de_la_cle(request: Request, response: Response) -> JobOut | None:
         """Le job DÉJÀ créé sous la clé de cette demande, s'il y en a un.
 
@@ -1422,6 +1440,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         auraient divergé.
         """
         _extras_admis(c, intent_in)
+        _pieces_jointes_admises(corps)
         spec = c.catalog.get_spec(intent_in.workflow)
         if spec.est_chaine:
             job = _lancer_chaine(c, spec, corps, background, force, reprise_de)
@@ -2385,12 +2404,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         moteur range cette catégorie — un modèle 3D va dans « 3d/ » et se cite
         « 3d/<nom> ». Omise, le fichier va à la racine du dossier d'entrée,
         comme une image."""
+        from ..adapter.juger_media import refus as _refus_du_media
         from ..adapter.media_inputs import upload_subfolder
         from ..adapter.neutral import upload_image
+        from ..core.intention import media_category
         c = request.app.state.container
         payload = await file.read()
         if not payload:
             raise UnknownWorkflowInputError("fichier vide", field="file")
+        # LA PORTE. Un fichier que le moteur ne sait pas ouvrir ne doit pas
+        # entrer : le 2026-09-22, un dessin vectoriel déposé comme image a fait
+        # tomber le moteur ENTIER (violation d'accès dans le démultiplexeur
+        # vidéo, où le nœud de chargement se rabat quand ce n'est pas une
+        # image) — vingt et un lancements perdus dans la journée, et tout ce
+        # qui suivait avec. Le refus dit quoi faire.
+        pourquoi = _refus_du_media(payload, file.filename or "",
+                                   media_category(param or "") or "image")
+        if pourquoi is not None:
+            raise InputValueRefusedError(pourquoi, field=param or "image",
+                                         fichier=file.filename or "")
         subfolder = upload_subfolder(param or "")
         name = await run_in_threadpool(
             upload_image, c.settings.comfyui_base_url, file.filename or "image.png", payload,

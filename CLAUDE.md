@@ -55,7 +55,10 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   un second lancement ; `X-Idempotence: rejouee`), `GET /v1/lenteurs` (les
   appels lents ou ratés et les retards de boucle, mesurés ; un moteur mort
   — connexion REFUSÉE 60 s — arrête le run au lieu d'attendre son budget, et
-  un veilleur le relève s'il est à nous, jamais s'il répond),
+  un veilleur le relève s'il est à nous, jamais s'il répond ; une pièce jointe
+  que le moteur ne sait pas ouvrir est refusée au dépôt par son CONTENU et au
+  lancement par son NOM — `core/pieces_jointes.py` —, un dessin vectoriel
+  ayant fait tomber le moteur vingt et une fois le 2026-09-22),
   `POST /v1/estimate` (une chaîne : par ses propres livraisons, `dit` la
   source — même configuration, droite sur le nombre de runs, autre
   configuration —, `impraticable` quand un montage refuse la demande),
