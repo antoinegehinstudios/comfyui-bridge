@@ -29,6 +29,9 @@ MEDIA_LOADERS: dict[str, tuple[str, str]] = {
     "LoadAudio": ("audio", "audio"),
     "Load3D": ("3d", "model_file"),
     "Load3DAdvanced": ("3d", "model_file"),
+    # Le constat de conformité d'Héraldiste prend une VIDÉO par son nom : la chaîne lui
+    # dépose la vidéo livrée, il en échantillonne quelques images et les envoie au service.
+    "HeraldisteConformite": ("video", "video"),
 }
 
 # Les drapeaux par lesquels ComfyUI annonce qu'une entrée reçoit un fichier.
