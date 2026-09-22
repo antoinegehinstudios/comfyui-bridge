@@ -47,6 +47,11 @@ business logic never names a ComfyUI node — the reconciliation file does that.
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Le veilleur de boucle : il ne sert QU'à dire quand tout attend, et qui
+    # tenait la main (voir api/lenteurs.py). Il s'arrête avec l'application.
+    import asyncio as _asyncio
+    from .lenteurs import veiller as _veiller
+    veilleur = _asyncio.create_task(_veiller(app.state.lenteurs))
     # Respect a container injected by create_app (tests / custom settings);
     # only build from the environment when none was provided.
     if getattr(app.state, "container", None) is None:
@@ -68,7 +73,10 @@ async def lifespan(app: FastAPI):
         app.state.raccourcis_completes = _completer_les_raccourcis(app.state.container)
     except Exception:
         app.state.raccourcis_completes = []    # never keep the service from starting
-    yield
+    try:
+        yield
+    finally:
+        veilleur.cancel()
 
 
 def _completer_les_raccourcis(c) -> list[dict]:
@@ -1291,6 +1299,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     install_problem_handlers(app)
 
+    # Ce qui fige le service se MESURE : une lenteur et un appel raté laissent
+    # une trace datée (journal + `GET /v1/lenteurs`), et le veilleur dit quand
+    # la boucle elle-même était tenue. Posé avant tout le reste : un appel qui
+    # n'atteint jamais sa route (refusé, en panne) se mesure aussi.
+    from .lenteurs import Lenteurs, poser as _poser_lenteurs
+    app.state.lenteurs = Lenteurs()
+    _poser_lenteurs(app, app.state.lenteurs)
+
+    # Les clés d'idempotence : un lancement rejoué (une réponse perdue, un lien
+    # coupé) rend le MÊME job au lieu d'en créer un second.
+    from .idempotence import Cles
+    app.state.cles = Cles()
+
     # Allow the ComfyUI extension (served from :8188) to POST workflows here.
     from fastapi.middleware.cors import CORSMiddleware
     app.add_middleware(
@@ -1329,6 +1350,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # hours for, and learned the ceiling from the failure.
             "job_max_duration_s": c.settings.comfyui_total_timeout_s,
         }
+
+    @app.get("/v1/lenteurs", tags=["meta"])
+    async def lenteurs(request: Request) -> dict:
+        """Ce qui a FIGÉ le service, mesuré : les appels lents ou ratés, les
+        retards de la boucle (tout attendait) et ce qui était en vol alors.
+
+        Une panne vue par l'utilisateur (« ça a lâché ») ne laissait aucune
+        trace de ce côté : elle en laisse une ici, datée, avec sa durée."""
+        return {**request.app.state.lenteurs.vue(),
+                "idempotence": request.app.state.cles.vue()}
 
     @app.get("/v1/materiel", tags=["meta"])
     async def materiel_du_poste(request: Request) -> dict:
@@ -1520,10 +1551,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         background: BackgroundTasks,
         force: bool = False,
     ) -> JobOut:
+        """Lancer une production.
+
+        Un en-tête `Idempotency-Key` rend le réessai SÛR : la première demande
+        crée le job, une demande ultérieure portant la même clé rend ce
+        job-là (`X-Idempotence: rejouee`) sans rien relancer. Sans cela, un
+        lanceur qui perd la réponse n'avait que deux mauvais choix : renoncer,
+        ou lancer deux fois (2026-09-22).
+        """
         c = request.app.state.container
+        cles = request.app.state.cles
+        cle = request.headers.get("idempotency-key")
+        deja = cles.lire(cle)
+        if deja is not None:
+            try:
+                job = c.store.get(deja)
+            except JobNotFoundError:
+                job = None                      # le job a disparu : la clé ne vaut plus
+            if job is not None:
+                response.headers["Location"] = f"/v1/jobs/{job.id}"
+                response.headers["X-Idempotence"] = "rejouee"
+                return JobOut.of(job)
         corps = await request.json()
-        return _creer(c, intent_in, corps if isinstance(corps, dict) else {},
-                      background, response, force)
+        job = _creer(c, intent_in, corps if isinstance(corps, dict) else {},
+                     background, response, force)
+        cles.retenir(cle, job.id)
+        return job
 
     @app.post("/v1/jobs/{job_id}/rejouer", status_code=202, response_model=JobOut,
               tags=["render"])
@@ -1646,9 +1699,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/v1/workflows", tags=["render"])
     async def list_workflows(request: Request) -> dict:
-        """The reconciliation file: workflows a pipeline can call, by name."""
+        """The reconciliation file: workflows a pipeline can call, by name.
+
+        Bâti HORS de la boucle : il lit des dizaines de fichiers (graphes,
+        fiches de raccourcis, menus déclarés) et juge chaque entrée. Dans la
+        boucle, un catalogue lent arrêtait TOUT le service — mesuré le
+        2026-09-22 : 14,6 s pendant lesquelles `/healthz`, `/v1/jobs` et
+        `/v1/file` ont attendu."""
+        return await run_in_threadpool(_catalogue, request.app.state.container)
+
+    def _catalogue(c) -> dict:
         from ..adapter import media_inputs
-        c = request.app.state.container
         cat = c.catalog
         items = {}
         for name in cat.names():
@@ -2085,7 +2146,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             corps = await request.json()
             valeurs, _ecartes = _valeurs_chaine(
                 c, chaine, corps if isinstance(corps, dict) else {})
-            return _estimation_chaine(c, chaine, valeurs)
+            # Hors de la boucle : estimer monte les montages de chaque étape
+            # (lecture de fichiers) et relit les livraisons mesurées. Le
+            # formulaire l'appelle à chaque frappe — dans la boucle, il tenait
+            # la main à chaque fois.
+            return await run_in_threadpool(_estimation_chaine, c, chaine, valeurs)
         plan = c.orchestrator.build_plan(intent_in.to_domain())
         values = _with_work(c, plan)
         return {
@@ -2101,9 +2166,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/v1/workflows/{name}/io", tags=["workflows"])
     async def workflow_io(name: str, request: Request) -> dict:
         """What this workflow expects and delivers — read from ComfyUI's own
-        node schemas, not guessed from parameter names."""
+        node schemas, not guessed from parameter names.
+
+        Hors de la boucle : ce formulaire INTERROGE le moteur (une sonde HTTP)
+        et lit des fichiers ; un moteur lent à répondre ne doit pas arrêter le
+        reste du service."""
+        return await run_in_threadpool(_io_du_mode, request.app.state.container, name)
+
+    def _io_du_mode(c, name: str) -> dict:
         from ..adapter.workflow_io import describe_io
-        c = request.app.state.container
         spec = c.catalog.get_spec(name)
         probe = c.comfyui.probe()
         if spec.est_chaine:
@@ -2125,7 +2196,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         graph, liaisons = c.catalog.monter(spec)
         if not probe.get("available"):
             return {"name": spec.name, "engine": probe, "described": False}
-        object_info = await run_in_threadpool(c.comfyui.get_object_info)
+        # Déjà hors de la boucle (`run_in_threadpool` chez l'appelant) : c'est
+        # l'appel direct qui vaut ici, pas un second passage au fil.
+        object_info = c.comfyui.get_object_info()
         io = describe_io(graph, object_info, spec.titles)
         from ..adapter import media_inputs
         from ..adapter.workflow_io import intent_inputs

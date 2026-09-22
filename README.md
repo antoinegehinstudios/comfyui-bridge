@@ -463,6 +463,26 @@ montant pas d'un seul tenant — : une demande que son montage refuse — un rô
 d'image sans son image — échouerait au run, et l'estimation le dit
 (`impraticable`, avec le réglage nommé) sans annoncer de durée.
 
+**Rejouer un lancement sans le doubler** — `POST /v1/render` accepte un
+en-tête `Idempotency-Key` : la première demande crée le job, toute demande
+ultérieure portant la même clé rend CE job (`X-Idempotence: rejouee`,
+`Location` sur lui) sans rien relancer. C'est ce qui rend un réessai sûr quand
+la réponse s'est perdue (un lien coupé, un proxy qui ferme) : sans cela, un
+appelant n'avait que deux mauvais choix — renoncer à une production, ou la
+lancer deux fois. Les clés vivent dans le processus, une demi-heure (le temps
+d'un réessai, pas de rejouer hier) ; un redémarrage les oublie.
+
+**Ce qui a figé le service se lit** — `GET /v1/lenteurs` : les appels lents
+(≥ 2 s) ou ratés, datés, avec leur durée ; les RETARDS DE LA BOUCLE mesurés par
+un veilleur (elle se réveille toutes les 500 ms ; en retard, c'est que
+quelqu'un la tenait) avec ce qui était en vol à ce moment-là ; et ce qui est en
+vol maintenant. Mesuré le 2026-09-22 : un premier `GET /v1/workflows` a tenu
+14,6 s et, pendant ce temps, `/healthz` (13,6 s), `/v1/jobs` (13,5 s) et
+`/v1/file` (13,3 s) ont attendu — du dehors, un écran qui ne répond plus. Le
+catalogue, le formulaire (`/io`) et l'estimation se bâtissent désormais HORS de
+la boucle (`run_in_threadpool`) : ils lisent des fichiers et interrogent le
+moteur, ce qui n'a pas à arrêter les jobs en cours ni un lancement.
+
 **Lancer et suivre** — `POST /v1/render` renvoie `202` + un identifiant ;
 `GET /v1/jobs/{id}` (ou le flux `…/events` en SSE) jusqu'à un état terminal
 (`succeeded` / `failed` / `cancelled`), avec la position en file quand le moteur
