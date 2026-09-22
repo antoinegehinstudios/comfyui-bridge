@@ -463,14 +463,26 @@ montant pas d'un seul tenant — : une demande que son montage refuse — un rô
 d'image sans son image — échouerait au run, et l'estimation le dit
 (`impraticable`, avec le réglage nommé) sans annoncer de durée.
 
-**Rejouer un lancement sans le doubler** — `POST /v1/render` accepte un
-en-tête `Idempotency-Key` : la première demande crée le job, toute demande
-ultérieure portant la même clé rend CE job (`X-Idempotence: rejouee`,
-`Location` sur lui) sans rien relancer. C'est ce qui rend un réessai sûr quand
+**Rejouer un lancement sans le doubler** — les trois verbes qui créent un job
+(`POST /v1/render`, `POST /v1/jobs/{id}/rejouer`, `POST /v1/jobs/{id}/reprendre`)
+acceptent un en-tête `Idempotency-Key` : la
+première demande crée le job, toute demande ultérieure portant la même clé rend
+CE job (`X-Idempotence: rejouee`, `Location` sur lui) sans rien relancer. C'est ce qui rend un réessai sûr quand
 la réponse s'est perdue (un lien coupé, un proxy qui ferme) : sans cela, un
 appelant n'avait que deux mauvais choix — renoncer à une production, ou la
 lancer deux fois. Les clés vivent dans le processus, une demi-heure (le temps
 d'un réessai, pas de rejouer hier) ; un redémarrage les oublie.
+
+**Un moteur mort ne se confond pas avec un moteur occupé** (2026-09-22). Un
+ComfyUI saturé ne répond pas ; un ComfyUI arrêté REFUSE la connexion. Après
+`MOTEUR_ABSENT_S` (60 s) de connexions refusées, le run s'arrête en le disant
+(« le moteur n'écoute plus … il s'est arrêté pendant ce run ») au lieu de
+consommer son budget entier — mesuré ce jour-là : une heure d'attente, une
+production perdue, et pas une ligne dans le journal du moteur (il était mort
+silencieusement, faute du pilote graphique). Et un veilleur regarde toutes les
+30 s : trois silences de suite et le moteur est RELEVÉ, s'il est à nous (profil
+`manage`) — jamais quand il répond, redémarrer un moteur vivant tuerait le run
+en cours (mesuré le 2026-09-20).
 
 **Ce qui a figé le service se lit** — `GET /v1/lenteurs` : les appels lents
 (≥ 2 s) ou ratés, datés, avec leur durée ; les RETARDS DE LA BOUCLE mesurés par

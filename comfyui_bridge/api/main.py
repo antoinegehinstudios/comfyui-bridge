@@ -73,10 +73,16 @@ async def lifespan(app: FastAPI):
         app.state.raccourcis_completes = _completer_les_raccourcis(app.state.container)
     except Exception:
         app.state.raccourcis_completes = []    # never keep the service from starting
+    # Le veilleur du MOTEUR : un moteur mort est relevé (s'il est à nous), et
+    # c'est dit. Jamais quand il répond — relever un moteur vivant tuerait le
+    # run qui tourne.
+    from .veille_moteur import veiller as _veiller_moteur
+    garde_moteur = _asyncio.create_task(_veiller_moteur(app.state.container))
     try:
         yield
     finally:
         veilleur.cancel()
+        garde_moteur.cancel()
 
 
 def _completer_les_raccourcis(c) -> list[dict]:
@@ -1387,6 +1393,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             info["probe"] = {"available": None, "reason": "backend has no server to probe"}
         return info
 
+    def _job_de_la_cle(request: Request, response: Response) -> JobOut | None:
+        """Le job DÉJÀ créé sous la clé de cette demande, s'il y en a un.
+
+        La même porte pour les trois verbes qui créent un job (lancer, rejouer,
+        reprendre) : sans elle, un réessai sur l'un d'eux doublait encore la
+        production — c'est exactement ce qu'un lien coupé provoque.
+        """
+        cle = request.headers.get("idempotency-key")
+        deja = request.app.state.cles.lire(cle)
+        if deja is None:
+            return None
+        try:
+            job = request.app.state.container.store.get(deja)
+        except JobNotFoundError:
+            return None                        # le job a disparu : la clé ne vaut plus
+        response.headers["Location"] = f"/v1/jobs/{job.id}"
+        response.headers["X-Idempotence"] = "rejouee"
+        return JobOut.of(job)
+
     def _creer(c, intent_in: IntentIn, corps: dict, background: BackgroundTasks,
                response: Response, force: bool = False,
                reprise_de: str | None = None) -> JobOut:
@@ -1560,22 +1585,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ou lancer deux fois (2026-09-22).
         """
         c = request.app.state.container
-        cles = request.app.state.cles
-        cle = request.headers.get("idempotency-key")
-        deja = cles.lire(cle)
+        deja = _job_de_la_cle(request, response)
         if deja is not None:
-            try:
-                job = c.store.get(deja)
-            except JobNotFoundError:
-                job = None                      # le job a disparu : la clé ne vaut plus
-            if job is not None:
-                response.headers["Location"] = f"/v1/jobs/{job.id}"
-                response.headers["X-Idempotence"] = "rejouee"
-                return JobOut.of(job)
+            return deja
         corps = await request.json()
         job = _creer(c, intent_in, corps if isinstance(corps, dict) else {},
                      background, response, force)
-        cles.retenir(cle, job.id)
+        request.app.state.cles.retenir(request.headers.get("idempotency-key"), job.id)
         return job
 
     @app.post("/v1/jobs/{job_id}/rejouer", status_code=202, response_model=JobOut,
@@ -1599,8 +1615,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 f"il est antérieur à cette mémoire", job_id=job_id)
         demande.setdefault("workflow", job.workflow)
         demande.update(dict((corps.reglages if corps else {}) or {}))
-        return _creer(c, IntentIn.model_validate(demande), demande, background,
+        deja = _job_de_la_cle(request, response)
+        if deja is not None:
+            return deja
+        neuf = _creer(c, IntentIn.model_validate(demande), demande, background,
                       response, force)
+        request.app.state.cles.retenir(request.headers.get("idempotency-key"), neuf.id)
+        return neuf
 
     @app.post("/v1/jobs/{job_id}/reprendre", status_code=202, response_model=JobOut,
               tags=["render"])
@@ -1631,8 +1652,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 f"le run {job_id} n'a pas gardé la demande qui l'a produit : "
                 f"il est antérieur à cette mémoire", job_id=job_id)
         demande.setdefault("workflow", job.workflow)
-        return _creer(c, IntentIn.model_validate(demande), demande, background,
+        deja = _job_de_la_cle(request, response)
+        if deja is not None:
+            return deja
+        neuf = _creer(c, IntentIn.model_validate(demande), demande, background,
                       response, force, reprise_de=job_id)
+        request.app.state.cles.retenir(request.headers.get("idempotency-key"), neuf.id)
+        return neuf
 
     @app.post("/v1/preview", tags=["render"])
     async def preview(intent_in: IntentIn, request: Request) -> dict:

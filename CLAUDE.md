@@ -53,7 +53,9 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
 - `POST /v1/render` (corps plat, `label` = nom de la production),
   `POST /v1/render` (en-tête `Idempotency-Key` : même clé = même job, jamais
   un second lancement ; `X-Idempotence: rejouee`), `GET /v1/lenteurs` (les
-  appels lents ou ratés et les retards de boucle, mesurés),
+  appels lents ou ratés et les retards de boucle, mesurés ; un moteur mort
+  — connexion REFUSÉE 60 s — arrête le run au lieu d'attendre son budget, et
+  un veilleur le relève s'il est à nous, jamais s'il répond),
   `POST /v1/estimate` (une chaîne : par ses propres livraisons, `dit` la
   source — même configuration, droite sur le nombre de runs, autre
   configuration —, `impraticable` quand un montage refuse la demande),

@@ -149,3 +149,24 @@ def test_relancer_avec_la_meme_cle_ne_cree_pas_un_second_job(atelier):
 
     for ident in (ident, autre.json()["id"], sans.json()["id"]):
         _job(atelier, atelier.get(f"/v1/jobs/{ident}"))        # on laisse les runs finir
+
+
+def test_rejouer_avec_la_meme_cle_ne_cree_pas_un_second_job(atelier):
+    """Le rejeu crée un job comme un lancement : il a la même porte, sinon un
+    lien coupé sur « Rejouer » doublait encore la production."""
+    premier = atelier.post("/v1/render", json={"workflow": "chaine-simple", "largeur": 96})
+    job = _job(atelier, premier)
+    assert job["status"] == "succeeded", job.get("problem")
+
+    un = atelier.post(f"/v1/jobs/{job['id']}/rejouer", json={},
+                      headers={"Idempotency-Key": "rejeu-1"})
+    assert un.status_code == 202 and "X-Idempotence" not in un.headers
+    deux = atelier.post(f"/v1/jobs/{job['id']}/rejouer", json={},
+                        headers={"Idempotency-Key": "rejeu-1"})
+    assert deux.status_code == 202 and deux.json()["id"] == un.json()["id"]
+    assert deux.headers["X-Idempotence"] == "rejouee"
+    # …et sans clé, rejouer reste rejouer : un autre job.
+    trois = atelier.post(f"/v1/jobs/{job['id']}/rejouer", json={})
+    assert trois.json()["id"] != un.json()["id"]
+    for ident in (un.json()["id"], trois.json()["id"]):
+        _job(atelier, atelier.get(f"/v1/jobs/{ident}"))

@@ -95,6 +95,33 @@ def dire_les_noeuds_fautifs(fautes: dict) -> str:
     return " | ".join(phrases)
 
 
+# Combien de temps de CONNEXION REFUSÉE suffit à conclure que le moteur n'est
+# plus là. Un moteur saturé ne refuse pas : il ne répond pas. Soixante secondes
+# laissent passer un redémarrage volontaire sans conclure trop vite.
+MOTEUR_ABSENT_S = 60.0
+
+
+def _connexion_refusee(exc: BaseException) -> bool:
+    """Personne n'écoute sur ce port — le moteur est arrêté, pas occupé.
+
+    Windows dit 10061 (WSAECONNREFUSED), POSIX ECONNREFUSED ; urllib emballe
+    l'un et l'autre dans une `URLError` dont `reason` porte l'original.
+    """
+    vus = []
+    cause: BaseException | None = exc
+    for _ in range(4):                                  # la pile d'emballages est courte
+        if cause is None:
+            break
+        vus.append(cause)
+        cause = getattr(cause, "reason", None) or getattr(cause, "__cause__", None)
+    for e in vus:
+        if isinstance(e, ConnectionRefusedError):
+            return True
+        if getattr(e, "errno", None) in (61, 111) or getattr(e, "winerror", None) == 10061:
+            return True
+    return False
+
+
 class ComfyUIHttpBackend:
     def __init__(self, settings: Settings, catalog: WorkflowCatalog,
                  inflight: InflightLog | None = None) -> None:
@@ -557,18 +584,35 @@ class ComfyUIHttpBackend:
         deadline = time.monotonic() + self._settings.comfyui_total_timeout_s
         unreachable = 0
         lost = 0
+        refuse = 0
         while time.monotonic() < deadline:
             time.sleep(self._settings.comfyui_poll_interval_s)
             try:
                 hist = self._get_json("/history/" + urllib.parse.quote(prompt_id), req_t)
                 unreachable = 0
-            except Exception:
+                refuse = 0
+            except Exception as exc:                       # noqa: BLE001 — la nature de l'échec décide
                 # NOT a verdict. A saturated ComfyUI stops answering HTTP while
                 # it computes (measured: a heavy model pegs it for minutes) and
                 # then delivers normally. Declaring failure here made the bridge
                 # report "failed" on a run ComfyUI actually completed — and fed
                 # Hermes a false problem. Only ComfyUI's history decides.
                 unreachable += 1
+                # MAIS : « personne n'écoute sur ce port » n'est pas « occupé ».
+                # Un moteur saturé garde sa socket ouverte et ne répond pas ; un
+                # moteur MORT refuse la connexion. Mesuré le 2026-09-22 : le
+                # moteur est mort en cours de run (silencieusement, pas une
+                # ligne dans son journal) et la passerelle a attendu son heure
+                # entière avant de le dire — une production perdue, et une heure
+                # de machine avec.
+                refuse = refuse + 1 if _connexion_refusee(exc) else 0
+                if refuse * self._settings.comfyui_poll_interval_s >= MOTEUR_ABSENT_S:
+                    raise BackendExecutionError(
+                        f"le moteur n'écoute plus (connexion refusée depuis "
+                        f"{int(refuse * self._settings.comfyui_poll_interval_s)} s) : il s'est "
+                        f"arrêté pendant ce run — inutile d'attendre la fin du budget",
+                        prompt_id=prompt_id,
+                    ) from exc
                 # Say it out loud after a while: a silent engine looks exactly
                 # like a slow one, and ours does crash (CUDA fault, measured).
                 if on_note is not None and unreachable in (60, 300, 900):
