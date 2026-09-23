@@ -473,6 +473,17 @@ appelant n'avait que deux mauvais choix — renoncer à une production, ou la
 lancer deux fois. Les clés vivent dans le processus, une demi-heure (le temps
 d'un réessai, pas de rejouer hier) ; un redémarrage les oublie.
 
+**Un dessin vectoriel (SVG) s'importe** (2026-09-23) : le dépôt le PEINT (fond
+transparent, côté long `cote_long`, 2048 par défaut) et c'est l'image qui part
+chez le moteur, sous le même nom en `.png` ; le document, lui, est déposé AUSSI
+sous son nom, pour le flux qui sait le repeindre (nœud `ChargerSVG`, paquet
+`comfyui-vectoriel`). La réponse dit ce qui a été fait (`converti`  : `de`,
+`largeur`, `hauteur`, `peintre`, `document_garde`). Le peintre est **Inkscape**
+(cherché dans `INKSCAPE_BIN`, puis aux endroits d'installation, puis dans le
+PATH) ; sans lui, le dépôt refuse en NOMMANT ce qui manque — jamais un SVG chez
+le moteur sous un nom d'image. Le contenu décide, pas le nom : un `.png` qui
+contient un dessin est peint lui aussi.
+
 **Une pièce jointe que le moteur ne sait pas ouvrir n'entre pas** (2026-09-22).
 Un dessin vectoriel déposé comme image de référence (`retarus_2025_RGB.svg`) a
 fait tomber le moteur ENTIER : le nœud qui charge une image ne sait pas

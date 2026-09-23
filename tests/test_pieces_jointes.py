@@ -11,6 +11,11 @@ citent ce fichier ; entre eux, le moteur était mort et tout ce qui partait
 
 Deux gardes, ici : le DÉPÔT (le contenu décide) et le LANCEMENT (le nom décide
 — c'est tout ce qu'on a d'un fichier déjà chez le moteur, rejeu compris).
+
+Depuis le 2026-09-23, un dessin vectoriel a son propre chemin : le dépôt le
+PEINT et garde le document (voir `test_svg_depose.py`). Ce qui reste refusé,
+c'est de DÉSIGNER le document comme image — et tout ce qui n'est pas une image
+et ne se peint pas (un PDF, un texte).
 """
 
 import io
@@ -34,9 +39,17 @@ def _png(taille=(4, 4)) -> bytes:
 
 
 def test_un_dessin_vectoriel_est_refuse_par_son_nom_et_on_dit_quoi_faire():
+    """Le document n'est pas une image : le désigner ferait tomber le moteur.
+    Le refus dit les DEUX sorties — le redéposer (le dépôt le peint), ou
+    prendre l'image déjà peinte — et rappelle que le flux, lui, sait s'en
+    servir par le nœud qui le repeint."""
     dit = refus_par_le_nom("retarus_2025_RGB.svg", "image")
-    assert dit and "dessin vectoriel" in dit and "exporter en PNG" in dit
+    assert dit and "dessin vectoriel" in dit
     assert "retarus_2025_RGB.svg" in dit          # l'utilisateur voit QUEL fichier
+    assert "retarus_2025_RGB.png" in dit and "redéposer" in dit and "nœud" in dit
+    # Ce qui ne se peint pas garde l'ancien conseil : l'exporter soi-même.
+    document = refus_par_le_nom("brief.pdf", "image")
+    assert document and "exporter en PNG" in document
     for ext in PAS_DES_IMAGES:
         assert refus_par_le_nom(f"a{ext}", "image"), ext
         assert refus_par_le_nom(f"A{ext.upper()}", "image"), ext     # la casse ne sauve pas
@@ -77,12 +90,16 @@ def atelier():
 
 
 def test_le_depot_refuse_ce_qui_ferait_tomber_le_moteur(atelier):
-    r = atelier.post("/v1/inputs/image", files={"file": ("retarus_2025_RGB.svg", SVG, "image/svg+xml")},
+    """Ce qui n'est pas une image ET ne se peint pas n'entre pas. (Un dessin
+    vectoriel, lui, a son chemin depuis le 2026-09-23 : il est peint — voir
+    `test_svg_depose.py`.)"""
+    r = atelier.post("/v1/inputs/image",
+                     files={"file": ("brief.pdf", b"%PDF-1.7\n1 0 obj\n", "application/pdf")},
                      data={"param": "image"})
     assert r.status_code == 422, r.text
     dit = r.json()
-    assert "dessin vectoriel" in dit["detail"] and dit["field"] == "image"
-    assert dit["fichier"] == "retarus_2025_RGB.svg"
+    assert "document" in dit["detail"] and "exporter en PNG" in dit["detail"]
+    assert dit["field"] == "image" and dit["fichier"] == "brief.pdf"
     # …et une vraie image PASSE la porte : sur cet atelier, elle échoue ensuite
     # faute de moteur (c'est lui qui range les fichiers) — ce qui compte est
     # que l'échec ne vienne pas d'ici.

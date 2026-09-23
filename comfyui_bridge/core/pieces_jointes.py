@@ -60,6 +60,15 @@ def refus_par_le_nom(nom: str, categorie: str) -> str | None:
     quoi = PAS_DES_IMAGES.get(ext)
     if quoi is None:
         return None
+    if ext in (".svg", ".svgz"):
+        # Depuis le 2026-09-23 le DÉPÔT accueille un dessin vectoriel : il le
+        # peint et c'est l'image peinte qui part chez le moteur. Ce qui reste
+        # refusé, c'est de DÉSIGNER le document lui-même comme image — le
+        # moteur ne sait pas l'ouvrir, et il en tombe.
+        return (f"« {nom} » est {quoi} : le moteur ne sait pas l'ouvrir comme une image. "
+                f"Le redéposer — le dépôt le peint et donne l'image — ou choisir l'image "
+                f"déjà peinte ({os.path.splitext(nom)[0]}.png). Le document, lui, reste "
+                f"utilisable dans le flux par le nœud qui le repeint.")
     return (f"« {nom} » est {quoi}, pas une image : {QUOI_FAIRE}. "
             f"(Mesuré le 2026-09-22 : un fichier de ce genre fait tomber le moteur "
             f"tout entier, et les productions suivantes avec.)")

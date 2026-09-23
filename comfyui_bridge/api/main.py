@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
-from ..adapter import raccourcis
+from ..adapter import raccourcis, svg_rendu
 from ..config import Settings
 from ..container import build_container
 from ..core.errors import (DependencyUnavailableError, InputValueRefusedError,
@@ -2391,7 +2391,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/v1/inputs/media", status_code=201, tags=["render"])
     @app.post("/v1/inputs/image", status_code=201, tags=["render"])
     async def upload_input_image(request: Request, file: UploadFile = File(...),
-                                 param: str = Form("")) -> dict:
+                                 param: str = Form(""),
+                                 cote_long: int = Form(svg_rendu.COTE_LONG_DEFAUT)) -> dict:
         """Hand a local file to ComfyUI so a workflow can use it as input.
 
         Relays ComfyUI's own ``/api/upload/image``: the engine keeps its input
@@ -2403,7 +2404,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         « image_2 », « model3d »…). Elle ne sert qu'à une chose : savoir OÙ le
         moteur range cette catégorie — un modèle 3D va dans « 3d/ » et se cite
         « 3d/<nom> ». Omise, le fichier va à la racine du dossier d'entrée,
-        comme une image."""
+        comme une image.
+
+        **Un dessin vectoriel (SVG) est accueilli** : il est PEINT en image
+        (fond transparent, côté long `cote_long`, 2048 par défaut) et c'est
+        cette image qui part chez le moteur ; le document original part AUSSI,
+        sous son nom, pour qui veut le repeindre plus grand dans le flux (le
+        nœud `ChargerSVG`). La réponse dit ce qui a été fait (`converti`).
+        Sans peintre sur le poste, le dépôt refuse en nommant ce qui manque —
+        jamais un SVG chez le moteur sous un nom d'image : il le ferait tomber
+        (2026-09-22)."""
         from ..adapter.juger_media import refus as _refus_du_media
         from ..adapter.media_inputs import upload_subfolder
         from ..adapter.neutral import upload_image
@@ -2418,16 +2428,57 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # vidéo, où le nœud de chargement se rabat quand ce n'est pas une
         # image) — vingt et un lancements perdus dans la journée, et tout ce
         # qui suivait avec. Le refus dit quoi faire.
-        pourquoi = _refus_du_media(payload, file.filename or "",
-                                   media_category(param or "") or "image")
-        if pourquoi is not None:
-            raise InputValueRefusedError(pourquoi, field=param or "image",
-                                         fichier=file.filename or "")
+        categorie = media_category(param or "") or "image"
         subfolder = upload_subfolder(param or "")
+        converti = None
+        if categorie == "image" and svg_rendu.est_svg(payload):
+            payload, converti = await run_in_threadpool(_peindre_le_dessin, c, payload,
+                                                        file.filename or "dessin.svg", subfolder,
+                                                        cote_long)
+        else:
+            pourquoi = _refus_du_media(payload, file.filename or "", categorie)
+            if pourquoi is not None:
+                raise InputValueRefusedError(pourquoi, field=param or "image",
+                                             fichier=file.filename or "")
+        nom_depose = (converti or {}).get("nom") or file.filename or "image.png"
         name = await run_in_threadpool(
-            upload_image, c.settings.comfyui_base_url, file.filename or "image.png", payload,
+            upload_image, c.settings.comfyui_base_url, nom_depose, payload,
             True, 60.0, subfolder)
-        return {"name": name, "bytes": len(payload), "subfolder": subfolder}
+        rendu = {"name": name, "bytes": len(payload), "subfolder": subfolder}
+        if converti is not None:
+            rendu["converti"] = {k: v for k, v in converti.items() if k != "nom"}
+        return rendu
+
+    def _peindre_le_dessin(c, octets: bytes, nom: str, subfolder: str,
+                           cote_long: int) -> tuple[bytes, dict]:
+        """Peindre un dessin vectoriel, et déposer le DOCUMENT à côté.
+
+        Le moteur reçoit une image (c'est tout ce qu'il sait ouvrir) ; le
+        document, lui, reste disponible sous son nom pour un nœud qui voudra
+        le repeindre à la taille du plan. Si le document ne peut pas être
+        déposé, ce n'est pas une faute : l'image, elle, est là — et c'est dit.
+        """
+        from ..adapter.neutral import upload_image as _deposer
+        try:
+            png, fait = svg_rendu.peindre(octets, cote_long=cote_long)
+        except svg_rendu.SansPeintre as exc:
+            raise InputValueRefusedError(str(exc), field="image", fichier=nom) from exc
+        except Exception as exc:                          # noqa: BLE001 — un dessin cassé se dit
+            raise InputValueRefusedError(
+                f"« {nom} » est un dessin vectoriel qui ne se peint pas : {exc}",
+                field="image", fichier=nom) from exc
+        tige = Path(nom).stem or "dessin"
+        garde = None
+        try:
+            garde = _deposer(c.settings.comfyui_base_url, f"{tige}.svg", octets, True, 60.0,
+                             subfolder)
+        except Exception as exc:                          # noqa: BLE001 — le vectoriel est un bonus
+            fait["document_garde"] = f"non : {exc}"
+        if garde:
+            fait["document_garde"] = garde
+        fait["nom"] = f"{tige}.png"
+        fait["de"] = "svg"
+        return png, fait
 
     @app.get("/v1/vitrine/{slug}", tags=["meta"])
     async def vitrine(slug: str, request: Request) -> dict:
