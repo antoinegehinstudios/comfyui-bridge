@@ -10,7 +10,7 @@ Un texte est un objet :
 
     {"texte": "Le titre", "police": "Segoe UI Bold", "debut_s": 0.5, "fin_s": 4,
      "position": "bas", "taille": 0.055, "couleur": "white", "fondu_s": 0.4,
-     "boite": true}
+     "boite": true, "fond": null}
 
 * ``police`` : un CHEMIN de fichier, ou un NOM résolu dans les polices du poste
   (même règle que l'appel final de la révélation : « Segoe UI Bold » →
@@ -22,7 +22,13 @@ Un texte est un objet :
   ``centre``, ``haut`` ;
 * ``fondu_s`` : entrée et sortie en fondu, en secondes ;
 * ``boite`` : un bandeau sombre translucide sous le texte, pour la lisibilité
-  sur une image claire.
+  sur une image claire ;
+* ``fond`` : une couleur PLEINE sous chaque ligne — celle qu'une charte déclare
+  pour ses titres (« texte #0c0c0c sur fond #ffffff ») : le couple a été choisi
+  pour se lire ensemble, le texte seul ne se lit pas forcément sur la vidéo
+  (mesuré le 2026-09-24 : un titre #000000 sans son fond disparaissait sur une
+  foule de nuit). Posé tel quel, il prime sur ``boite`` ; le liseré et l'ombre,
+  faits pour lire un texte à même l'image, ne s'y ajoutent pas.
 
 Ce module ne connaît aucun flux : il rend une chaîne de filtres que le
 recollage pose sur la vidéo recollée.
@@ -193,7 +199,11 @@ def filtre_drawtext(texte: dict[str, Any], largeur: int, hauteur: int,
     liseré = max(1, taille // 40)
     ombre = max(1, taille // 24)
     boite = ""
-    if texte.get("boite", False):
+    fond = str(texte.get("fond") or "").strip()
+    if fond:
+        boite = f":box=1:boxcolor={fond}:boxborderw={max(2, taille // 4)}"
+        liseré = ombre = 0
+    elif texte.get("boite", False):
         boite = f":box=1:boxcolor=black@0.45:boxborderw={max(2, taille // 8)}"
     sortie: list[str] = []
     for i, ligne in enumerate(lignes):

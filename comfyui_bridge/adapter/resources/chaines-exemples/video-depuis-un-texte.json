@@ -206,6 +206,7 @@
           "negatif": "$negatif",
           "police": "$police",
           "couleur": "white",
+          "fond": null,
           "part_min_dans_palette": 0.0,
           "image_1": "$image",
           "role_1": "$role_image",
@@ -269,7 +270,8 @@
             "fin_s": 4.5,
             "taille": 0.055,
             "fondu_s": 0.4,
-            "couleur": "$contrainte.recit.couleur"
+            "couleur": "$contrainte.recit.couleur",
+            "fond": "$contrainte.recit.fond"
           },
           {
             "texte": "$appel",
@@ -279,7 +281,8 @@
             "fin_s": -0.2,
             "taille": 0.055,
             "fondu_s": 0.4,
-            "couleur": "$contrainte.recit.couleur"
+            "couleur": "$contrainte.recit.couleur",
+            "fond": "$contrainte.recit.fond"
           }
         ],
         "texture": {

@@ -112,6 +112,17 @@ def test_le_repli_coupe_aux_mots_et_reduit_la_taille_si_un_mot_ne_tient_pas(monk
     assert textes.replier("un texte", "x", 40, 100) == (["un texte"], 40)
 
 
+def test_le_fond_declare_se_pose_plein_sans_liseré_ni_ombre(tmp_path):
+    p = _une_police(tmp_path)
+    f = textes.filtre_drawtext({"texte": "GRABUGE FEST", "police": str(p), "debut_s": 0.5, "fin_s": 4,
+                                "couleur": "0x0C0C0C", "fond": "0xFFFFFF", "boite": True}, 720, 1280, dossier=tmp_path)[0]
+    assert "box=1:boxcolor=0xFFFFFF" in f and "black@0.45" not in f, "le fond de la charte prime sur le bandeau générique"
+    assert "borderw=0:" in f and "shadowx=0" in f
+    sans = textes.filtre_drawtext({"texte": "GRABUGE FEST", "police": str(p), "debut_s": 0.5, "fin_s": 4,
+                                   "couleur": "white", "fond": None}, 720, 1280, dossier=tmp_path)[0]
+    assert "box=1" not in sans, "sans fond déclaré, rien ne change"
+
+
 def test_sans_textes_rien(tmp_path):
     assert textes.filtres(None, 720, 1280) == ([], 0)
     assert textes.filtres([], 720, 1280) == ([], 0)
