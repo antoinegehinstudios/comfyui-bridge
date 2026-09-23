@@ -218,6 +218,7 @@
           "logo_largeur": null,
           "logo_marge": null,
           "logo_hauteur_min_px": null,
+          "logo_zone": null,
           "texture_fichier": null,
           "texture_fusion": null,
           "texture_opacite": null,
@@ -293,7 +294,8 @@
             "ancrage": "$contrainte.recit.logo_ancrage",
             "largeur": "$contrainte.recit.logo_largeur",
             "marge": "$contrainte.recit.logo_marge",
-            "hauteur_min_px": "$contrainte.recit.logo_hauteur_min_px"
+            "hauteur_min_px": "$contrainte.recit.logo_hauteur_min_px",
+            "espace_min": "$contrainte.recit.logo_zone"
           }
         ]
       }

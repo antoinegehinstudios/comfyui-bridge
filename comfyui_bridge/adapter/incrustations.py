@@ -18,6 +18,10 @@ Une image est un objet :
   part du plus petit côté (la même grammaire que le placement d'Héraldiste) ;
 * ``hauteur_min_px`` : la taille minimale de la charte — un logo que le
   placement ferait plus petit est AGRANDI jusqu'à elle, et c'est dit ;
+* ``espace_min`` : la zone de protection, en hauteurs de l'image — le bord du
+  cadre ne s'approche pas plus près ; un placement plus serré est DÉPLACÉ vers
+  l'intérieur (jamais rétréci), et c'est dit ; s'il ne tient pas même ainsi,
+  c'est dit aussi ;
 * ``debut_s`` / ``fin_s`` : facultatifs (toute la durée par défaut), négatifs
   comptés depuis la fin comme pour les textes.
 
@@ -59,7 +63,7 @@ FUSIONS = {
 
 
 def boite(ancrage: str, largeur_relative: float | None, marge: float | None, largeur: int, hauteur: int,
-          rapport: float, hauteur_min_px: float | None = None) -> dict[str, Any]:
+          rapport: float, hauteur_min_px: float | None = None, espace_min: float | None = None) -> dict[str, Any]:
     """La boîte, en pixels du cadre, où poser une image de ce rapport largeur/hauteur."""
     if ancrage not in ANCRAGES:
         raise MediaAssemblyError(f"incrustation : ancrage « {ancrage} » inconnu ({', '.join(ANCRAGES)})")
@@ -83,8 +87,16 @@ def boite(ancrage: str, largeur_relative: float | None, marge: float | None, lar
         x = m if colonne == "gauche" else (largeur - lw - m if colonne == "droite" else (largeur - lw) / 2)
     x = min(max(0.0, x), largeur - lw)
     y = min(max(0.0, y), hauteur - lh)
+    deplace, tenue = False, None
+    if espace_min:
+        e = float(espace_min) * lh
+        x_tenu = min(max(x, e), largeur - lw - e) if lw + 2 * e <= largeur else (largeur - lw) / 2
+        y_tenu = min(max(y, e), hauteur - lh - e) if lh + 2 * e <= hauteur else (hauteur - lh) / 2
+        deplace = abs(x_tenu - x) >= 0.5 or abs(y_tenu - y) >= 0.5
+        x, y = x_tenu, y_tenu
+        tenue = lw + 2 * e <= largeur and lh + 2 * e <= hauteur
     return {"x": int(round(x)), "y": int(round(y)), "largeur": int(round(lw)), "hauteur": int(round(lh)),
-            "agrandi_au_minimum": agrandi}
+            "agrandi_au_minimum": agrandi, "deplace_pour_la_zone": deplace, "zone_tenue_au_bord": tenue}
 
 
 def _ouvrir(fichier: Any, quoi: str):
@@ -161,7 +173,7 @@ def filtres_images(images: Any, largeur: int, hauteur: int, fps: int, premier_ra
             continue
         source = _ouvrir(spec["fichier"], "image").convert("RGBA")
         b = boite(str(spec.get("ancrage") or "centre"), spec.get("largeur"), spec.get("marge"), int(largeur), int(hauteur),
-                  source.width / source.height, spec.get("hauteur_min_px"))
+                  source.width / source.height, spec.get("hauteur_min_px"), spec.get("espace_min"))
         posee = source.resize((b["largeur"], b["hauteur"]), Image.LANCZOS)
         chemin = Path(dossier) / f"image_{n}.png"
         posee.save(chemin)
@@ -181,6 +193,9 @@ def filtres_images(images: Any, largeur: int, hauteur: int, fps: int, premier_ra
         rang += 1
         nom = Path(str(spec["fichier"])).name
         dits.append(f"image « {nom} » posée telle quelle : {b['largeur']}×{b['hauteur']} px en {spec.get('ancrage') or 'centre'}"
-                    f" (x {b['x']}, y {b['y']})" + (" — agrandie à la taille minimale" if b["agrandi_au_minimum"] else ""))
+                    f" (x {b['x']}, y {b['y']})" + (" — agrandie à la taille minimale" if b["agrandi_au_minimum"] else "")
+                    + (f" — déplacée vers l'intérieur pour tenir sa zone de protection ({round(float(spec['espace_min']) * b['hauteur'])} px au bord)"
+                       if b["deplace_pour_la_zone"] else "")
+                    + (" — sa zone de protection ne tient pas dans le cadre à cette taille" if b["zone_tenue_au_bord"] is False else ""))
         poses.append({"fichier": str(spec["fichier"]), **b, "ancrage": spec.get("ancrage") or "centre"})
     return args, chaines, courant, dits, poses

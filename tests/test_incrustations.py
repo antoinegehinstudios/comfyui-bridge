@@ -49,6 +49,12 @@ def test_la_boite_suit_le_placement_et_la_taille_minimale():
     assert petit["x"] + petit["largeur"] <= 320 and petit["y"] + petit["hauteur"] <= 240
     with pytest.raises(MediaAssemblyError):
         incrustations.boite("en-haut", 0.5, 0.05, 320, 240, 3.0)
+    # une marge plus serrée que la zone de protection : l'image s'écarte du bord, sans rétrécir, et c'est dit
+    serre = incrustations.boite("haut-centre", 0.5, 0.01, 320, 240, 3.0, espace_min=0.25)
+    assert serre["deplace_pour_la_zone"] and serre["y"] == round(0.25 * serre["hauteur"]) and serre["largeur"] == 160
+    assert serre["zone_tenue_au_bord"] is True
+    trop = incrustations.boite("haut-centre", 1.0, 0.0, 320, 240, 3.0, espace_min=0.25)
+    assert trop["zone_tenue_au_bord"] is False, "une image qui remplit la largeur ne peut pas tenir sa zone : c'est dit"
 
 
 def test_le_logo_se_pose_tel_quel_a_sa_place(tmp_path):

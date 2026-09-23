@@ -1726,12 +1726,14 @@ pourquoi le texte est un service de la livraison, pas du rendu.
 Les IMAGES et la TEXTURE s'incrustent au même passage (module
 `adapter/incrustations.py`, depuis le 2026-09-24) : `recoller` accepte `images`
 (une liste — fichier, `ancrage` parmi haut-gauche… bas-droite, `largeur` en part
-du cadre, `marge`, `hauteur_min_px`, début et fin facultatifs) et `texture`
+du cadre, `marge`, `hauteur_min_px`, `espace_min`, début et fin facultatifs) et `texture`
 (fichier, `fusion` parmi normal, multiplier, superposition, lumiere-douce, ecran,
 `opacite`, `taille_relative`). Une image se pose TELLE QUELLE par-dessus tout le
 reste, redimensionnée une seule fois depuis son fichier (Lanczos) — c'est ainsi
 qu'un logo de charte reste celui de la marque, après tout agrandissement ; une
-taille minimale l'agrandit et le dit. La texture se fond SOUS les textes, par des
+taille minimale l'agrandit et le dit ; une zone de protection (`espace_min`, en
+hauteurs de l'image) l'écarte du bord, sans la rétrécir, et le dit — comme elle dit
+une zone qui ne tient pas dans le cadre à cette taille. La texture se fond SOUS les textes, par des
 formules écrites (la vidéo pour base, la texture pour calque) : le mode « normal »
 du filtre `blend` d'ffmpeg rendait la vidéo seule. Un objet sans fichier (une
 charte sans logo) ne pose rien et le dit ; un ancrage, une fusion ou un fichier
