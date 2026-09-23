@@ -84,6 +84,16 @@
       "categorie": "references",
       "aide": "Dites ce que cette image est, pour que la vidéo la respecte : « le personnage principal », « l'objet exact à montrer », « le lieu où ça se passe »… Sans image jointe, ce champ ne sert pas."
     },
+    "charte": {
+      "type": "COMBO",
+      "defaut": "aucune",
+      "options_depuis": {
+        "menu": "charte"
+      },
+      "libelle": "Charte de marque",
+      "categorie": "references",
+      "aide": "La charte graphique (Héraldiste) que la création doit respecter : sa palette et ses mots de style complètent la consigne, ses interdits le négatif, sa police et sa couleur de texte habillent l'accroche et l'appel, et la vidéo livrée reçoit un constat de conformité (part de l'image dans la palette). « Aucune charte » : rien ne change."
+    },
     "accroche": {
       "type": "STRING",
       "defaut": "",
@@ -168,10 +178,37 @@
   },
   "etapes": [
     {
+      "id": "contrainte",
+      "quand": { "valeur": "$charte", "op": "ne", "attendu": "aucune" },
+      "rendre": {
+        "workflow": "image-heraldiste",
+        "inputs": {
+          "1.charte": "$charte",
+          "1.prompt": "$prompt",
+          "1.negatif": "$negatif",
+          "1.police": "$police"
+        }
+      },
+      "sinon": {
+        "livrable": null,
+        "recit": {
+          "charte": "aucune",
+          "appliquee": false,
+          "tenue": true,
+          "raison": "aucune charte demandée : l'étape n'a pas eu lieu",
+          "prompt": "$prompt",
+          "negatif": "$negatif",
+          "police": "$police",
+          "couleur": "white",
+          "part_min_dans_palette": 0.0
+        }
+      }
+    },
+    {
       "id": "rendu",
       "rendre": {
         "workflow": "video-h3-texte",
-        "prompt": "$prompt",
+        "prompt": "$contrainte.recit.prompt",
         "style_graphique": "$style_graphique",
         "style_narratif": "$style_narratif",
         "duration_s": "$duration_s",
@@ -179,7 +216,7 @@
         "width": "$width",
         "height": "$height",
         "seed": "$seed",
-        "negative_prompt": "$negatif",
+        "negative_prompt": "$contrainte.recit.negatif",
         "media": {
           "image": "$image",
           "image_2": "$image_2",
@@ -204,23 +241,49 @@
         "textes": [
           {
             "texte": "$accroche",
-            "police": "$police",
+            "police": "$contrainte.recit.police",
             "position": "$texte_position",
             "debut_s": 0.5,
             "fin_s": 4.5,
             "taille": 0.055,
-            "fondu_s": 0.4
+            "fondu_s": 0.4,
+            "couleur": "$contrainte.recit.couleur"
           },
           {
             "texte": "$appel",
-            "police": "$police",
+            "police": "$contrainte.recit.police",
             "position": "$texte_position",
             "debut_s": -4.0,
             "fin_s": -0.2,
             "taille": 0.055,
-            "fondu_s": 0.4
+            "fondu_s": 0.4,
+            "couleur": "$contrainte.recit.couleur"
           }
         ]
+      }
+    },
+    {
+      "id": "conformite",
+      "quand": { "valeur": "$charte", "op": "ne", "attendu": "aucune" },
+      "rendre": {
+        "workflow": "video-heraldiste-conformite",
+        "media": {
+          "video": "$livraison.livrable"
+        },
+        "inputs": {
+          "1.charte": "$charte"
+        }
+      },
+      "sinon": {
+        "livrable": null,
+        "recit": {
+          "charte": "aucune",
+          "mesuree": false,
+          "tenue": true,
+          "part_dans_palette": 1.0,
+          "part_attendue": 0.0,
+          "raison": "aucune charte demandée : l'étape n'a pas eu lieu"
+        }
       }
     },
     {
@@ -262,6 +325,20 @@
           "op": "gte",
           "attendu": 0.6,
           "aide": "Les blocs doivent se suivre sans saut dans la vidéo LIVRÉE : la ressemblance (SSIM) entre la dernière image gardée d'un bloc et la première gardée du suivant, mesurée par la passerelle après avoir jeté ce que le bloc suivant rejouait (mesuré le 2026-09-20 : 0,42 sans coupe, 0,67 après ; deux images générées ne sont jamais les mêmes au pixel). Un seul bloc : aucune jonction, 1,0. Non tenu : la vidéo est livrée, le regard tranche ; le journal dit combien d'images ont été jetées à chaque raccord."
+        },
+        {
+          "id": "la_charte_demandee_est_appliquee",
+          "valeur": "$contrainte.recit.tenue",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Une charte demandée doit avoir été lue chez Héraldiste et appliquée (consigne, négatif, police, couleur). Non tenue : le service était injoignable ou la charte inconnue, la vidéo a été faite SANS contrainte — le récit de l'étape « charte » dit pourquoi. Sans charte demandée, tenu."
+        },
+        {
+          "id": "la_palette_de_la_charte_est_tenue",
+          "valeur": "$conformite.recit.part_dans_palette",
+          "op": "gte",
+          "attendu": "$conformite.recit.part_attendue",
+          "aide": "La part moyenne des pixels de la vidéo livrée (quelques images échantillonnées) à moins de ΔE2000 10 d'une couleur de la charte, mesurée par Héraldiste, contre la part que la charte attend (part_min_dans_palette). Sans charte demandée : 1 contre 0, tenu. C'est un constat : la vidéo est livrée quoi qu'il en soit."
         }
       ]
     }
@@ -274,6 +351,7 @@
     "textes_au_recollage": "Les textes s'incrustent à la livraison (ffmpeg drawtext, en flux, police par fichier, fondu, minutage exact) : aucun nœud du moteur n'écrit une police du poste sans tenir toute la vidéo en mémoire. Un temps négatif se compte depuis la fin (« -4 » : quatre secondes avant la fin).",
     "agrandissement": "L'agrandissement ×2 (RealESRGAN) est une constante du montage (« agrandir »), pas un champ : la chaîne n'a pas de moyen de porter un booléen jusqu'au graphe autrement que par une entrée d'intention, et la qualité livrée n'est pas un réglage d'usage. Il a été validé face au lanczos seul par un rendu comparé (voir tasks/todo-ecrire-une-video-outillage.md).",
     "references_commentees": "Une image jointe (image, image_2, image_3) et son rôle (role_image…) passent au montage : au tour 0, l'amorce devient « texte + références → vidéo » (MiniMaxH3ReferenceToVideo, étiquettes « <Picture i> » dans la consigne, une phrase « <Picture i> is <rôle> » par image) ; les tours suivants repartent de la dernière image, où l'identité est déjà. Les rôles sont des réglages NOMMÉS de l'étape (« parametres »), injectés par les liaisons du montage — la chaîne ne nomme aucun nœud. Sans image, rien ne change : l'amorce ordinaire.",
-    "continuite_des_blocs": "Chaque bloc après le premier est CONTINUÉ par référence : les 22 dernières images natives du bloc précédent (préfixe vidéo) et une image d'identité du bloc 0, rendus avec les poids ref2va — une vraie extension (mesuré le 2026-09-18 : SSIM 0,91–0,93 à la couture, caméra et personnage tenus). Chaque bloc a son bruit (graine + bloc) : le même seed rejouait la même trajectoire de caméra. La couture est constatée bloc par bloc (récit « raccord_ssim_min », constat ≥ 0,85) — un constat, jamais un refus."
+    "continuite_des_blocs": "Chaque bloc après le premier est CONTINUÉ par référence : les 22 dernières images natives du bloc précédent (préfixe vidéo) et une image d'identité du bloc 0, rendus avec les poids ref2va — une vraie extension (mesuré le 2026-09-18 : SSIM 0,91–0,93 à la couture, caméra et personnage tenus). Chaque bloc a son bruit (graine + bloc) : le même seed rejouait la même trajectoire de caméra. La couture est constatée bloc par bloc (récit « raccord_ssim_min », constat ≥ 0,85) — un constat, jamais un refus.",
+    "charte": "L'étape « contrainte » (un pas d'étape ne porte pas le nom d'un champ : « charte » est le champ) tourne toujours (un GET local, ou rien si « aucune ») : elle rend la consigne, le négatif, la police et la couleur EFFECTIFS — les entrées telles quelles sans charte, complétées par le brief d'Héraldiste avec. Un « quand » + « sinon » ne tiendrait pas : « sinon » n'admet que des littéraux, et la police de repli est un champ. L'étape « conformite » reçoit la vidéo livrée en média et rend la part dans la palette ; les deux constats en fin de chaîne la disent sans jamais refuser la livraison."
   }
 }

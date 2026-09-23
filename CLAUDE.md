@@ -80,7 +80,10 @@ paquet de nœuds). Jamais dans un `.py` : la règle `flux-hors-du-code` de
   gardée par clé porte `resultat.memoire.{cle, reprise}` et, reprise sans run,
   `job_id` nul et la note « reprise de la mémoire : même clé » ; une étape
   sautée porte `note` et `resultat.sans_effet[]`, les champs qu'elle seule
-  lisait et qu'on avait réglés),
+  lisait et qu'on avait réglés — sauf ceux que son `sinon` RENVOIE, qui
+  traversent l'étape et ont donc bien un effet ; son `quand` prend aussi la
+  forme NOMMÉE d'un contrôle, `{valeur, op, attendu}`, pour sauter une étape
+  dont la valeur dit « rien à faire » sans être vide),
   `artifacts[].{kind,path,url}`, `problem` — et sur un refus de chaîne
   (`problem_kind` `controle-echoue`) : `problem.etape` et
   `problem.controles[].{id,op,attendu,mesure,ok,aide}`, `aide` étant

@@ -1,6 +1,8 @@
 """Engine reconciliation: declared, never duplicated."""
 
 import json
+import os
+import types
 
 import pytest
 
@@ -161,13 +163,16 @@ def test_stop_refuses_to_touch_an_attached_engine(tmp_path):
 
 
 def test_stop_uses_the_pid_we_recorded(tmp_path, monkeypatch):
-    killed = []
+    # Ce que l’arrêt frappe est capturé des deux côtés : sous Windows il passe
+    # désormais par taskkill, et un vrai taskkill dans un test tuerait un PID
+    # de cette machine.
+    vus = _arrets_observes(monkeypatch)
     (tmp_path / "engine-local.pid").write_text("777", encoding="utf-8")
-    monkeypatch.setattr(E.os, "kill", lambda pid, sig: killed.append(pid))
     monkeypatch.setattr(E, "is_alive", lambda url, timeout=2.0: False)
     p = E.EngineProfile("local", "http://127.0.0.1:8188", manage=True, command=["x"])
     assert E.stop_engine(p, tmp_path)["stopped"] is True
-    assert killed == [777]
+    vises = vus["racine"] + [int(c[-1]) for c in vus["arbre"]]
+    assert vises == [777]
 
 
 def test_the_liveness_probe_never_kills_what_it_probes():
@@ -212,3 +217,97 @@ def test_an_unreadable_or_dead_lock_is_not_a_running_starter(tmp_path):
     lock.write_text("pas un pid", encoding="utf-8")
     assert E._starter_alive(lock) is False              # illisible
     assert E._pid_exists(0) is False and E._pid_exists(-1) is False
+
+
+# --- L'arrêt emporte-t-il l'ARBRE, ou seulement sa racine ? -----------------
+
+
+class _TaskkillOk:
+    """Ce que rend `subprocess.run` quand taskkill a fait son travail."""
+
+    returncode = 0
+    stdout = ""
+    stderr = ""
+
+
+def _arrets_observes(monkeypatch, systeme=None, issue=None):
+    """Regarder QUI l'arrêt frappe, sans jamais toucher un processus réel.
+
+    `systeme` remplace le module `os` VU PAR engines.py, et lui seul : poser
+    `os.name` à la main dérègle pathlib, qui choisit dessus sa saveur de chemin
+    — constaté ici, plus aucun tmp_path ne s'instanciait.
+    """
+    vus: dict[str, list] = {"arbre": [], "racine": []}
+    faux_os = types.SimpleNamespace(name=systeme or os.name,
+                                    kill=lambda pid, sig: vus["racine"].append(pid))
+    monkeypatch.setattr(E, "os", faux_os)
+    monkeypatch.setattr(E.subprocess, "run",
+                        lambda cmd, **kw: vus["arbre"].append(list(cmd)) or (issue or _TaskkillOk()))
+    return vus
+
+
+def test_l_arret_emporte_l_arbre_pas_seulement_sa_racine(tmp_path, monkeypatch):
+    """ComfyUI se ré-exécute dans un enfant. Arbre constaté sur la machine :
+    la passerelle lance 25092 (working set nul — c'est le PID que nous gardons),
+    qui lance 22928, et c'est 22928 qui ÉCOUTE le port. Tuer la seule racine
+    laissait le fils vivant avec le port, et l'arrêt rendait « toujours vivant
+    après l'arrêt demandé »."""
+    vus = _arrets_observes(monkeypatch, systeme="nt")
+    (tmp_path / "engine-local.pid").write_text("25092", encoding="utf-8")
+    monkeypatch.setattr(E, "is_alive", lambda url, timeout=2.0: False)
+    p = E.EngineProfile("local", "http://127.0.0.1:8188", manage=True, command=["x"])
+    assert E.stop_engine(p, tmp_path)["stopped"] is True
+    assert vus["arbre"] == [["taskkill", "/T", "/F", "/PID", "25092"]]   # /T : la descendance
+    assert vus["racine"] == []                     # la racine seule ne rendait pas le port
+    assert not (tmp_path / "engine-local.pid").exists()
+
+
+def test_hors_windows_l_arret_reste_le_signal(tmp_path, monkeypatch):
+    """Ailleurs, le groupe de processus fait ce travail : rien à changer."""
+    vus = _arrets_observes(monkeypatch, systeme="posix")
+    (tmp_path / "engine-local.pid").write_text("25092", encoding="utf-8")
+    monkeypatch.setattr(E, "is_alive", lambda url, timeout=2.0: False)
+    p = E.EngineProfile("local", "http://127.0.0.1:8188", manage=True, command=["x"])
+    assert E.stop_engine(p, tmp_path)["stopped"] is True
+    assert vus["racine"] == [25092] and vus["arbre"] == []
+
+
+def test_un_arret_qui_ne_part_pas_se_declare(tmp_path, monkeypatch):
+    """Un arrêt manqué ne se tait pas : il dit ce que le système a répondu."""
+    class _Rate:
+        returncode = 128
+        stdout = ""
+        stderr = "Le processus 25092 est introuvable."
+
+    _arrets_observes(monkeypatch, systeme="nt", issue=_Rate())
+    (tmp_path / "engine-local.pid").write_text("25092", encoding="utf-8")
+    p = E.EngineProfile("local", "http://127.0.0.1:8188", manage=True, command=["x"])
+    issue = E.stop_engine(p, tmp_path)
+    assert issue["stopped"] is False and "introuvable" in issue["reason"]
+
+
+# --- Le journal du moteur porte-t-il une date ? -----------------------------
+
+
+def test_le_journal_du_moteur_s_ouvre_sur_une_ligne_datee(tmp_path, monkeypatch):
+    """ComfyUI n'horodate rien : dater sa mort a demandé de la reconstruire
+    depuis les durées de prompts (« Prompt executed in 595.24 seconds »)
+    recoupées avec les fiches de jobs. Le démarrage, lui, est daté par nous."""
+    from datetime import datetime
+
+    class _P:
+        pid = 25092
+
+    monkeypatch.setattr(E.subprocess, "Popen", lambda *a, **k: _P())
+    monkeypatch.setattr(E.time, "sleep", lambda s: None)
+    seq = iter([False, True])                      # mort au premier regard, debout après
+    monkeypatch.setattr(E, "is_alive", lambda url, timeout=2.0: next(seq, True))
+    p = E.EngineProfile("local", "http://127.0.0.1:8188", manage=True, command=["x"])
+    assert E.ensure_engine(p, lock_dir=tmp_path)["started"] is True
+
+    premiere = (tmp_path / "moteur-local.log").read_text(encoding="utf-8").splitlines()[0]
+    marque, quand, suite = premiere.split(" ", 2)
+    assert marque == "[passerelle]"                # jamais confondue avec la sortie du moteur
+    date = datetime.fromisoformat(quand)           # une vraie date ISO 8601…
+    assert date.utcoffset().total_seconds() == 0   # …en UTC, pas en heure d'ici
+    assert "'local'" in suite and "25092" in suite  # le profil, et le PID lancé

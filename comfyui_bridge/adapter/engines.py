@@ -20,6 +20,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -159,6 +160,45 @@ def _journal_path(profile: EngineProfile, lock_dir: Path) -> Path:
     return Path(lock_dir) / f"moteur-{profile.name}.log"
 
 
+def _ligne_de_journal(message: str) -> bytes:
+    """Une ligne À NOUS dans le journal du moteur, datée en UTC.
+
+    ComfyUI n'horodate rien de ce qu'il écrit : dater sa mort du 2026-09-22 a
+    demandé de la reconstruire depuis les durées de prompts (« Prompt executed
+    in 595.24 seconds ») recoupées avec les fiches de jobs — une heure
+    d'enquête pour ce que deux lignes auraient dit. Le préfixe tient notre
+    ligne à part de la sienne, qui n'en porte aucun.
+    """
+    quand = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return f"[passerelle] {quand} {message}\n".encode("utf-8")
+
+
+def _arreter_l_arbre(pid: int) -> None:
+    """Arrêter le processus lancé ET sa descendance.
+
+    ComfyUI se ré-exécute dans un enfant : l'arbre constaté sur la machine est
+    « passerelle → lanceur (le PID que nous gardons, working set nul) → le vrai
+    moteur, celui qui tient le port ». Tuer la seule racine laissait le fils
+    vivant avec le port, et l'arrêt rendait « toujours vivant après l'arrêt
+    demandé » — l'arrêt échouait en disant qu'il avait réussi à frapper.
+    """
+    if os.name == "nt":
+        # /T prend la descendance, /F ne négocie pas : sous Windows un SIGTERM
+        # se résout déjà en TerminateProcess, il n'y a rien de plus doux à
+        # perdre. `taskkill` est livré avec le système : aucune dépendance.
+        # Sans fenêtre : la passerelle tourne sans console (start-bridge-silent),
+        # et un arrêt de moteur ne doit pas en faire clignoter une.
+        issue = subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)],
+                               capture_output=True, text=True,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if issue.returncode != 0:
+            raise OSError((issue.stderr or issue.stdout or "").strip()
+                          or f"taskkill a rendu {issue.returncode}")
+        return
+    import signal
+    os.kill(pid, signal.SIGTERM)
+
+
 def stop_engine(profile: EngineProfile, lock_dir: Path, timeout_s: float = 40.0) -> dict[str, Any]:
     """Stop the engine WE started. An 'attach' profile is never touched: that
     server belongs to someone else (ComfyUI Desktop)."""
@@ -171,8 +211,7 @@ def stop_engine(profile: EngineProfile, lock_dir: Path, timeout_s: float = 40.0)
     except Exception:
         return {"stopped": False, "reason": "aucun PID connu pour ce moteur"}
     try:
-        import signal
-        os.kill(pid, signal.SIGTERM)
+        _arreter_l_arbre(pid)
     except Exception as e:
         return {"stopped": False, "reason": f"arrêt impossible ({e})"}
     deadline = time.monotonic() + timeout_s
@@ -236,6 +275,13 @@ def ensure_engine(profile: EngineProfile, startup_timeout_s: float = 180.0,
             creationflags=flags, close_fds=True,
             start_new_session=not hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"),  # POSIX
         )
+        if journal is not None:
+            # C'est nous qui ouvrons ce descripteur : nous pouvons le dater
+            # avant de le confier au moteur, qui met des secondes à écrire sa
+            # première ligne. Le démarrage est ainsi le seul repère sûr du
+            # journal, et tout ce qui suit s'y rattache.
+            journal.write(_ligne_de_journal(
+                f"démarrage du moteur {profile.name!r}, PID lancé {proc.pid}"))
     finally:
         if journal is not None:
             journal.close()

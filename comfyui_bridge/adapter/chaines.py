@@ -437,14 +437,28 @@ class RunnerDeChaines:
         appel partait nulle part sans le dire — 2026-09-19)."""
         if not etape.quand:
             return None
-        valeur = noyau.resoudre(etape.quand, valeurs, resultats)
-        if isinstance(valeur, str):
-            pleine = bool(valeur.strip())
+        if isinstance(etape.quand, dict):
+            # La forme NOMMÉE : le même opérateur que celui qui juge un
+            # contrôle, sur la valeur que le renvoi désigne. La raison dit ce
+            # qu'on a LU — « aucune », pas « vide » : sautée pour cause de
+            # vide, l'étape mentirait sur pourquoi elle n'a pas eu lieu.
+            renvoi = etape.quand.get("valeur")
+            mesure = noyau.resoudre(renvoi, valeurs, resultats, strict=False)
+            if isinstance(mesure, str) and mesure.startswith("$"):
+                mesure = None                   # rien à ce nom : la condition est fausse
+            attendu = noyau.resoudre(etape.quand.get("attendu"), valeurs, resultats, strict=False)
+            op = str(etape.quand.get("op"))
+            pleine = noyau.evaluer(op, mesure, attendu)
+            raison = f"« {renvoi} » vaut {mesure!r} : {op} {attendu!r} n'est pas tenu"
         else:
-            pleine = bool(valeur)
+            valeur = noyau.resoudre(etape.quand, valeurs, resultats)
+            if isinstance(valeur, str):
+                pleine = bool(valeur.strip())
+            else:
+                pleine = bool(valeur)
+            raison = f"« {etape.quand} » est vide"
         if pleine:
             return None
-        raison = f"« {etape.quand} » est vide"
         sans_effet = (noyau.sans_effet_si_sautee(chaine, etape, technique, valeurs)
                       if chaine is not None else [])
         if sans_effet:
@@ -472,7 +486,15 @@ class RunnerDeChaines:
         # l'emporte sur ce qu'on a deviné. C'est ainsi qu'un appel sauté rend
         # « aucun livrable » et « 0 image reprise », que le montage lit sans
         # savoir que l'étape n'a pas eu lieu.
-        resultat.update(etape.sinon or {})
+        #
+        # Il est RÉSOLU comme le reste de la chaîne : une étape qui ne fait
+        # qu'enrichir ce qu'on lui donne doit pouvoir le rendre tel quel quand
+        # elle est sautée (« $prompt » repart en « $etape.recit.prompt »).
+        # Sans cela, seuls des littéraux pouvaient être rendus, et une étape
+        # facultative de passe-plat ne pouvait pas être sautée du tout. Les
+        # « sinon » d'avant ne portent que des littéraux : les résoudre ne
+        # change rien pour eux.
+        resultat.update(noyau.resoudre(etape.sinon or {}, valeurs, resultats, strict=False))
         return resultat
 
     def _executer_etape(self, job_id: str, etape: noyau.Etape, valeurs: dict[str, Any],

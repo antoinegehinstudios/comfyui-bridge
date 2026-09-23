@@ -124,7 +124,13 @@ class Etape:
     # « quand » : un RENVOI (« $cta ») ; l'étape n'est jouée que si ce qu'il
     # désigne n'est pas vide. Sautée, elle rend son média tel quel en livrable,
     # pour que l'aval qui la nomme continue de tenir (voir l'adaptateur).
-    quand: str = ""
+    # Il prend aussi la forme NOMMÉE d'un contrôle — « valeur », « op »,
+    # « attendu » —, pour ce qu'un renvoi seul ne sait pas dire : « sauf quand
+    # ce champ vaut ceci ». Une valeur de menu qui signifie « rien à faire »
+    # est un texte comme un autre, donc jamais vide, donc toujours vraie pour
+    # un renvoi seul — et l'étape tournait pour rien. Mesuré le 2026-09-22 :
+    # une étape qui n'avait rien à faire a tué la production sur un moteur mort.
+    quand: str | dict[str, Any] = ""
     # « sinon » : ce que l'étape rend QUAND ELLE EST SAUTÉE, par-dessus ce
     # passe-plat. Un aval qui lit « $appel.recit.images_reprises » doit trouver
     # un nombre même si l'appel n'a pas eu lieu — sans cela, le renvoi restait
@@ -505,11 +511,29 @@ def _etape(brut: Any, rang: int, chaine: str) -> Etape:
     # n'a pas à exister). Demandé le 2026-09-15 : « si pas de CTA spécifié, on
     # ne met pas de CTA — on saute l'étape ».
     quand = brut.get("quand", "")
-    if quand is not None and quand != "":
+    if isinstance(quand, dict):
+        # La forme NOMMÉE, mot pour mot celle d'un contrôle : une chaîne ne
+        # parle qu'une langue, et l'opérateur est le même que celui qui juge.
+        renvoi = quand.get("valeur")
+        op = str(quand.get("op") or "")
+        if not isinstance(renvoi, str) or not renvoi.startswith("$"):
+            raise WorkflowMappingError(
+                f"chaîne {chaine!r} : étape {ident!r} — « quand.valeur » attend un renvoi "
+                f"(« $champ » ou « $etape.cle »), pas {renvoi!r}")
+        if op not in _OPS:
+            raise WorkflowMappingError(
+                f"chaîne {chaine!r} : étape {ident!r} — « quand.op » {op!r} est inconnu "
+                f"(connus : {', '.join(_OPS)})")
+        if op != "exists" and "attendu" not in quand:
+            raise WorkflowMappingError(
+                f"chaîne {chaine!r} : étape {ident!r} — « quand » en {op!r} attend « attendu » "
+                f"(la valeur à laquelle comparer)")
+    elif quand is not None and quand != "":
         if not isinstance(quand, str) or not quand.startswith("$"):
             raise WorkflowMappingError(
                 f"chaîne {chaine!r} : étape {ident!r} — « quand » attend un renvoi "
-                f"(« $champ » ou « $etape.cle »), pas {quand!r}")
+                f"(« $champ » ou « $etape.cle »), ou une condition nommée "
+                f"(« valeur », « op », « attendu »), pas {quand!r}")
     else:
         quand = ""
     sinon = brut.get("sinon")
@@ -956,6 +980,15 @@ def _vide(valeur: Any) -> bool:
     return not valeur
 
 
+def tete_de_quand(quand: Any) -> str | None:
+    """Le champ (ou l'étape) que « quand » INTERROGE, quelle que soit sa forme
+    — le renvoi seul, ou celui que porte la condition nommée."""
+    renvoi = quand.get("valeur") if isinstance(quand, dict) else quand
+    if not isinstance(renvoi, str) or not renvoi.startswith("$"):
+        return None
+    return renvoi.lstrip("$").split(".", 1)[0]
+
+
 def sans_effet_si_sautee(chaine: Chaine, etape: Etape, technique: Technique | None,
                          valeurs: dict[str, Any]) -> list[str]:
     """Les champs exposés qui restent SANS EFFET quand cette étape est sautée :
@@ -964,16 +997,21 @@ def sans_effet_si_sautee(chaine: Chaine, etape: Etape, technique: Technique | No
 
     Une police d'appel sans appel partait nulle part sans le dire (2026-09-19) ;
     le renvoi de « quand » lui-même n'y est pas : c'est lui qui est vide.
+
+    Ce que le « sinon » RENVOIE n'y est pas non plus : une étape de passe-plat
+    sautée rend elle-même ces champs à l'aval, ils ont donc bien un effet.
     """
     lus = champs_lus_par(etape, technique)
     ailleurs: set[str] = set()
     for autre in chaine.etapes:
         if autre.id != etape.id:
             ailleurs |= champs_lus_par(autre, technique)
-    quand = etape.quand.lstrip("$").split(".", 1)[0] if etape.quand else None
+    quand = tete_de_quand(etape.quand)
+    rendus = {r.split(".", 1)[0] for r in renvois(etape.sinon)}
     exposes = champs_retenus(chaine, technique)
     return sorted(nom for nom in lus
                   if nom in exposes and nom not in ailleurs and nom != quand
+                  and nom not in rendus
                   and nom != chaine.champ_de_technique and not _vide(valeurs.get(nom)))
 
 

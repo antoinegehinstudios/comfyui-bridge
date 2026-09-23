@@ -122,6 +122,26 @@ def _connexion_refusee(exc: BaseException) -> bool:
     return False
 
 
+def _dire_les_sondes(refus: int, muets: int) -> str:
+    """De quoi le moteur est-il mort : refus ou silence ?
+
+    Le message d'expiration appelait « muet » TOUT sondage raté. Les trois
+    échecs du 2026-09-22 avaient le port fermé d'un bout à l'autre de l'heure :
+    le moteur ne se taisait pas, il n'était plus là — et le mot a envoyé
+    l'enquête chercher une saturation qui n'a jamais existé. La dominante se
+    dit en premier : c'est elle qui explique l'échec.
+    """
+    dits = [(n, mot) for n, mot in ((refus, "connexion refusée"),
+                                    (muets, "serveur muet")) if n]
+    dits.sort(key=lambda d: -d[0])          # tri stable : à égalité, le refus prime
+    if not dits:
+        return ""
+    if len(dits) == 1:
+        return f"{dits[0][1]} sur {dits[0][0]} sondages"
+    return (f"surtout {dits[0][1]} ({dits[0][0]} sondages), "
+            f"aussi {dits[1][1]} ({dits[1][0]})")
+
+
 class ComfyUIHttpBackend:
     def __init__(self, settings: Settings, catalog: WorkflowCatalog,
                  inflight: InflightLog | None = None) -> None:
@@ -585,12 +605,21 @@ class ComfyUIHttpBackend:
         unreachable = 0
         lost = 0
         refuse = 0
+        # DEPUIS QUAND le port refuse, et non combien de fois : un tour de
+        # boucle ne vaut pas le sommeil annoncé. Sur un port fermé, Windows met
+        # ~2 s à refuser (le dépôt le savait déjà : scripts/lancer-console.ps1)
+        # et le tour coûte ~3 s — la garde « 60 s » a donc parlé après 191,4 s
+        # réelles (job 8c099b8d, 2026-09-22). Seule l'horloge dit le temps.
+        premier_refus: float | None = None
+        refus_total = 0
+        muet_total = 0
         while time.monotonic() < deadline:
             time.sleep(self._settings.comfyui_poll_interval_s)
             try:
                 hist = self._get_json("/history/" + urllib.parse.quote(prompt_id), req_t)
                 unreachable = 0
                 refuse = 0
+                premier_refus = None
             except Exception as exc:                       # noqa: BLE001 — la nature de l'échec décide
                 # NOT a verdict. A saturated ComfyUI stops answering HTTP while
                 # it computes (measured: a heavy model pegs it for minutes) and
@@ -605,14 +634,24 @@ class ComfyUIHttpBackend:
                 # ligne dans son journal) et la passerelle a attendu son heure
                 # entière avant de le dire — une production perdue, et une heure
                 # de machine avec.
-                refuse = refuse + 1 if _connexion_refusee(exc) else 0
-                if refuse * self._settings.comfyui_poll_interval_s >= MOTEUR_ABSENT_S:
-                    raise BackendExecutionError(
-                        f"le moteur n'écoute plus (connexion refusée depuis "
-                        f"{int(refuse * self._settings.comfyui_poll_interval_s)} s) : il s'est "
-                        f"arrêté pendant ce run — inutile d'attendre la fin du budget",
-                        prompt_id=prompt_id,
-                    ) from exc
+                if _connexion_refusee(exc):
+                    refuse += 1
+                    refus_total += 1
+                    if premier_refus is None:
+                        premier_refus = time.monotonic()
+                else:
+                    refuse = 0
+                    premier_refus = None            # un autre échec n'est pas une absence
+                    muet_total += 1
+                if premier_refus is not None:
+                    refus_depuis = time.monotonic() - premier_refus
+                    if refus_depuis >= MOTEUR_ABSENT_S:
+                        raise BackendExecutionError(
+                            f"le moteur n'écoute plus (connexion refusée depuis "
+                            f"{int(refus_depuis)} s, {refuse} sondages) : il s'est "
+                            f"arrêté pendant ce run — inutile d'attendre la fin du budget",
+                            prompt_id=prompt_id,
+                        ) from exc
                 # Say it out loud after a while: a silent engine looks exactly
                 # like a slow one, and ours does crash (CUDA fault, measured).
                 if on_note is not None and unreachable in (60, 300, 900):
@@ -660,7 +699,8 @@ class ComfyUIHttpBackend:
             pass
         raise BackendExecutionError(
             f"ComfyUI timed out after {self._settings.comfyui_total_timeout_s}s"
-            + (f" (serveur muet sur {unreachable} sondages)" if unreachable else ""),
+            + (f" ({_dire_les_sondes(refus_total, muet_total)})"
+               if refus_total or muet_total else ""),
             prompt_id=prompt_id,
         )
 

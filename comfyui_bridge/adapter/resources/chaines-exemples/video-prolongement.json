@@ -43,10 +43,17 @@
       }
     },
     {
+      "id": "raccord_tenu",
+      "constater": [
+        { "id": "raccord_franc", "valeur": "$raccord.pire", "op": "gte", "attendu": 0.72,
+          "aide": "La ressemblance du pire raccord entre deux parts recollées, contre celle qu'on attend d'une jonction invisible. C'est un CONSTAT, pas un refus : une mesure sur la PEINTURE ne suicide pas la livraison — la vidéo est livrée, et c'est le regard qui tranche si le raccord se voit." }
+      ]
+    },
+    {
       "id": "controle",
       "verifier": [
-        { "id": "raccord_franc", "valeur": "$raccord.pire", "op": "gte", "attendu": 0.72 },
-        { "id": "duree_tenue", "valeur": "$final.mesure.duration_s", "op": "gte", "attendu": 4 }
+        { "id": "duree_tenue", "valeur": "$final.mesure.duration_s", "op": "gte", "attendu": 4,
+          "aide": "La durée du fichier livré. En dessous de quatre secondes, le recollage n'a pas produit un prolongement mais un débris : c'est le FICHIER FINAL qui est en cause, et là le refus est juste — il n'y a rien à regarder." }
       ]
     }
   ],
