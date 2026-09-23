@@ -539,7 +539,9 @@ class RunnerDeChaines:
                                           chevauchement=int(params.get("chevauchement") or 0),
                                           signaler=lambda dit: self._c.store.append_log(
                                               job_id, f"étape {etape.id} : {dit}"),
-                                          textes=params.get("textes"))
+                                          textes=params.get("textes"),
+                                          images=params.get("images"),
+                                          texture=params.get("texture"))
         if etape.genre == "mesurer_raccords":
             parts = self._parts_locales(params["parts"], travail)
             return montage_video.mesurer_raccords(

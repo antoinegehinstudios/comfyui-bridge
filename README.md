@@ -1723,6 +1723,20 @@ fichier du poste résolu par son nom (`_data/polices.json` fait le menu
 moteur n'écrit une police du poste sans tenir toute la vidéo en mémoire — c'est
 pourquoi le texte est un service de la livraison, pas du rendu.
 
+Les IMAGES et la TEXTURE s'incrustent au même passage (module
+`adapter/incrustations.py`, depuis le 2026-09-24) : `recoller` accepte `images`
+(une liste — fichier, `ancrage` parmi haut-gauche… bas-droite, `largeur` en part
+du cadre, `marge`, `hauteur_min_px`, début et fin facultatifs) et `texture`
+(fichier, `fusion` parmi normal, multiplier, superposition, lumiere-douce, ecran,
+`opacite`, `taille_relative`). Une image se pose TELLE QUELLE par-dessus tout le
+reste, redimensionnée une seule fois depuis son fichier (Lanczos) — c'est ainsi
+qu'un logo de charte reste celui de la marque, après tout agrandissement ; une
+taille minimale l'agrandit et le dit. La texture se fond SOUS les textes, par des
+formules écrites (la vidéo pour base, la texture pour calque) : le mode « normal »
+du filtre `blend` d'ffmpeg rendait la vidéo seule. Un objet sans fichier (une
+charte sans logo) ne pose rien et le dit ; un ancrage, une fusion ou un fichier
+inconnus refusent l'étape. L'étape rend `images_posees` et `texture_posee`.
+
 Les IMAGES DE RÉFÉRENCE COMMENTÉES : jusqu'à trois images jointes (`image`,
 `image_2`, `image_3`), chacune avec son rôle (`role_image`… — « le personnage
 principal », « l'objet exact à montrer », « le lieu »). Au tour 0, l'amorce
@@ -2007,6 +2021,7 @@ modifier ça ? » a donc une réponse par nature de changement :
 | ce que l'utilisateur VOIT d'un MODE (titre, catégorie de la vitrine, résumé, libellés des valeurs) | `_data/reconciliation.local.json` : `titre`, `categorie`, `menus` ; `aides` sur l'entrée d'un GRAPHE seulement | `/v1/workflows`, `/io` |
 | ce que l'utilisateur VOIT d'un CHAMP (sa rubrique, son aide) et la liste qu'il offre | le champ lui-même, chez son propriétaire — `expose` de la chaîne pour les réglages du plan, `expose` de la technique pour les siens : `categorie` (une valeur de `categories_de_champs`, vocabulaire déclaré une fois dans `_data/reconciliation.local.json`, avec `titre` et `repliee`), `aide`, et pour une liste tirée d'un menu `options_depuis: {"menu": …, "requiert": {…}}` qui ne garde que les lignes qui portent ce que le plan exige | `/io` (`categorie`, `aide`, `options`), `/v1/workflows` (`categories_de_champs`) |
 | un TEXTE incrusté (accroche, appel : minutage, position, fondu) | l'étape `recoller` de la chaîne, clé `textes` | la livraison (`adapter/textes.py`) |
+| une IMAGE incrustée telle quelle (un logo : ancrage, largeur, marge, taille minimale) ou une TEXTURE fondue (fusion, opacité) | l'étape `recoller` de la chaîne, clés `images` et `texture` ; pour une charte, ce que le récit de l'étape `contrainte` en dit | la livraison (`adapter/incrustations.py`) |
 | une POLICE proposée au menu | `_data/polices.json` (une ligne par police présente dans les polices du poste) | le menu `police`, `/io` |
 | le STYLE d'une vidéo écrite (médium, temps du récit, caméra) | les catalogues `styles/*.json` du paquet de direction de style — une entrée éprouvée de plus, jamais un mot de style dans la chaîne | `/io` (menus), `DirectionDeStyle` / `DirectionDuBloc` |
 | une TECHNIQUE (quel graphe tient chaque rôle, ses réglages, ses contrôles, ce que son nœud IMPOSE — `budget.queue_s`) | `_data/techniques/<nom>.json` (et sa copie `resources/techniques-exemples/`) — une technique de plus est un FICHIER de plus ; le plan lit son fichier par `$technique.<chemin>` | le runner de chaînes, `/v1/workflows` (`techniques`), `/io` (`selon`) |

@@ -280,9 +280,13 @@ def parts_normalisees(parts: Any, chevauchement: int = 0,
 
 def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
              hauteur: int = 720, chevauchement: int = 0,
-             signaler: Any = None, textes: Any = None) -> dict[str, Any]:
-    """Joindre des parts en UN livrable, ré-encodé uniformément — et y incruster
-    des textes (voir `textes.py`), en flux, au même passage."""
+             signaler: Any = None, textes: Any = None, images: Any = None,
+             texture: Any = None) -> dict[str, Any]:
+    """Joindre des parts en UN livrable, ré-encodé uniformément — et y incruster,
+    en flux, au même passage : une texture fondue sous tout le reste, les textes
+    (voir `textes.py`), puis des images posées TELLES QUELLES par-dessus, un logo
+    par exemple (voir `incrustations.py`). C'est après le dernier agrandissement :
+    ce qui est posé ici n'est plus rééchantillonné que par l'encodage final."""
     pieces = parts_normalisees(parts, chevauchement, signaler)
     cible = Path(sortie)
     cible.parent.mkdir(parents=True, exist_ok=True)
@@ -363,12 +367,27 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
     filtre.append(f"{entrelace}concat=n={len(pieces)}:v=1:a=1[vout][aout]")
     sortie_video = "[vout]"
     dossier_textes = None
+    dossier_images = None
+    poses: list[dict[str, Any]] = []
+    duree_totale = sum(max(0.0, s["duree"] - s["saute"] - s["rogne"]) for s in sons)
+    if texture or images:
+        import tempfile as _tempfile_images
+        from . import incrustations as _incrustations
+        dossier_images = _tempfile_images.mkdtemp(prefix="incrustation-images-")
+    if texture:
+        entrees, chaines, sortie_video, dits = _incrustations.filtre_texture(
+            texture, largeur, hauteur, fps, suivant, dossier_images, sortie_video)
+        args += entrees
+        filtre += chaines
+        suivant += 1 if entrees else 0
+        for dit in dits:
+            if signaler is not None:
+                signaler(dit)
     if textes:
         import shutil as _shutil
         import tempfile as _tempfile
         from . import textes as _textes
         dossier_textes = _tempfile.mkdtemp(prefix="incrustation-")
-        duree_totale = sum(max(0.0, s["duree"] - s["saute"] - s["rogne"]) for s in sons)
         incrustations, vides = _textes.filtres(textes, largeur, hauteur, duree_totale, dossier_textes)
         if signaler is not None:
             if incrustations:
@@ -376,8 +395,16 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
             if vides:
                 signaler(f"{vides} texte(s) vide(s), sans incrustation")
         if incrustations:
-            filtre.append("[vout]" + ",".join(incrustations) + "[vtxt]")
+            filtre.append(sortie_video + ",".join(incrustations) + "[vtxt]")
             sortie_video = "[vtxt]"
+    if images:
+        entrees, chaines, sortie_video, dits, poses = _incrustations.filtres_images(
+            images, largeur, hauteur, fps, suivant, dossier_images, sortie_video, duree_totale)
+        args += entrees
+        filtre += chaines
+        for dit in dits:
+            if signaler is not None:
+                signaler(dit)
 
     args += ["-filter_complex", ";".join(filtre), "-map", sortie_video, "-map", "[aout]",
              "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "aac",
@@ -387,8 +414,11 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
     finally:
         if dossier_textes:
             _shutil.rmtree(dossier_textes, ignore_errors=True)
+        if dossier_images:
+            shutil.rmtree(dossier_images, ignore_errors=True)
     return {"livrable": str(cible.resolve()), "parts": len(pieces),
-            "mesure": mesurer(cible)}
+            "mesure": mesurer(cible), "images_posees": poses,
+            "texture_posee": bool(texture and isinstance(texture, dict) and texture.get("fichier"))}
 
 
 def concatener(parts: Any, sortie: str | Path) -> dict[str, Any]:
