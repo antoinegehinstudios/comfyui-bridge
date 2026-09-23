@@ -328,6 +328,7 @@
           "logo_taille_tenue": true,
           "logo_espace_libre_tenu": true,
           "logo_position_tenue": true,
+          "regles_non_tenues": [],
           "raison": "aucune charte demandée : l'étape n'a pas eu lieu"
         }
       }
@@ -420,6 +421,13 @@
           "op": "eq",
           "attendu": true,
           "aide": "Un élément imposé par la charte se mesure sur la vidéo LIVRÉE, quelques images échantillonnées, par Héraldiste (repérage de la forme par corrélation des contours, fidélité par ΔE2000 sur ses pixels opaques). L'ancrage du logo retrouvé (haut-centre, bas-droite…) contre le placement de la charte. Sans placement déclaré ni montré par un exemple : tenu, et le récit le dit."
+        },
+        {
+          "id": "les_regles_mesurables_de_la_charte_sont_tenues",
+          "valeur": "$conformite.recit.regles_non_tenues",
+          "op": "eq",
+          "attendu": [],
+          "aide": "Les règles de la charte qui portent une mesure — part minimale dans la palette, écart ΔE2000 maximal, taille minimale et zone de protection du logo, présence et fidélité du logo, part visible minimale du fond — évaluées par Héraldiste sur la vidéo livrée : la liste de celles qui ne tiennent pas doit être vide. C'est par une règle que la charte donne un seuil à ce qui n'en a pas d'office : « fond_visible_min » pour un fond imposé, par exemple — la charte le porte, ce constat le juge. Non tenu : le récit de « conformite » nomme les règles (regles_non_tenues) ; une liste inconnue (constat non fait) n'est pas tenue. Sans charte : tenu."
         }
       ]
     }
