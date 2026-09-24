@@ -177,7 +177,7 @@ def test_le_message_est_pose_pas_peint_et_la_zone_demandee(social):
     assert all(t["police"] == "$contrainte.recit.police" and t["position"] == "$texte_position"
                and t["couleur"] == "$contrainte.recit.couleur" and t["fond"] == "$contrainte.recit.fond"
                and t["boite"] == "$bandeau" and t["laisser_au_logo"] == "$contrainte.recit.logo_texte" for t in textes)
-    assert textes[0]["taille"] == "$taille_message" and textes[1]["decalage"] == 0.1
+    assert textes[0]["taille"] == "$taille_message" and textes[1]["sous_le_precedent"] is True and "decalage" not in textes[1]
     # Le message est posé par la livraison, jamais confié au graphe de peinture ni à la charte.
     assert "$message" not in json.dumps(etapes["rendu"]) and "$message" not in json.dumps(contrainte)
     constats = {c["id"]: c for c in etapes["constat"]["constater"]}

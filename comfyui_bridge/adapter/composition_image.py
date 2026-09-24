@@ -66,6 +66,68 @@ def _un_texte_pour_une_image(t: dict[str, Any]) -> dict[str, Any]:
     return {**t, "debut_s": 0.0, "fin_s": 1.0, "fondu_s": 0.0}
 
 
+# L'ancre de chaque position, en part de la hauteur — la même table que le
+# recollage (`textes.filtre_drawtext`), tenue ici pour empiler des textes.
+ANCRES = {"bas": 0.80, "centre": 0.50, "haut": 0.14}
+
+
+def _bloc(t: dict[str, Any], W: int, H: int) -> tuple[int, int]:
+    """Ce que ce texte occupera : `(lignes, hauteur du bloc en px)`, replié
+    comme le recollage le fera (même police, même largeur utile, même taille
+    minimale) — sans rien écrire."""
+    contenu = str(t.get("texte") or "").strip()
+    if not contenu:
+        return 0, 0
+    police = _textes.chemin_police(t.get("police") or "")
+    taille = max(8, int(round(float(t.get("taille") or 0.055) * H)))
+    lignes, taille = _textes.replier(contenu, police, taille, int(W * 0.88))
+    return len(lignes), len(lignes) * int(round(taille * 1.25))
+
+
+def empiler(textes: list[dict[str, Any]], W: int, H: int) -> list[dict[str, Any]]:
+    """Poser chaque texte marqué « sous_le_precedent » SOUS le texte posé avant
+    lui à la même position, à la hauteur RÉELLE du bloc de celui-ci — un
+    sous-titre ne se pose pas à un décalage écrit d'avance : un message qui se
+    replie sur trois lignes le recouvrait (mesuré le 2026-09-24 sur un visuel
+    sous charte). Un groupe qui déborderait du bas de l'image remonte d'autant,
+    et c'est dit (`decalage` posé sur chaque texte du groupe)."""
+    sortie: list[dict[str, Any]] = []
+    precedent: dict[str, Any] | None = None    # le dernier texte posé : ancre (px), demi-bloc (px)
+    groupe: list[int] = []
+    for t in textes:
+        if not isinstance(t, dict):
+            sortie.append(t)
+            continue
+        t = dict(t)
+        vide = not str(t.get("texte") or "").strip()
+        position = str(t.get("position") or "bas")
+        if position not in ANCRES or vide:
+            sortie.append(t)
+            continue
+        lignes, bloc = _bloc(t, W, H)
+        if t.pop("sous_le_precedent", False) and precedent is not None and precedent["position"] == position:
+            ancre = precedent["ancre"] + precedent["demi"] + int(round(0.35 * bloc / max(1, lignes))) + bloc // 2
+            t["decalage"] = round(ancre / H - ANCRES[position], 4)
+            groupe.append(len(sortie))
+        else:
+            ancre = int(round((ANCRES[position] + float(t.get("decalage") or 0.0)) * H))
+            groupe = [len(sortie)]
+        precedent = {"position": position, "ancre": ancre, "demi": bloc // 2}
+        t["_bas"] = ancre + bloc // 2
+        sortie.append(t)
+        # Le groupe déborde du bas : il remonte d'autant, d'un bloc.
+        deborde = t["_bas"] - (H - int(round(0.02 * H)))
+        if deborde > 0:
+            for i in groupe:
+                sortie[i]["decalage"] = round(float(sortie[i].get("decalage") or 0.0) - deborde / H, 4)
+                sortie[i]["_bas"] = int(sortie[i]["_bas"]) - deborde
+            precedent["ancre"] -= deborde
+    for t in sortie:
+        if isinstance(t, dict):
+            t.pop("_bas", None)
+    return sortie
+
+
 def composer(image: str | Path, sortie: str | Path, largeur: int | None = None,
              hauteur: int | None = None, textes: Any = None, images: Any = None,
              texture: Any = None, signaler: Any = None) -> dict[str, Any]:
@@ -113,6 +175,7 @@ def composer(image: str | Path, sortie: str | Path, largeur: int | None = None,
         if textes:
             if not isinstance(textes, list):
                 raise MediaAssemblyError("composition : « textes » doit être une liste")
+            textes = empiler(textes, W, H)
             for n, t in enumerate(textes):
                 if not isinstance(t, dict):
                     continue
@@ -129,6 +192,7 @@ def composer(image: str | Path, sortie: str | Path, largeur: int | None = None,
                 textes_dits.append({"rang": n, "pose": True, "lignes": len(lignes),
                                     "taille_px": int(trouve.group(1)) if trouve else 0,
                                     "position": str(t.get("position") or "bas"),
+                                    "decalage": float(t.get("decalage") or 0.0),
                                     "texte": str(t.get("texte") or "")[:80]})
                 filtre.append(courant + ",".join(lignes) + f"[vtxt{n}]")
                 courant = f"[vtxt{n}]"

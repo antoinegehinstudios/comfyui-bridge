@@ -31,7 +31,7 @@
       "defaut": "",
       "libelle": "Le sous-titre (facultatif)",
       "categorie": "texte",
-      "aide": "Une seconde ligne, plus petite, posée sous le message (même position, décalée d'un dixième de la hauteur). Vide : rien."
+      "aide": "Une seconde ligne, plus petite, posée SOUS le message, à la hauteur réelle de son bloc (un message replié sur trois lignes ne la recouvre pas ; le groupe remonte s'il déborde). Vide : rien."
     },
     "police": {
       "type": "COMBO",
@@ -254,7 +254,7 @@
             "texte": "$sous_message",
             "police": "$contrainte.recit.police",
             "position": "$texte_position",
-            "decalage": 0.1,
+            "sous_le_precedent": true,
             "taille": 0.042,
             "couleur": "$contrainte.recit.couleur",
             "fond": "$contrainte.recit.fond",

@@ -221,3 +221,37 @@ def test_une_chaine_qui_compose_livre_un_png_a_la_taille_demandee():
         r = client.put("/v1/workflows/chaine-composee/apercu", json={"job_id": job["id"]})
         assert r.status_code == 201 and r.json()["format"] == "webp"
         assert client.get("/v1/workflows/chaine-composee/apercu").status_code == 200
+
+
+@SANS_FFMPEG
+@SANS_POLICE
+def test_un_texte_se_pose_sous_le_precedent_a_la_hauteur_reelle_de_son_bloc(tmp_path):
+    """Mesuré le 2026-09-24 sur un visuel sous charte : un message replié sur
+    trois lignes recouvrait le sous-titre posé à un décalage écrit d'avance. Le
+    sous-titre se pose SOUS le bloc réel du message ; un groupe qui déborderait
+    du bas remonte d'autant, et chaque texte dit son décalage."""
+    source = _degrade(tmp_path / "source.png", (600, 750))
+    long = "Tremplin deux mille vingt-sept : inscrivez votre groupe avant la fin du mois"
+    fait = composition_image.composer(
+        source, tmp_path / "livree.png", 600, 750,
+        textes=[{"texte": long, "police": str(POLICE), "position": "bas", "taille": 0.09, "couleur": "white"},
+                {"texte": "12 et 13 juin", "police": str(POLICE), "position": "bas", "taille": 0.045,
+                 "couleur": "white", "sous_le_precedent": True}])
+    titre, sous = fait["textes_dits"]
+    assert titre["pose"] and sous["pose"] and titre["lignes"] >= 2
+    # le sous-titre est plus bas que le bas du bloc du titre, et le groupe tient dans l'image
+    H = 750
+    bas_du_titre = (0.80 + titre["decalage"]) * H + titre["lignes"] * round(titre["taille_px"] * 1.25) / 2
+    haut_du_sous = (0.80 + sous["decalage"]) * H - round(sous["taille_px"] * 1.25) / 2
+    assert haut_du_sous >= bas_du_titre - 1
+    assert (0.80 + sous["decalage"]) * H + round(sous["taille_px"] * 1.25) / 2 <= H
+    assert titre["decalage"] < 0                      # le groupe a remonté : le titre est au-dessus de son ancre
+    # sans « sous_le_precedent », deux textes à la même position partagent l'ancre (comme au recollage)
+    plat = composition_image.empiler([{"texte": "a", "police": str(POLICE), "position": "bas"},
+                                      {"texte": "b", "police": str(POLICE), "position": "bas"}], 600, 750)
+    assert "decalage" not in plat[0] and "decalage" not in plat[1]
+    # un texte vide ou une autre position ne s'empile pas
+    autre = composition_image.empiler([{"texte": "a", "police": str(POLICE), "position": "bas"},
+                                       {"texte": "", "police": str(POLICE), "position": "bas", "sous_le_precedent": True},
+                                       {"texte": "c", "police": str(POLICE), "position": "haut", "sous_le_precedent": True}], 600, 750)
+    assert "decalage" not in autre[2] and "sous_le_precedent" not in autre[2]
