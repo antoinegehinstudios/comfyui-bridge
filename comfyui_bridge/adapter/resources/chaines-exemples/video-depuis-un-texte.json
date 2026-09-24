@@ -251,6 +251,7 @@
           "logo_hauteur_min_px": null,
           "logo_zone": null,
           "logo_texte": null,
+          "texte_laisse_au_logo": null,
           "logo_pose": false,
           "logo_attendu": "aucun",
           "logo_fichier_pendant": null,
@@ -317,7 +318,7 @@
             "fondu_s": 0.4,
             "couleur": "$contrainte.recit.couleur",
             "fond": "$contrainte.recit.fond",
-            "laisser_au_logo": "$contrainte.recit.logo_texte"
+            "laisser_au_logo": "$contrainte.recit.texte_laisse_au_logo"
           },
           {
             "texte": "$appel",
@@ -329,7 +330,7 @@
             "fondu_s": 0.4,
             "couleur": "$contrainte.recit.couleur",
             "fond": "$contrainte.recit.fond",
-            "laisser_au_logo": "$contrainte.recit.logo_texte"
+            "laisser_au_logo": "$contrainte.recit.texte_laisse_au_logo"
           }
         ],
         "texture": {
