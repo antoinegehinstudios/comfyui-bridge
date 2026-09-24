@@ -383,6 +383,19 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
         for dit in dits:
             if signaler is not None:
                 signaler(dit)
+    # une image « sous_les_textes » (la plaque d'un carton final) se pose avant les textes ; les autres par-dessus tout
+    dessous = [i for i in (images or []) if isinstance(i, dict) and i.get("sous_les_textes")]
+    dessus = [i for i in (images or []) if not (isinstance(i, dict) and i.get("sous_les_textes"))]
+    if dessous:
+        entrees, chaines, sortie_video, dits, poses_dessous = _incrustations.filtres_images(
+            dessous, largeur, hauteur, fps, suivant, dossier_images, sortie_video, duree_totale)
+        args += entrees
+        filtre += chaines
+        suivant += entrees.count("-i")
+        poses += poses_dessous
+        for dit in dits:
+            if signaler is not None:
+                signaler(dit)
     if textes:
         import shutil as _shutil
         import tempfile as _tempfile
@@ -397,11 +410,12 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
         if incrustations:
             filtre.append(sortie_video + ",".join(incrustations) + "[vtxt]")
             sortie_video = "[vtxt]"
-    if images:
-        entrees, chaines, sortie_video, dits, poses = _incrustations.filtres_images(
-            images, largeur, hauteur, fps, suivant, dossier_images, sortie_video, duree_totale)
+    if dessus:
+        entrees, chaines, sortie_video, dits, poses_dessus = _incrustations.filtres_images(
+            dessus, largeur, hauteur, fps, suivant, dossier_images, sortie_video, duree_totale)
         args += entrees
         filtre += chaines
+        poses += poses_dessus
         for dit in dits:
             if signaler is not None:
                 signaler(dit)
