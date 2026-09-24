@@ -31,9 +31,15 @@
     "negatif": {
       "type": "STRING",
       "defaut": "",
+      "impose_par": {
+        "champ": "charte",
+        "sauf": [
+          "aucune"
+        ]
+      },
       "libelle": "À éviter (facultatif)",
       "categorie": "avance",
-      "aide": "Ce que l'image ne doit pas montrer, ajouté au négatif du style (et de la palette). Ne pèse que sous cette technique, parce que seul son guidage lit un négatif."
+      "aide": "Ce que l'image ne doit pas montrer, ajouté au négatif du style (et de la palette). Ne pèse que sous cette technique, parce que seul son guidage lit un négatif. Sous une charte, ses interdits remplissent ce champ, grisé : ils vont au négatif par la direction, et c'est dit."
     }
   },
   "roles": {

@@ -520,7 +520,7 @@ def _options_declarees(c, depuis: Any, chaine=None) -> tuple[list[str], dict[str
         # dépendance dont on vient de la débarrasser.
         from ..adapter import techniques as _techniques
         vues = _techniques.vues(c.catalog.techniques_de(chaine) if chaine is not None
-                                else c.catalog.techniques())
+                                else c.catalog.techniques(), _lecteur_de_graphes(c))
         return ([v["valeur"] for v in vues],
                 {"libelles": {v["valeur"]: {"libelle": v["libelle"], "resume": v["resume"]}
                               for v in vues}})
@@ -579,7 +579,25 @@ def _entree_de_champ(c, nom: str, champ, aides: dict | None = None, chaine=None)
     # que sous les valeurs dites (la palette s'efface devant celle d'une charte).
     if champ.selon:
         entree["selon"] = dict(champ.selon)
+    # Un champ qu'un autre IMPOSE (la palette sous une charte) : le lanceur le
+    # grise et ne l'envoie pas ; la valeur imposée se lit dans « impose » du
+    # choix du champ maître, quand le fournisseur la déclare.
+    if champ.impose_par:
+        entree["impose_par"] = dict(champ.impose_par)
     return entree
+
+
+def _lecteur_de_graphes(c):
+    """Le graphe d'un rôle par son nom, tel qu'il est au catalogue — pour dire
+    ce qu'une technique tient à une valeur fixe sans l'exposer ; None quand le
+    nom n'y est pas ou que le fichier ne se lit pas (on ne mentionne que ce
+    qu'on a lu)."""
+    def lire(nom: str):
+        try:
+            return json.loads(Path(c.catalog.get_spec(nom).workflow_path).read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            return None
+    return lire
 
 
 def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
@@ -614,6 +632,14 @@ def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
         for entree in entrees:
             if entree["param"] == chaine.champ_de_technique and entree.get("value") in (None, ""):
                 entree["value"] = defaut.nom
+    # Ce que chaque technique déclare ne pas lire, par valeur : un lanceur le
+    # mentionne sous la technique choisie — jamais un faux champ à sa place.
+    from ..adapter import techniques as _techniques_vues
+    for entree in entrees:
+        if entree["param"] == chaine.champ_de_technique and techniques:
+            graphe_de = _lecteur_de_graphes(c)
+            entree["manques_par_valeur"] = {nom: _techniques_vues.manques(t, techniques, graphe_de)
+                                            for nom, t in sorted(techniques.items())}
     for nom, qui in porteuses.items():
         if nom in chaine.champs:
             continue                       # un commun ne devient pas conditionnel
@@ -670,7 +696,7 @@ def _techniques_vues(c, chaine) -> list[dict]:
     from ..adapter import techniques as _techniques
     if chaine.champ_de_technique is None:
         return []
-    return _techniques.vues(c.catalog.techniques_de(chaine))
+    return _techniques.vues(c.catalog.techniques_de(chaine), _lecteur_de_graphes(c))
 
 
 def _etapes_annoncees(chaine, technique=None) -> list[dict]:

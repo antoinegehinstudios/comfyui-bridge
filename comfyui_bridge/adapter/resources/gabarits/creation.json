@@ -1,0 +1,33 @@
+{
+  "gabarit": "creation",
+  "resume": "Le patron d'un CAS DE CRÉATION (une image créée par un modèle, 2026-09-24) — ce qu'une chaîne qui le manifeste doit porter, vérifié à la lecture du catalogue. Le cas de référence : image-creation ; sa variante : image-visuel-social. Antoine : « standardise par un template un cas de création, en manifestant le template à suivre ».",
+  "_lire_moi": {
+    "etapes": "Dans cet ordre, avec ce genre. « sous » : l'étape n'a lieu que sous le champ nommé (un « quand » sur ce champ). « role » : le rendu tient un RÔLE par une technique interchangeable, jamais un graphe nommé — ce que la peinture lit vit dans _data/techniques/<nom>.json.",
+    "etapes_libres": "Les genres d'étapes qu'une chaîne peut intercaler entre les étapes requises (un constat de plus : le message d'un visuel social).",
+    "premier_champ": "La charte se choisit EN PREMIER : ce qu'elle impose pèse sur tout ce qui suit (Antoine : « la charte ne doit pas être sélectionnée sur la fin, sinon c'est pas logique »).",
+    "imposes_par": "Les champs que le premier champ IMPOSE quand il n'est pas à « aucune » : ils se déclarent impose_par et un lanceur les grise (jamais cachés : un champ caché est un champ qui n'existe pas sous une autre technique — c'est « selon »).",
+    "constats_requis": "Un constat DIT, il ne refuse jamais (« c'est l'utilisateur qui juge ») ; seul le contrôle du fichier refuse. Ce qu'un modèle ne sait pas honorer (les interdits sans guidage, les images de référence) est constaté, jamais tu.",
+    "et_encore": "Chaque champ porte categorie et aide ; chaque réglage exposé pèse (le récit le prouve) ou n'est pas exposé ; le jumeau de la chaîne vit dans resources/chaines-exemples/ ; un témoin test_socle_<nom>.py épingle le plan ; la preuve est un vrai run. Voir resources/chaines-exemples/GABARIT-creation.md."
+  },
+  "etapes": [
+    {"id": "contrainte", "genre": "rendre", "sous": "charte"},
+    {"id": "direction", "genre": "rendre"},
+    {"id": "rendu", "genre": "rendre", "role": "image"},
+    {"id": "livraison", "genre": "composer"},
+    {"id": "conformite", "genre": "rendre", "sous": "charte"},
+    {"id": "constat", "genre": "constater"},
+    {"id": "constat_de_la_charte", "genre": "constater", "sous": "charte"},
+    {"id": "controle", "genre": "verifier"}
+  ],
+  "etapes_libres": ["constater"],
+  "premier_champ": "charte",
+  "premier_champ_rubrique": "charte",
+  "champ_de_technique": true,
+  "imposes_par": {"champ": "charte", "sauf": ["aucune"], "au_moins": ["palette"]},
+  "constats_requis": {
+    "constat": ["la_largeur_demandee_est_tenue", "la_hauteur_demandee_est_tenue", "l_image_n_est_pas_agrandie_a_la_livraison"],
+    "constat_de_la_charte": ["la_charte_demandee_est_appliquee", "la_palette_de_la_charte_est_dans_la_consigne", "la_palette_de_la_charte_est_tenue", "le_logo_impose_est_pose", "le_logo_impose_est_intact", "le_logo_impose_tient_sa_taille", "les_regles_mesurables_de_la_charte_sont_tenues", "les_interdits_de_la_charte_pesent", "aucune_image_de_reference_de_la_charte_n_est_attendue"]
+  },
+  "controles_requis": {"controle": ["livrable_pese"]},
+  "livrable": "$livraison.livrable"
+}

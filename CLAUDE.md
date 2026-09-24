@@ -183,6 +183,31 @@ modèle n'en prend aucune). Un champ de CHAÎNE peut porter `selon` (noyau
 `Champ.selon`, refusé s'il désigne un champ absent ou lui-même) : la même clé
 que celle des réglages de technique, un lanceur n'a qu'une règle.
 
+**La règle compte partout (2026-09-24, Antoine)** — trois choses tenues par le
+noyau et l'adaptateur, pour toute chaîne et toute technique, sans nommer un
+flux : (1) **rien de fantôme** — un champ exposé que rien ne lit (aucune
+étape, aucun rôle, aucun contrôle ; le champ qui choisit la technique excepté)
+est refusé au chargement (`core.chaine.champs_que_rien_ne_lit`, en fin de
+`verifier_techniques`) ; (2) **un champ IMPOSÉ se grise, il ne se cache pas** —
+`impose_par: {champ, sauf}` sur un champ de chaîne ou de technique (le maître
+doit exister), publié tel quel dans `/io` ; ce que chaque valeur du maître
+impose vient du fournisseur du menu (colonne « impose », projetée par
+`source_fichier.impose: {colonne, champs}` — Héraldiste dit `negatif`,
+`palette`, `police_titres`, `couleur_titres`, `fond_titres`, seulement ce que
+la charte donne ; la réconciliation traduit vers les champs des chaînes) et
+part dans `choix[].impose` ; le lanceur ne grise que ce qui est imposé ; (3)
+**ce qu'une technique ne règle pas se DÉTECTE et se dit** —
+`adapter.techniques.manques(technique, voisines, graphe_de)` : un réglage
+qu'une voisine de la même chaîne expose et qu'elle n'a pas, dit par l'auteur
+(`<champ>: {applique: false, dit}`, `declare`), sinon lu dans son graphe
+(entrée tenue à une valeur fixe, `graphe`), sinon `absent` ; publié dans
+`/io` (`manques_par_valeur`) et `/v1/workflows` (`techniques[].manques`) ;
+une section `applique: false` sur un champ exposé est une contradiction,
+refusée. Et le **gabarit** : une chaîne qui écrit `"gabarit": "creation"` est
+vérifiée contre `resources/gabarits/creation.json` au chargement
+(`core.gabarit`), chaque écart nommé ; `presentation.gabarit` le publie ; la
+lecture humaine est `resources/chaines-exemples/GABARIT-creation.md`.
+
 **Créer une image (2026-09-24)** : deux modes publiés sous la catégorie
 `creer-une-image` — `image-creation` (« Créer une image ») et
 `image-visuel-social` (« Créer un visuel pour les réseaux ») — sur UN socle

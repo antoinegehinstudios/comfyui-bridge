@@ -442,3 +442,73 @@ def test_un_champ_de_chaine_peut_dependre_d_un_autre_par_selon():
     faux["expose"]["palette"]["selon"] = {"champ": "palette", "valeurs": ["libre"]}
     with pytest.raises(WorkflowMappingError, match="lui-même"):
         noyau.lire(faux, "c")
+
+
+def test_un_champ_peut_etre_impose_par_un_autre_et_reste_expose():
+    """2026-09-24 : « grise les champs imposés par la charte au lieu de les
+    cacher ; fait-en un standard ». « impose_par » : le champ existe toujours,
+    sa valeur vient d'ailleurs dès que le maître n'est pas à une valeur
+    « sauf » — un lanceur le grise et ne l'envoie pas. Un maître absent, ou
+    le champ lui-même, refusent."""
+    brut = {"version": 1, "chaine": "c", "resume": "r",
+            "expose": {"charte": {"type": "COMBO", "defaut": "aucune", "options": ["aucune", "x"], "libelle": "Charte"},
+                       "palette": {"type": "COMBO", "defaut": "libre", "options": ["libre", "chaude"], "libelle": "Palette",
+                                   "impose_par": {"champ": "charte", "sauf": ["aucune"]}}},
+            "etapes": [{"id": "rendu", "rendre": {"workflow": "g", "prompt": "$palette", "seed": 1,
+                                                   "inputs": {"1.x": "$charte"}}}],
+            "livrable": "$rendu.livrable"}
+    chaine = noyau.lire(brut, "c")
+    assert chaine.champs["palette"].impose_par == {"champ": "charte", "sauf": ["aucune"]}
+    assert chaine.champs["palette"].selon is None and chaine.gabarit is None
+    assert "palette" in noyau.champs_admis(chaine)          # exposé, toujours
+    import copy
+    faux = copy.deepcopy(brut)
+    faux["expose"]["palette"]["impose_par"] = {"champ": "inconnu", "sauf": []}
+    with pytest.raises(WorkflowMappingError, match="n'expose pas"):
+        noyau.lire(faux, "c")
+    faux["expose"]["palette"]["impose_par"] = {"champ": "palette", "sauf": []}
+    with pytest.raises(WorkflowMappingError, match="lui-même"):
+        noyau.lire(faux, "c")
+    faux["expose"]["palette"]["impose_par"] = {"champ": "charte"}
+    with pytest.raises(WorkflowMappingError, match="impose_par"):
+        noyau.lire(faux, "c")
+    # Le gabarit se déclare par son nom, ou pas du tout.
+    assert noyau.lire({**brut, "gabarit": "creation"}, "c").gabarit == "creation"
+    with pytest.raises(WorkflowMappingError, match="gabarit"):
+        noyau.lire({**brut, "gabarit": ""}, "c")
+
+
+def test_un_champ_que_rien_ne_lit_est_refuse_comme_faux_champ():
+    """2026-09-24 : « s'il n'y a rien dans ComfyUI en ce sens, on ne met pas
+    de faux champ ; la règle doit compter partout ». Un champ exposé par la
+    chaîne ou par une technique, que ni une étape, ni un rôle, ni un contrôle
+    ne lit, est refusé au chargement — et une technique qui déclare ne pas lire
+    (applique: false) un champ qu'elle expose pourtant, aussi."""
+    brut = {"version": 1, "chaine": "c", "resume": "r",
+            "expose": {"technique": {"type": "COMBO", "defaut": "t", "options_depuis": {"techniques": True},
+                                     "libelle": "Technique"},
+                       "sujet": {"type": "STRING", "defaut": "", "libelle": "Sujet"},
+                       "fantome": {"type": "STRING", "defaut": "", "libelle": "Fantôme"}},
+            "etapes": [{"id": "rendu", "rendre": {"role": "image", "technique": "$technique", "seed": 1}}],
+            "livrable": "$rendu.livrable"}
+    t = {"version": 1, "technique": "t", "libelle": "T",
+         "roles": {"image": {"workflow": "g", "inputs": {"1.text": "$sujet", "2.steps": "$steps"}}},
+         "expose": {"steps": {"type": "INT", "defaut": 8, "libelle": "Pas"},
+                    "orphelin": {"type": "INT", "defaut": 1, "libelle": "Orphelin"}}}
+    chaine = noyau.lire(brut, "c")
+    technique = noyau.lire_technique(t, "t")
+    assert noyau.champs_que_rien_ne_lit(chaine, {"t": technique}) == [("chaine", "fantome"), ("t", "orphelin")]
+    with pytest.raises(WorkflowMappingError, match="faux champ"):
+        noyau.verifier_techniques(chaine, {"t": technique})
+    # branchés, plus rien à redire
+    brut["expose"].pop("fantome")
+    t["expose"].pop("orphelin")
+    chaine = noyau.lire(brut, "c")
+    technique = noyau.lire_technique(t, "t")
+    assert noyau.champs_que_rien_ne_lit(chaine, {"t": technique}) == []
+    noyau.verifier_techniques(chaine, {"t": technique})
+    # la contradiction : « je ne lis pas steps », et steps exposé
+    t["steps"] = {"applique": False, "dit": "jamais"}
+    technique = noyau.lire_technique(t, "t")
+    with pytest.raises(WorkflowMappingError, match="ment"):
+        noyau.verifier_techniques(chaine, {"t": technique})

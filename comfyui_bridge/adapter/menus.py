@@ -86,8 +86,32 @@ def _libelles(menu: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     projection = {"libelle": str(source.get("libelle") or "libelle"),
                   "resume": str(source.get("resume") or "resume"),
                   "groupe": str(source.get("groupe") or "groupe")}
-    return {valeur: {cle: ligne.get(champ) for cle, champ in projection.items()}
+    # « impose » : la colonne du fournisseur qui dit ce que CETTE valeur impose
+    # aux autres champs (une charte : sa palette, ses interdits, sa police) —
+    # un objet {clé du fournisseur: valeur lisible}. Déclarée par son nom (relayée
+    # telle quelle), ou par {colonne, champs: {clé du fournisseur: champ de la
+    # chaîne}} : le fournisseur parle sa langue, la réconciliation traduit, et
+    # ce qui n'a pas de champ ici ne part pas. Un lanceur grise et remplit les
+    # champs imposés avec. Absente, rien : le lanceur grise par la seule
+    # déclaration « impose_par » du champ, sans dire de valeur.
+    return {valeur: {**{cle: ligne.get(champ) for cle, champ in projection.items()},
+                     **_impose_de(ligne, source.get("impose"))}
             for valeur, ligne in table.items()}, None
+
+
+def _impose_de(ligne: dict[str, Any], declaration: Any) -> dict[str, Any]:
+    if isinstance(declaration, str):
+        colonne, champs = declaration, None
+    elif isinstance(declaration, dict) and declaration.get("colonne"):
+        colonne, champs = str(declaration["colonne"]), declaration.get("champs")
+    else:
+        return {}
+    porte = ligne.get(colonne)
+    if not isinstance(porte, dict):
+        return {}
+    if not isinstance(champs, dict):
+        return {"impose": dict(porte)}
+    return {"impose": {str(champ): porte[cle] for cle, champ in champs.items() if cle in porte}}
 
 
 def _lignes_brutes(menu: dict[str, Any]) -> dict[str, Any]:
@@ -185,5 +209,7 @@ def choix(options: list[Any] | tuple[Any, ...] | None,
             entree["resume"] = decrit["resume"]
         if decrit.get("groupe"):
             entree["groupe"] = decrit["groupe"]
+        if isinstance(decrit.get("impose"), dict):
+            entree["impose"] = dict(decrit["impose"])
         habilles.append(entree)
     return habilles, manque

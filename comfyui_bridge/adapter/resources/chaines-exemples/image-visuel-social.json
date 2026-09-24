@@ -1,15 +1,18 @@
 {
   "version": 1,
   "chaine": "image-visuel-social",
+  "gabarit": "creation",
   "resume": "CRÉER UN VISUEL POUR LES RÉSEAUX — le même socle que « Créer une image » (contrainte → direction → rendu par une technique → livraison → conformité → constats), pour une affiche, une image de carrousel, un visuel qui porte un MESSAGE. La charte se choisit en premier et pèse sur tout : sa palette, ses mots, ses interdits, sa police et ses couleurs de titre (à la place de celles qu'on choisirait, qui ne sont plus proposées), son logo posé, sa texture, son constat. Le message et son sous-titre sont posés PAR-DESSUS l'image à la livraison, tels quels, dans une police du poste ou de la charte (jamais confiés au modèle, qui les réécrirait à sa façon) ; la direction demande au modèle une zone calme là où le texte ira. Format par défaut 1080 × 1350 (4:5).",
   "expose": {
     "charte": {
       "type": "COMBO",
       "defaut": "aucune",
-      "options_depuis": {"menu": "charte"},
+      "options_depuis": {
+        "menu": "charte"
+      },
       "libelle": "Charte de marque",
       "categorie": "charte",
-      "aide": "La charte graphique (Héraldiste) que le visuel doit respecter — à choisir EN PREMIER, le reste en découle. Elle impose : sa palette (à la place de celle qu'on choisirait, qui n'est alors plus proposée), ses mots de style et ses interdits dans la consigne, la police et les couleurs de ses titres pour le message (police, couleur et bandeau ne sont alors plus proposés ; le texte se pose sur le fond de titre de la charte), son logo posé tel quel à la livraison (une zone calme est demandée au modèle là où il ira ; ce que le logo écrit déjà est ôté du message), sa texture fondue ; l'image livrée reçoit un constat de conformité. Ce modèle ne prend aucune image de référence : un fond ou un exemple d'affiche de la charte ne pèse pas ici, et le constat le dit. Sous la technique rapide (sans guidage), les interdits ne pèsent que par la consigne positive : le constat le dit aussi. « Aucune charte » : rien ne change."
+      "aide": "La charte graphique (Héraldiste) que le visuel doit respecter — à choisir EN PREMIER, le reste en découle. Elle impose : sa palette (à la place de celle qu'on choisirait, qui n'est alors plus proposée), ses mots de style et ses interdits dans la consigne, la police et les couleurs de ses titres pour le message (police, couleur et bandeau se grisent et montrent ce qu'elle impose ; le texte se pose sur le fond de titre de la charte), son logo posé tel quel à la livraison (une zone calme est demandée au modèle là où il ira ; ce que le logo écrit déjà est ôté du message), sa texture fondue ; l'image livrée reçoit un constat de conformité. Ce modèle ne prend aucune image de référence : un fond ou un exemple d'affiche de la charte ne pèse pas ici, et le constat le dit. Sous la technique rapide (sans guidage), les interdits ne pèsent que par la consigne positive : le constat le dit aussi. « Aucune charte » : rien ne change. Sous la technique soignée, ses interdits remplissent le champ « À éviter », grisé."
     },
     "prompt": {
       "type": "STRING",
@@ -36,16 +39,27 @@
     "police": {
       "type": "COMBO",
       "defaut": "Segoe UI Bold",
-      "options_depuis": {"menu": "police"},
-      "selon": {"champ": "charte", "valeurs": ["aucune"]},
+      "options_depuis": {
+        "menu": "police"
+      },
+      "impose_par": {
+        "champ": "charte",
+        "sauf": [
+          "aucune"
+        ]
+      },
       "libelle": "Police",
       "categorie": "texte",
-      "aide": "La police des textes posés, parmi celles du poste. Sous une charte, c'est la police de ses titres qui s'impose (celle du poste par défaut si la charte n'en déclare pas, et c'est dit) : ce choix n'est plus proposé."
+      "aide": "La police des textes posés, parmi celles du poste. Sous une charte, c'est la police de ses titres qui s'impose (celle du poste par défaut si la charte n'en déclare pas, et c'est dit) : ce champ se grise et montre ce que la charte impose."
     },
     "texte_position": {
       "type": "COMBO",
       "defaut": "bas",
-      "options": ["bas", "centre", "haut"],
+      "options": [
+        "bas",
+        "centre",
+        "haut"
+      ],
       "libelle": "Position des textes",
       "categorie": "texte",
       "aide": "Où le message se pose — et où la direction demande au modèle de laisser une zone calme, sans détail ni texte peint : bas (le tiers inférieur, l'usage), centre, haut."
@@ -53,19 +67,32 @@
     "couleur_texte": {
       "type": "COMBO",
       "defaut": "white",
-      "options": ["white", "black"],
-      "selon": {"champ": "charte", "valeurs": ["aucune"]},
+      "options": [
+        "white",
+        "black"
+      ],
+      "impose_par": {
+        "champ": "charte",
+        "sauf": [
+          "aucune"
+        ]
+      },
       "libelle": "Couleur des textes",
       "categorie": "texte",
-      "aide": "Blanc (avec un fin liseré et une ombre sombres, lisible sur presque tout) ou noir. Sous une charte, la couleur de ses titres s'impose, sur son fond de titre : ce choix n'est plus proposé."
+      "aide": "Blanc (avec un fin liseré et une ombre sombres, lisible sur presque tout) ou noir. Sous une charte, la couleur de ses titres s'impose, sur son fond de titre : ce champ se grise et montre ce que la charte impose."
     },
     "bandeau": {
       "type": "BOOLEAN",
       "defaut": false,
-      "selon": {"champ": "charte", "valeurs": ["aucune"]},
+      "impose_par": {
+        "champ": "charte",
+        "sauf": [
+          "aucune"
+        ]
+      },
       "libelle": "Bandeau sous les textes",
       "categorie": "texte",
-      "aide": "Un bandeau sombre translucide sous chaque ligne, pour la lisibilité sur une image claire ou chargée. Par défaut non : la direction a demandé une zone calme au modèle. Sous une charte, le fond de titre de la charte prend cette place : ce choix n'est plus proposé."
+      "aide": "Un bandeau sombre translucide sous chaque ligne, pour la lisibilité sur une image claire ou chargée. Par défaut non : la direction a demandé une zone calme au modèle. Sous une charte, le fond de titre de la charte prend cette place : ce champ se grise et montre ce que la charte impose."
     },
     "taille_message": {
       "type": "FLOAT",
@@ -80,7 +107,9 @@
     "style": {
       "type": "COMBO",
       "defaut": "affiche-minimaliste",
-      "options_depuis": {"menu": "style_image"},
+      "options_depuis": {
+        "menu": "style_image"
+      },
       "libelle": "Style",
       "categorie": "style",
       "aide": "Le médium et la matière du visuel — le catalogue d'image de direction de style (styles/images.json). « Affiche minimaliste » par défaut : un sujet fort, du vide pour le message. Sous une charte, ses mots de style s'y ajoutent."
@@ -88,7 +117,9 @@
     "cadrage": {
       "type": "COMBO",
       "defaut": "libre",
-      "options_depuis": {"menu": "cadrage_image"},
+      "options_depuis": {
+        "menu": "cadrage_image"
+      },
       "libelle": "Cadrage",
       "categorie": "style",
       "aide": "Le plan et le point de vue. « Libre » n'ajoute rien ; toute autre valeur ajoute ses mots à la consigne."
@@ -96,7 +127,9 @@
     "lumiere": {
       "type": "COMBO",
       "defaut": "libre",
-      "options_depuis": {"menu": "lumiere_image"},
+      "options_depuis": {
+        "menu": "lumiere_image"
+      },
       "libelle": "Lumière",
       "categorie": "style",
       "aide": "Sous quelle lumière. « Libre » n'ajoute rien ; toute autre valeur ajoute ses mots à la consigne."
@@ -104,23 +137,34 @@
     "palette": {
       "type": "COMBO",
       "defaut": "libre",
-      "options_depuis": {"menu": "palette_image"},
-      "selon": {"champ": "charte", "valeurs": ["aucune"]},
+      "options_depuis": {
+        "menu": "palette_image"
+      },
+      "impose_par": {
+        "champ": "charte",
+        "sauf": [
+          "aucune"
+        ]
+      },
       "libelle": "Palette",
       "categorie": "style",
-      "aide": "La dominante de couleur. « Libre » n'ajoute rien ; une palette qui refuse quelque chose l'ajoute aussi au négatif. Sous une charte, c'est la palette de la charte qui s'impose : ce choix n'est plus proposé, et la direction le dit."
+      "aide": "La dominante de couleur. « Libre » n'ajoute rien ; une palette qui refuse quelque chose l'ajoute aussi au négatif. Sous une charte, c'est la palette de la charte qui s'impose : ce champ se grise et montre ce que la charte impose, et la direction le dit."
     },
     "ambiance": {
       "type": "COMBO",
       "defaut": "libre",
-      "options_depuis": {"menu": "ambiance_image"},
+      "options_depuis": {
+        "menu": "ambiance_image"
+      },
       "libelle": "Ambiance",
       "categorie": "style",
       "aide": "Le ton. « Libre » n'ajoute rien ; toute autre valeur ajoute ses mots à la consigne."
     },
     "technique": {
       "type": "COMBO",
-      "options_depuis": {"techniques": true},
+      "options_depuis": {
+        "techniques": true
+      },
       "libelle": "Technique",
       "categorie": "technique",
       "aide": "La façon de peindre : rapide (Z-Image Turbo, huit pas, sans guidage — un négatif n'y pèserait pas, il n'est pas proposé, et les interdits d'une charte n'y pèsent que par la consigne positive) ou soignée (Z-Image, vingt-cinq pas, guidage et négatif réels — les interdits d'une charte y pèsent)."
@@ -156,7 +200,11 @@
   "etapes": [
     {
       "id": "contrainte",
-      "quand": {"valeur": "$charte", "op": "ne", "attendu": "aucune"},
+      "quand": {
+        "valeur": "$charte",
+        "op": "ne",
+        "attendu": "aucune"
+      },
       "rendre": {
         "workflow": "image-heraldiste",
         "inputs": {
@@ -276,7 +324,11 @@
     },
     {
       "id": "conformite",
-      "quand": {"valeur": "$charte", "op": "ne", "attendu": "aucune"},
+      "quand": {
+        "valeur": "$charte",
+        "op": "ne",
+        "attendu": "aucune"
+      },
       "rendre": {
         "workflow": "video-heraldiste-conformite",
         "inputs": {
@@ -350,7 +402,11 @@
     },
     {
       "id": "constat_de_la_charte",
-      "quand": {"valeur": "$charte", "op": "ne", "attendu": "aucune"},
+      "quand": {
+        "valeur": "$charte",
+        "op": "ne",
+        "attendu": "aucune"
+      },
       "constater": [
         {
           "id": "la_charte_demandee_est_appliquee",

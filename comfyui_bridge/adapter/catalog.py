@@ -172,6 +172,9 @@ class WorkflowSpec:
     description: str = ""
     categorie: str | None = None
     ordre: int = 100
+    # Le gabarit qu'une chaîne manifeste (vérifié à la lecture) — publié, pour
+    # qu'un lanceur ou un lecteur sache quel patron ce mode suit.
+    gabarit: str | None = None
     # Ce qu'il faut SAVOIR pour remplir un champ, quand le nom du champ ne
     # suffit pas (« le sujet s'écrit décor | temps un | temps deux »). Déclaré à
     # l'entrée, rendu par /io sur le champ concerné : écrit dans un client, ce
@@ -186,7 +189,8 @@ class WorkflowSpec:
     def presentation(self) -> dict[str, Any]:
         return {"titre": self.titre or self.name, "resume": self.description,
                 "categorie": self.categorie, "ordre": self.ordre,
-                "publie": self.categorie is not None}
+                "publie": self.categorie is not None,
+                **({"gabarit": self.gabarit} if self.gabarit else {})}
 
     @property
     def profile(self) -> WorkflowProfile:
@@ -708,6 +712,11 @@ def _spec_de_chaine(name: str, entry: dict[str, Any], catalogue: Path,
         # autres sont d'un autre plan, et n'ont rien à lui dire (2026-09-24).
         techniques = noyau.techniques_pour(lue, techniques)
         noyau.verifier_techniques(lue, techniques)
+        if lue.gabarit:
+            # La chaîne MANIFESTE un gabarit : elle est jugée contre lui ici,
+            # au chargement — s'en écarter refuse le mode, en nommant l'écart.
+            from ..core import gabarit as _gabarit
+            _gabarit.verifier(lue, _gabarit.lire(lue.gabarit))
         expose = tuple(noyau.champs_admis(lue, techniques))
         # Les défauts publiés sont ceux du plan ET de la technique par DÉFAUT :
         # c'est ce qu'un formulaire ouvre, et ce contre quoi un écart se juge.
@@ -726,6 +735,7 @@ def _spec_de_chaine(name: str, entry: dict[str, Any], catalogue: Path,
         exposes=expose,
         defaults={**defauts, **dict(entry.get("defaults", {}))},
         limits=dict(entry.get("limits", {})),
+        gabarit=lue.gabarit,
         **vitrine,
     )
 

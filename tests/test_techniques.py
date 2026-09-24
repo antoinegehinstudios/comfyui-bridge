@@ -499,11 +499,16 @@ def test_le_catalogue_publie_les_techniques_d_un_mode(atelier):
     """Un lanceur qui tiendrait sa propre liste de techniques la verrait vieillir
     au premier fichier ajouté."""
     entree = atelier.get("/v1/workflows").json()["workflows"]["chaine-a-techniques"]
+    # Chacune dit ce qu'elle NE RÈGLE PAS parmi ce que l'autre règle (2026-09-24, « la règle
+    # compte partout ») : le trait n'a pas d'épaisseur de voile, le voile n'a pas de grain.
+    absent = "cette technique ne l'expose pas : il ne se règle pas sous elle"
     assert entree["techniques"] == [
         {"valeur": "trait", "libelle": "Au trait", "resume": "un trait sec sur un papier",
-         "par_defaut": False},
+         "par_defaut": False, "manques": [{"quoi": "epaisseur", "libelle": "Épaisseur du voile",
+                                            "detecte": "absent", "dit": absent}]},
         {"valeur": "voile", "libelle": "Au voile", "resume": "un voile qui se lève",
-         "par_defaut": False}]
+         "par_defaut": False, "manques": [{"quoi": "grain", "libelle": "Grain du trait",
+                                            "detecte": "absent", "dit": absent}]}]
     # Les étapes annoncent le graphe de la technique par DÉFAUT, et le rôle.
     peinture = [e for e in entree["etapes"] if e["id"] == "peinture"][0]
     assert peinture["workflow"] == "graphe-au-trait" and peinture["role"] == "peinture"
@@ -750,6 +755,7 @@ def test_chaque_champ_publie_sa_categorie_et_son_aide_et_un_menu_se_filtre():
         "type": "COMBO", "defaut": "avec-accroche", "categorie": "recit",
         "options_depuis": {"menu": "structure", "requiert": {"temps": "hook"}},
         "libelle": "Structure du récit", "aide": "Seules celles qui ont une accroche."}
+    chaine["etapes"][0]["rendre"]["inputs"] = {"61.structure": "$structure"}   # lu : sinon faux champ, refusé
     trait = json.loads(json.dumps(TECHNIQUE_TRAIT))
     trait["expose"]["grain"].update({"categorie": "matiere", "aide": "Le grain du trait."})
     _ecrire(tmp, techniques=(trait, TECHNIQUE_VOILE))
@@ -939,3 +945,50 @@ def test_les_techniques_d_une_chaine_sont_celles_qui_tiennent_ses_roles():
     assert list(noyau.techniques_pour(deux_roles, toutes)) == ["trait"]
     with pytest.raises(WorkflowMappingError, match="finition"):
         noyau.verifier_techniques(deux_roles, noyau.techniques_pour(deux_roles, toutes))
+
+
+def test_les_manques_d_une_technique_se_detectent_parmi_ses_voisines():
+    """2026-09-24, « la règle doit compter partout » : ce qu'une technique ne
+    règle pas se détecte — dit par l'auteur (applique: false), sinon lu dans son
+    graphe (une entrée tenue à une valeur fixe), sinon absent — et se dit avec
+    le libellé que la voisine donne au champ. Jamais un faux champ."""
+    from comfyui_bridge.adapter import techniques as adt
+    lire_t = noyau.lire_technique
+    soignee = lire_t({"version": 1, "technique": "soignee", "libelle": "Soignée",
+                      "roles": {"image": {"workflow": "g-soignee", "inputs": {"3.cfg": "$cfg", "40.string_b": "$negatif", "3.steps": "$steps"}}},
+                      "expose": {"cfg": {"type": "FLOAT", "defaut": 4, "libelle": "Guidage"},
+                                 "negatif": {"type": "STRING", "defaut": "", "libelle": "À éviter"},
+                                 "steps": {"type": "INT", "defaut": 25, "libelle": "Pas"}}}, "soignee")
+    rapide = lire_t({"version": 1, "technique": "rapide", "libelle": "Rapide",
+                     "roles": {"image": {"workflow": "g-rapide", "inputs": {"3.steps": "$steps"}}},
+                     "expose": {"steps": {"type": "INT", "defaut": 8, "libelle": "Pas"}},
+                     "negatif": {"applique": False, "dit": "à cfg 1, le négatif n'est pas lu"}}, "rapide")
+    graphes = {"g-rapide": {"3": {"class_type": "KSampler", "inputs": {"cfg": 1.0, "steps": 8, "model": ["1", 0]}},
+                            "27": {"class_type": "CLIPTextEncode", "inputs": {"text": "…"}}}}
+    voisines = {"rapide": rapide, "soignee": soignee}
+    sans_graphe = {m["quoi"]: m for m in adt.manques(rapide, voisines)}
+    assert set(sans_graphe) == {"cfg", "negatif"}
+    assert sans_graphe["negatif"] == {"quoi": "negatif", "libelle": "À éviter", "detecte": "declare",
+                                      "dit": "à cfg 1, le négatif n'est pas lu"}
+    assert sans_graphe["cfg"]["detecte"] == "absent" and sans_graphe["cfg"]["libelle"] == "Guidage"
+    avec_graphe = {m["quoi"]: m for m in adt.manques(rapide, voisines, graphes.get)}
+    assert avec_graphe["cfg"]["detecte"] == "graphe" and "« 1.0 » (nœud 3, KSampler)" in avec_graphe["cfg"]["dit"]
+    assert avec_graphe["negatif"]["detecte"] == "declare"          # le mot de l'auteur prime sur le graphe
+    assert adt.manques(soignee, voisines, graphes.get) == []       # elle règle tout ce que sa voisine règle
+    # Une entrée que le rôle BRANCHE lui-même n'est pas « tenue » : la brume règle « 61.fond » sous son
+    # propre nom (« brume ») — le « fond » de l'encre n'est pas tenu à une valeur fixe, il est absent.
+    brume = lire_t({"version": 1, "technique": "brume", "libelle": "Brume",
+                    "roles": {"image": {"workflow": "g-brume", "inputs": {"61.fond": "$brume"}}},
+                    "expose": {"brume": {"type": "COMBO", "defaut": "blanche", "options": ["blanche", "grise"], "libelle": "Brume"}}}, "brume")
+    encre = lire_t({"version": 1, "technique": "encre", "libelle": "Encre",
+                    "roles": {"image": {"workflow": "g-encre", "inputs": {"61.fond": "$fond", "61.bords": "$bords"}}},
+                    "expose": {"fond": {"type": "COMBO", "defaut": "washi", "options": ["washi"], "libelle": "Fond"},
+                               "bords": {"type": "COMBO", "defaut": "fondus", "options": ["fondus", "francs"], "libelle": "Bords"}}}, "encre")
+    graphes["g-brume"] = {"61": {"class_type": "RevealBrume", "inputs": {"fond": "brume-blanche", "bords": "fondus"}}}
+    sous_brume = {m["quoi"]: m["detecte"] for m in adt.manques(brume, {"brume": brume, "encre": encre}, graphes.get)}
+    assert sous_brume == {"fond": "absent", "bords": "graphe"}
+    assert adt.manques(rapide, None) == [{"quoi": "negatif", "libelle": "negatif", "detecte": "declare",
+                                          "dit": "à cfg 1, le négatif n'est pas lu"}]
+    # et la liste d'un lanceur porte ces manques, par technique
+    vues = {v["valeur"]: v["manques"] for v in adt.vues(voisines, graphes.get)}
+    assert [m["quoi"] for m in vues["rapide"]] == ["cfg", "negatif"] and vues["soignee"] == []

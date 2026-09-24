@@ -8,6 +8,10 @@
     "applique": false,
     "dit": "à cfg 1, le prompt négatif n'est pas lu (ConditioningZeroOut) : les interdits d'une charte ne pèsent que par la consigne positive ; choisir la technique soignée pour qu'ils pèsent"
   },
+  "cfg": {
+    "applique": false,
+    "dit": "le guidage est fixé à 1 par le graphe : un modèle distillé (Turbo) se dégrade au-delà ; le cfg ne se règle que sous la technique soignée"
+  },
   "expose": {
     "steps": {
       "type": "INT",

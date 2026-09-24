@@ -244,7 +244,7 @@ CHAINE_QUI_SE_SOUVIENT = {
     "etapes": [
         {"id": "releve", "rendre": {"workflow": "sd15-txt2img", "prompt": "relevé"}},
         {"id": "plan", "rendre": {"workflow": "sd15-txt2img", "prompt": "plan",
-                                  "seed": "$graine",
+                                  "seed": "$graine", "duration_s": "$duree",
                                   "memoire": {"cle": ["$releve.recit.empreinte", "$graine",
                                                       "$duree"]}}},
         # La peinture lit une clé LONGUE du récit du plan (que la fiche ne

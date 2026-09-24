@@ -1,15 +1,18 @@
 {
   "version": 1,
   "chaine": "image-creation",
+  "gabarit": "creation",
   "resume": "CRÉER UNE IMAGE — le flux de création maître (2026-09-24). La CHARTE se choisit en premier : lue chez Héraldiste (contrainte), ce qu'elle impose pèse sur tout ce qui suit — sa palette prend la place de celle qu'on choisirait, ses mots de style et ses interdits rejoignent la consigne, son logo et sa texture sont posés à la livraison, et l'image livrée reçoit son constat de conformité. Puis la DIRECTION compose la consigne (style, cadrage, lumière, palette, ambiance : le récit dit mot pour mot ce que chaque paramètre a ajouté), une TECHNIQUE interchangeable peint (rapide : Z-Image Turbo, soignée : Z-Image avec guidage et négatif) à la taille native du modèle, la LIVRAISON porte l'image à la taille exacte demandée (couvrir puis rogner quelques pixels, jamais de bandes) et la chaîne CONSTATE. Aucun paramètre fantôme : ce qu'une technique ne lit pas n'est pas proposé sous elle, ce qu'une charte supplante ne s'affiche pas sous elle, ce qu'une charte ne peut pas imposer ici est dit.",
   "expose": {
     "charte": {
       "type": "COMBO",
       "defaut": "aucune",
-      "options_depuis": {"menu": "charte"},
+      "options_depuis": {
+        "menu": "charte"
+      },
       "libelle": "Charte de marque",
       "categorie": "charte",
-      "aide": "La charte graphique (Héraldiste) que l'image doit respecter — à choisir EN PREMIER, le reste en découle. Elle impose : sa palette (à la place de celle qu'on choisirait ci-dessous, qui n'est alors plus proposée), ses mots de style et ses interdits dans la consigne, son logo posé tel quel à la livraison (une zone calme est demandée au modèle là où il ira), sa texture fondue ; l'image livrée reçoit un constat de conformité (part dans la palette, logo retrouvé, intact, à sa taille, règles mesurables). Ce modèle ne prend aucune image de référence : un fond ou un exemple d'affiche de la charte ne pèse pas ici, et le constat le dit. Sous la technique rapide (sans guidage), les interdits ne pèsent que par la consigne positive : le constat le dit aussi. « Aucune charte » : rien ne change."
+      "aide": "La charte graphique (Héraldiste) que l'image doit respecter — à choisir EN PREMIER, le reste en découle. Elle impose : sa palette (à la place de celle qu'on choisirait ci-dessous, qui se grise et la montre), ses mots de style et ses interdits dans la consigne, son logo posé tel quel à la livraison (une zone calme est demandée au modèle là où il ira), sa texture fondue ; l'image livrée reçoit un constat de conformité (part dans la palette, logo retrouvé, intact, à sa taille, règles mesurables). Ce modèle ne prend aucune image de référence : un fond ou un exemple d'affiche de la charte ne pèse pas ici, et le constat le dit. Sous la technique rapide (sans guidage), les interdits ne pèsent que par la consigne positive : le constat le dit aussi. « Aucune charte » : rien ne change. Sous la technique soignée, ses interdits remplissent le champ « À éviter », grisé."
     },
     "prompt": {
       "type": "STRING",
@@ -22,7 +25,9 @@
     "style": {
       "type": "COMBO",
       "defaut": "photographie",
-      "options_depuis": {"menu": "style_image"},
+      "options_depuis": {
+        "menu": "style_image"
+      },
       "libelle": "Style",
       "categorie": "style",
       "aide": "Le médium et la matière de l'image — photo, illustration, peinture, gravure, affiche, matières — un gabarit de consigne du catalogue d'image de direction de style (styles/images.json). Chaque style enveloppe votre sujet de ses mots et refuse les siens au négatif. Sous une charte, ses mots de style s'y ajoutent."
@@ -30,7 +35,9 @@
     "cadrage": {
       "type": "COMBO",
       "defaut": "libre",
-      "options_depuis": {"menu": "cadrage_image"},
+      "options_depuis": {
+        "menu": "cadrage_image"
+      },
       "libelle": "Cadrage",
       "categorie": "style",
       "aide": "Le plan et le point de vue (gros plan, plan large, vue de dessus, contre-plongée, sujet isolé…). « Libre » n'ajoute rien : le style et le sujet décident. Toute autre valeur ajoute ses mots à la consigne — le récit de la direction les cite."
@@ -38,7 +45,9 @@
     "lumiere": {
       "type": "COMBO",
       "defaut": "libre",
-      "options_depuis": {"menu": "lumiere_image"},
+      "options_depuis": {
+        "menu": "lumiere_image"
+      },
       "libelle": "Lumière",
       "categorie": "style",
       "aide": "Sous quelle lumière (jour douce, heure dorée, studio, contre-jour, clair-obscur, néon…). « Libre » n'ajoute rien ; toute autre valeur ajoute ses mots à la consigne."
@@ -46,23 +55,34 @@
     "palette": {
       "type": "COMBO",
       "defaut": "libre",
-      "options_depuis": {"menu": "palette_image"},
-      "selon": {"champ": "charte", "valeurs": ["aucune"]},
+      "options_depuis": {
+        "menu": "palette_image"
+      },
+      "impose_par": {
+        "champ": "charte",
+        "sauf": [
+          "aucune"
+        ]
+      },
       "libelle": "Palette",
       "categorie": "style",
-      "aide": "La dominante de couleur (chaude, froide, pastel, vive, sombre, terre, monochrome, noir et blanc…). « Libre » n'ajoute rien ; une palette qui refuse quelque chose (noir et blanc : la couleur) l'ajoute aussi au négatif. Sous une charte, c'est la palette de la charte qui s'impose : ce choix n'est plus proposé, et la direction le dit."
+      "aide": "La dominante de couleur (chaude, froide, pastel, vive, sombre, terre, monochrome, noir et blanc…). « Libre » n'ajoute rien ; une palette qui refuse quelque chose (noir et blanc : la couleur) l'ajoute aussi au négatif. Sous une charte, c'est la palette de la charte qui s'impose : ce champ se grise et montre ce que la charte impose, et la direction le dit."
     },
     "ambiance": {
       "type": "COMBO",
       "defaut": "libre",
-      "options_depuis": {"menu": "ambiance_image"},
+      "options_depuis": {
+        "menu": "ambiance_image"
+      },
       "libelle": "Ambiance",
       "categorie": "style",
       "aide": "Le ton (calme, dramatique, joyeuse, mystérieuse, luxueuse, brute, onirique, épurée…). « Libre » n'ajoute rien ; toute autre valeur ajoute ses mots à la consigne."
     },
     "technique": {
       "type": "COMBO",
-      "options_depuis": {"techniques": true},
+      "options_depuis": {
+        "techniques": true
+      },
       "libelle": "Technique",
       "categorie": "technique",
       "aide": "La façon de peindre : rapide (Z-Image Turbo, huit pas, sans guidage — un négatif n'y pèserait pas, il n'est pas proposé, et les interdits d'une charte n'y pèsent que par la consigne positive) ou soignée (Z-Image, vingt-cinq pas, guidage et négatif réels — les interdits d'une charte y pèsent). Une technique de plus est un fichier de plus chez la passerelle."
@@ -98,7 +118,11 @@
   "etapes": [
     {
       "id": "contrainte",
-      "quand": {"valeur": "$charte", "op": "ne", "attendu": "aucune"},
+      "quand": {
+        "valeur": "$charte",
+        "op": "ne",
+        "attendu": "aucune"
+      },
       "rendre": {
         "workflow": "image-heraldiste",
         "inputs": {
@@ -191,7 +215,11 @@
     },
     {
       "id": "conformite",
-      "quand": {"valeur": "$charte", "op": "ne", "attendu": "aucune"},
+      "quand": {
+        "valeur": "$charte",
+        "op": "ne",
+        "attendu": "aucune"
+      },
       "rendre": {
         "workflow": "video-heraldiste-conformite",
         "inputs": {
@@ -250,7 +278,11 @@
     },
     {
       "id": "constat_de_la_charte",
-      "quand": {"valeur": "$charte", "op": "ne", "attendu": "aucune"},
+      "quand": {
+        "valeur": "$charte",
+        "op": "ne",
+        "attendu": "aucune"
+      },
       "constater": [
         {
           "id": "la_charte_demandee_est_appliquee",

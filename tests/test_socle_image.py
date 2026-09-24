@@ -37,7 +37,7 @@ PLAN_SOCIAL = SOCLE + [("constat", "constater"), ("constat_du_message", "constat
 REGLAGES_DE_STYLE = ("cadrage", "lumiere", "palette", "ambiance")
 COMMUNS = {"charte": "aucune", "prompt": "", "style": None, "cadrage": "libre", "lumiere": "libre", "palette": "libre",
            "ambiance": "libre", "width": 1080, "height": 1350, "seed": 71}
-SOUS_LA_CHARTE = {"champ": "charte", "valeurs": ["aucune"]}
+IMPOSE_PAR_LA_CHARTE = {"champ": "charte", "sauf": ["aucune"]}
 CE_QUE_LA_CHARTE_IMPOSE_A_LA_DIRECTION = {"1.charte": "$charte", "1.style_impose": "$contrainte.recit.positif",
                                           "1.palette_imposee": "$contrainte.recit.couleurs_en",
                                           "1.negatif_impose": "$contrainte.recit.negatif",
@@ -116,10 +116,12 @@ def test_les_champs_et_leurs_defauts(standard, social):
         # La charte EN PREMIER : « sinon c'est pas logique » (Antoine, 2026-09-24).
         assert list(expose)[0] == "charte" and expose["charte"]["categorie"] == "charte"
         assert expose["charte"]["options_depuis"] == {"menu": "charte"} and expose["charte"]["defaut"] == "aucune"
-        # Ce que la charte supplante ne s'affiche plus sous elle.
-        assert expose["palette"]["selon"] == SOUS_LA_CHARTE
+        # Ce que la charte supplante se GRISE sous elle (impose_par), jamais caché (selon = n'existe pas).
+        assert expose["palette"]["impose_par"] == IMPOSE_PAR_LA_CHARTE and "selon" not in expose["palette"]
         for nom in ("style", "cadrage", "lumiere", "ambiance", "technique", "width", "height", "seed", "prompt"):
-            assert "selon" not in expose[nom], nom
+            assert "selon" not in expose[nom] and "impose_par" not in expose[nom], nom
+        # La chaîne MANIFESTE le gabarit « creation » : elle est vérifiée contre lui.
+        assert brut["gabarit"] == "creation"
         assert expose["prompt"]["requis"] is True and expose["prompt"]["categorie"] == "sujet"
         assert expose["technique"]["options_depuis"] == {"techniques": True} and "defaut" not in expose["technique"]
         assert expose["style"]["options_depuis"] == {"menu": "style_image"}
@@ -131,9 +133,9 @@ def test_les_champs_et_leurs_defauts(standard, social):
     assert social["expose"]["bandeau"]["type"] == "BOOLEAN"
     assert social["expose"]["texte_position"]["options"] == ["bas", "centre", "haut"]
     for nom in ("police", "couleur_texte", "bandeau"):
-        assert social["expose"][nom]["selon"] == SOUS_LA_CHARTE, nom
+        assert social["expose"][nom]["impose_par"] == IMPOSE_PAR_LA_CHARTE and "selon" not in social["expose"][nom], nom
     for nom in ("message", "sous_message", "texte_position", "taille_message"):
-        assert "selon" not in social["expose"][nom], nom
+        assert "selon" not in social["expose"][nom] and "impose_par" not in social["expose"][nom], nom
 
 
 def test_les_techniques_de_ce_plan_tiennent_le_role_image_et_aucun_fantome(standard, social, techniques):
@@ -143,6 +145,16 @@ def test_les_techniques_de_ce_plan_tiennent_le_role_image_et_aucun_fantome(stand
     assert techniques["rapide"].par_defaut is True and techniques["soignee"].par_defaut is False
     assert set(techniques["rapide"].champs) == {"steps"}
     assert set(techniques["soignee"].champs) == {"steps", "cfg", "negatif"}
+    # Le négatif n'existe que sous la soignée (selon, calculé) ; sous une charte il est rempli par elle (impose_par).
+    assert techniques["soignee"].champs["negatif"].impose_par == IMPOSE_PAR_LA_CHARTE
+    assert techniques["rapide"].donnees["negatif"]["applique"] is False and techniques["rapide"].donnees["negatif"]["dit"]
+    # La règle compte PARTOUT : sous la rapide, le cfg (que la soignée règle) est déclaré fixé, comme le négatif ;
+    # rien d'autre ne manque à la rapide (les pas se règlent sous les deux), rien ne manque à la soignée.
+    from comfyui_bridge.adapter import techniques as vues_t
+    sous_rapide = {m["quoi"]: m for m in vues_t.manques(techniques["rapide"], techniques)}
+    assert set(sous_rapide) == {"negatif", "cfg"} and all(m["detecte"] == "declare" for m in sous_rapide.values())
+    assert sous_rapide["cfg"]["libelle"] == techniques["soignee"].champs["cfg"].libelle
+    assert vues_t.manques(techniques["soignee"], techniques) == []
     assert techniques["rapide"].champs["steps"].defaut == 8 and techniques["soignee"].champs["steps"].defaut == 25
     assert techniques["soignee"].champs["cfg"].defaut == 4.0
     for nom, t in techniques.items():
@@ -244,6 +256,12 @@ def test_sur_ce_poste_les_modes_sont_publies_et_leurs_graphes_tiennent():
     rubriques = [c["valeur"] for c in r["categories_de_champs"]]
     assert rubriques[:2] == ["charte", "sujet"] and "style" in rubriques
     assert pathlib.Path(r["menus"]["charte"]["source_fichier"]["chemin"]).is_file()
+    # Ce que chaque charte impose, relayé au lanceur : Héraldiste parle sa langue (police_titres…), la
+    # réconciliation traduit vers les champs des chaînes — et rien d'autre ne part.
+    impose = r["menus"]["charte"]["source_fichier"]["impose"]
+    assert impose["colonne"] == "impose" and impose["champs"] == {
+        "negatif": "negatif", "palette": "palette", "police_titres": "police",
+        "couleur_titres": "couleur_texte", "fond_titres": "bandeau"}
     for nom, noeud, cles in (("image-heraldiste", "HeraldisteCharte", ("charte", "prompt", "police", "couleur")),
                              ("video-heraldiste-conformite", "HeraldisteConformite", ("video", "charte", "images"))):
         graphe = json.loads(pathlib.Path(r["workflows"][nom]["workflow"]).read_text(encoding="utf-8"))

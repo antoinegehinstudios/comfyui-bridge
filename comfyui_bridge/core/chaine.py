@@ -128,6 +128,15 @@ class Champ:
     # celle qu'une technique fait naître sur ses réglages : un lanceur n'a
     # qu'une règle à connaître.
     selon: dict[str, Any] | None = None
+    # « impose_par » : la valeur de ce champ est IMPOSÉE par un autre champ dès
+    # que celui-ci n'est pas à l'une des valeurs « sauf » — la palette, la police
+    # d'un visuel sous une charte. Le champ existe toujours : un lanceur le GRISE
+    # (la valeur imposée se lit, au récit ou dans « impose » du choix maître) et
+    # ne l'envoie pas. Antoine, 2026-09-24 : « grise les champs imposés par la
+    # charte au lieu de les cacher ; fait-en un standard ». « selon », lui, dit
+    # qu'un champ n'EXISTE pas sous une autre valeur (un réglage d'une autre
+    # technique) : caché.
+    impose_par: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -273,6 +282,10 @@ class Chaine:
     champs: dict[str, Champ] = field(default_factory=dict)
     etapes: tuple[Etape, ...] = ()
     livrable: str = ""
+    # Le GABARIT que la chaîne manifeste suivre (« creation ») : vérifié à la
+    # lecture du catalogue contre `resources/gabarits/<nom>.json` — voir
+    # `core/gabarit.py`. Rien sans déclaration.
+    gabarit: str | None = None
 
     @property
     def rendus(self) -> tuple[Etape, ...]:
@@ -380,7 +393,22 @@ def _champ(nom: str, brut: Any, contexte: str) -> Champ:
         categorie=_texte_ou_rien(nom, brut, "categorie", contexte),
         aide=_texte_ou_rien(nom, brut, "aide", contexte),
         selon=_selon(nom, brut.get("selon"), contexte),
+        impose_par=_impose_par(nom, brut.get("impose_par"), contexte),
     )
+
+
+def _impose_par(nom: str, brut: Any, contexte: str) -> dict[str, Any] | None:
+    """`{"champ": …, "sauf": [...]}` — ou rien. Le champ maître et les valeurs
+    sous lesquelles ce champ reste LIBRE (« aucune » pour une charte)."""
+    if brut is None:
+        return None
+    if (not isinstance(brut, dict) or not str(brut.get("champ") or "").strip()
+            or not isinstance(brut.get("sauf"), list)):
+        raise WorkflowMappingError(
+            f"{contexte} : « impose_par » de {nom!r} attend {{\"champ\": \"<nom>\", \"sauf\": [...]}}")
+    if str(brut["champ"]) == nom:
+        raise WorkflowMappingError(f"{contexte} : « impose_par » de {nom!r} ne peut pas le désigner lui-même")
+    return {"champ": str(brut["champ"]), "sauf": [str(v) for v in brut["sauf"]]}
 
 
 def _selon(nom: str, brut: Any, contexte: str) -> dict[str, Any] | None:
@@ -627,6 +655,13 @@ def lire(brut: Any, nom_declare: str | None = None) -> Chaine:
             raise WorkflowMappingError(
                 f"chaîne {nom!r} : « selon » de {champ.nom!r} désigne un champ que la chaîne "
                 f"n'expose pas ({champ.selon['champ']!r})")
+        if champ.impose_par and champ.impose_par["champ"] not in champs:
+            raise WorkflowMappingError(
+                f"chaîne {nom!r} : « impose_par » de {champ.nom!r} désigne un champ que la chaîne "
+                f"n'expose pas ({champ.impose_par['champ']!r})")
+    gabarit = brut.get("gabarit")
+    if gabarit is not None and (not isinstance(gabarit, str) or not gabarit.strip()):
+        raise WorkflowMappingError(f"chaîne {nom!r} : « gabarit » nomme un gabarit, ou ne s'écrit pas")
     brutes = brut.get("etapes")
     if not isinstance(brutes, list) or not brutes:
         raise WorkflowMappingError(f"chaîne {nom!r} : « etapes » doit être une liste non vide")
@@ -642,7 +677,7 @@ def lire(brut: Any, nom_declare: str | None = None) -> Chaine:
                 f"un renvoi « ${etape.id} » ne saurait plus de quoi il parle")
         vus.add(etape.id)
         etapes.append(etape)
-    chaine = Chaine(nom=nom, version=int(brut.get("version", 1)),
+    chaine = Chaine(nom=nom, version=int(brut.get("version", 1)), gabarit=(gabarit or None),
                     resume=str(brut.get("resume") or ""), champs=champs,
                     etapes=tuple(etapes), livrable=str(brut.get("livrable") or ""))
     _verifier_renvois(chaine)
@@ -788,6 +823,19 @@ def verifier_techniques(chaine: Chaine, techniques: dict[str, Technique]) -> Non
         raise WorkflowMappingError(
             f"chaîne {chaine.nom!r} : {len(par_defaut)} techniques se disent par défaut "
             f"({', '.join(par_defaut)}) — une seule peut l'être")
+    for nom, technique in (techniques or {}).items():
+        # Une section « applique: false » dit ce que la technique NE LIT PAS ;
+        # sur un champ qu'elle expose pourtant, c'est une contradiction.
+        for cle, section in (technique.donnees or {}).items():
+            if isinstance(section, dict) and section.get("applique") is False and str(cle) in technique.champs:
+                raise WorkflowMappingError(
+                    f"technique {nom!r} : déclare ne pas lire « {cle} » (applique: false) et l'expose pourtant "
+                    f"— l'un des deux ment")
+        for champ in technique.champs.values():
+            if champ.impose_par and champ.impose_par["champ"] not in chaine.champs:
+                raise WorkflowMappingError(
+                    f"technique {nom!r} : « impose_par » de {champ.nom!r} désigne un champ que la "
+                    f"chaîne {chaine.nom!r} n'expose pas ({champ.impose_par['champ']!r})")
     amont: set[str] = set()
     for etape in chaine.etapes:
         for nom, technique in (techniques or {}).items():
@@ -822,6 +870,17 @@ def verifier_techniques(chaine: Chaine, techniques: dict[str, Technique]) -> Non
                 _chemins_tiennent(list(renvois(liste)), chaine, technique,
                                   f"technique {nom!r}, contrôles {nommes!r}", etape)
         amont.add(etape.id)
+    # Rien de fantôme, en dernier (les rôles et les renvois d'abord : un champ
+    # que rien ne lit se juge sur une chaîne dont tout le reste tient) : un
+    # champ exposé que rien ne lit est refusé ici, pour toute chaîne et toute
+    # technique — la règle compte partout (2026-09-24).
+    fantomes = champs_que_rien_ne_lit(chaine, techniques)
+    if fantomes:
+        dits = ", ".join(f"« {champ} » ({'de la chaîne' if qui == 'chaine' else 'de la technique ' + repr(qui)})"
+                         for qui, champ in fantomes)
+        raise WorkflowMappingError(
+            f"chaîne {chaine.nom!r} : {dits} — exposé mais lu par aucune étape, aucun rôle ni aucun "
+            f"contrôle : un champ que rien ne lit serait un faux champ ; le brancher, ou le retirer")
 
 
 def _renvois_tiennent(valeur: Any, connus: set[str], contexte: str,
@@ -1034,6 +1093,34 @@ def champs_lus_par(etape: Etape, technique: Technique | None = None) -> set[str]
         if nommes is not None and nommes in technique.controles:
             tetes |= {r.split(".", 1)[0] for r in renvois(technique.controles[nommes])}
     return tetes
+
+
+def champs_que_rien_ne_lit(chaine: Chaine, techniques: dict[str, Technique] | None = None
+                           ) -> list[tuple[str, str]]:
+    """Les champs EXPOSÉS que rien ne lit : ceux de la chaîne qu'aucune étape
+    ni aucune technique ne nomme, ceux d'une technique qu'aucun de ses rôles,
+    aucun de ses contrôles ni aucune étape ne nomme sous CETTE chaîne. Un tel
+    champ s'afficherait, se remplirait, et ne pèserait sur rien : un faux champ
+    — Antoine, 2026-09-24 : « s'il n'y a rien dans ComfyUI en ce sens, on ne
+    met pas de faux champ dans maestro, c'est une règle générale importante »,
+    et « la règle doit compter partout ». Le champ qui CHOISIT la technique ne
+    compte pas : aucun renvoi ne le lit, il désigne un fichier. Rend
+    [(propriétaire, champ)], le propriétaire étant 'chaine' ou le nom de la
+    technique."""
+    techniques = techniques or {}
+    lus_par_la_chaine: set[str] = set()
+    for etape in chaine.etapes:
+        lus_par_la_chaine |= champs_lus_par(etape, None)
+        for technique in techniques.values():
+            lus_par_la_chaine |= champs_lus_par(etape, technique)
+    sans: list[tuple[str, str]] = [("chaine", nom) for nom in chaine.champs
+                                   if nom != chaine.champ_de_technique and nom not in lus_par_la_chaine]
+    for nom_t, technique in sorted(techniques.items()):
+        lus: set[str] = set()
+        for etape in chaine.etapes:
+            lus |= champs_lus_par(etape, technique)
+        sans.extend((nom_t, nom) for nom in technique.champs if nom not in lus)
+    return sans
 
 
 def _vide(valeur: Any) -> bool:
