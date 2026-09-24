@@ -388,7 +388,7 @@ def recoller(parts: Any, sortie: str | Path, fps: int = 25, largeur: int = 1280,
         import tempfile as _tempfile
         from . import textes as _textes
         dossier_textes = _tempfile.mkdtemp(prefix="incrustation-")
-        incrustations, vides = _textes.filtres(textes, largeur, hauteur, duree_totale, dossier_textes)
+        incrustations, vides = _textes.filtres(textes, largeur, hauteur, duree_totale, dossier_textes, signaler=signaler)
         if signaler is not None:
             if incrustations:
                 signaler(f"{len(incrustations)} texte(s) incrusté(s) au recollage")

@@ -123,6 +123,20 @@ def test_le_fond_declare_se_pose_plein_sans_liseré_ni_ombre(tmp_path):
     assert "box=1" not in sans, "sans fond déclaré, rien ne change"
 
 
+def test_un_texte_laisse_au_logo_ce_qu_il_ecrit(tmp_path):
+    p = _une_police(tmp_path)
+    dits = []
+    textes_ = [{"texte": "GRABUGE FEST 2027 · TREMPLIN IV", "police": str(p), "debut_s": 0.5, "fin_s": 4, "laisser_au_logo": "Grabuge Fest"},
+               {"texte": "Grabuge-Fest", "police": str(p), "debut_s": 1, "fin_s": 4, "laisser_au_logo": "GRABUGE FEST"},
+               {"texte": "Billetterie ouverte", "police": str(p), "debut_s": 1, "fin_s": 4, "laisser_au_logo": None}]
+    f, vides = textes.filtres(textes_, 720, 1280, 5.0, tmp_path, signaler=dits.append)
+    assert (tmp_path / "texte_0_0.txt").read_text(encoding="utf-8").startswith("2027 · TREMPLIN IV"[:4])
+    assert vides == 1, "un texte qui n'était que le nom du wordmark n'est pas incrusté"
+    assert any("ôté du texte incrusté" in d and "reste « 2027 · TREMPLIN IV »" in d for d in dits), dits
+    assert any("il ne restait rien" in d for d in dits), dits
+    assert textes.oter_le_nom("Affiche de Grabuge Fest", "grabugefest") == ("Affiche", ["de Grabuge Fest"])
+
+
 def test_sans_textes_rien(tmp_path):
     assert textes.filtres(None, 720, 1280) == ([], 0)
     assert textes.filtres([], 720, 1280) == ([], 0)

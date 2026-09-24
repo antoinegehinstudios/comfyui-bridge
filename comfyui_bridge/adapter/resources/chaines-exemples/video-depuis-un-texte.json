@@ -220,6 +220,7 @@
           "logo_marge": null,
           "logo_hauteur_min_px": null,
           "logo_zone": null,
+          "logo_texte": null,
           "texture_fichier": null,
           "texture_fusion": null,
           "texture_opacite": null,
@@ -271,7 +272,8 @@
             "taille": 0.055,
             "fondu_s": 0.4,
             "couleur": "$contrainte.recit.couleur",
-            "fond": "$contrainte.recit.fond"
+            "fond": "$contrainte.recit.fond",
+            "laisser_au_logo": "$contrainte.recit.logo_texte"
           },
           {
             "texte": "$appel",
@@ -282,7 +284,8 @@
             "taille": 0.055,
             "fondu_s": 0.4,
             "couleur": "$contrainte.recit.couleur",
-            "fond": "$contrainte.recit.fond"
+            "fond": "$contrainte.recit.fond",
+            "laisser_au_logo": "$contrainte.recit.logo_texte"
           }
         ],
         "texture": {
@@ -329,6 +332,7 @@
           "logo_espace_libre_tenu": true,
           "logo_position_tenue": true,
           "regles_non_tenues": [],
+          "logo_texte_non_reecrit": true,
           "raison": "aucune charte demandée : l'étape n'a pas eu lieu"
         }
       }
@@ -423,6 +427,13 @@
           "aide": "Un élément imposé par la charte se mesure sur la vidéo LIVRÉE, quelques images échantillonnées, par Héraldiste (repérage de la forme par corrélation des contours, fidélité par ΔE2000 sur ses pixels opaques). L'ancrage du logo retrouvé (haut-centre, bas-droite…) contre le placement de la charte. Sans placement déclaré ni montré par un exemple : tenu, et le récit le dit."
         },
         {
+          "id": "le_texte_du_wordmark_n_est_pas_reecrit",
+          "valeur": "$conformite.recit.logo_texte_non_reecrit",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Ce que le logo de la charte ÉCRIT (son « texte » : « GRABUGE FEST » pour un wordmark), déclaré ou lu par l'analyse, ne se réécrit pas ailleurs : il est ôté de la consigne du rendu et des textes incrustés, et Héraldiste le cherche hors du logo sur quelques images de la vidéo livrée (le logo masqué, un modèle local relève tout le texte visible). Non tenu : le rendu a écrit le nom quand même — le récit de « conformite » dit ce qui a été lu (texte_hors_logo). Non lu (moteur local absent) : non tenu, jamais « rien de réécrit » sans lecture. Un logo qui ne dit pas ce qu'il écrit : tenu, et c'est dit."
+        },
+        {
           "id": "les_regles_mesurables_de_la_charte_sont_tenues",
           "valeur": "$conformite.recit.regles_non_tenues",
           "op": "eq",
@@ -442,6 +453,6 @@
     "references_commentees": "Une image jointe (image, image_2, image_3) et son rôle (role_image…) passent au montage : au run 0, l'amorce devient « texte + références → vidéo » (MiniMaxH3ReferenceToVideo, étiquettes « <Picture i> » dans la consigne, une phrase « <Picture i> is <rôle> » par image) ; les runs suivants repartent de la dernière image, où l'identité est déjà. Les rôles sont des réglages NOMMÉS de l'étape (« parametres »), injectés par les liaisons du montage — la chaîne ne nomme aucun nœud. Sans image, rien ne change : l'amorce ordinaire.",
     "continuite_des_blocs": "Chaque bloc après le premier est CONTINUÉ par référence : les 22 dernières images natives du bloc précédent (préfixe vidéo) et une image d'identité du bloc 0, rendus avec les poids ref2va — une vraie extension (mesuré le 2026-09-18 : SSIM 0,91–0,93 à la couture, caméra et personnage tenus). Chaque bloc a son bruit (graine + bloc) : le même seed rejouait la même trajectoire de caméra. La couture est constatée bloc par bloc (récit « raccord_ssim_min », constat ≥ 0,85) — un constat, jamais un refus.",
     "charte": "L'étape « contrainte » (un pas d'étape ne porte pas le nom d'un champ : « charte » est le champ) ne tourne que si une charte est demandée (« quand ») ; sinon son « sinon » rend les entrées telles quelles. Elle rend la consigne, le négatif, la police et la couleur EFFECTIFS, et — depuis le 2026-09-24 — ce que les éléments imposés de la charte deviennent (voir « elements_imposes »). L'étape « conformite » reçoit la vidéo livrée en média et rend la part dans la palette et la mesure de chaque élément imposé ; les constats en fin de chaîne la disent sans jamais refuser la livraison.",
-    "elements_imposes": "Les éléments que la charte impose pèsent selon leur TYPE, pas seulement par leurs couleurs. Le LOGO s'incruste TEL QUEL à la livraison, après le dernier agrandissement (un seul redimensionnement Lanczos depuis son fichier, puis l'encodage final) : à son ancrage, à sa largeur, avec sa marge, jamais sous sa taille minimale ; le rendu ne dessine pas de logo (négatif). La TEXTURE se fond à la livraison, avec sa fusion et son opacité (le défaut des réglages d'Héraldiste quand la charte ne les déclare pas, dit). Le FOND, les EXEMPLES D'APPLICATION et les IMAGES DE RÉFÉRENCE de la charte prennent les places de référence que l'utilisateur laisse libres (image, image_2, image_3 — jamais les siennes), avec un rôle qui dit leur obligation ; un contre-exemple ne se transmet pas. Les références ne sont vues qu'au premier bloc du rendu : sur une vidéo longue, le constat de conformité dit ce qui en reste."
+    "elements_imposes": "Les éléments que la charte impose pèsent selon leur TYPE, pas seulement par leurs couleurs. Le LOGO s'incruste TEL QUEL à la livraison, après le dernier agrandissement (un seul redimensionnement Lanczos depuis son fichier, puis l'encodage final) : à son ancrage, à sa largeur, avec sa marge, jamais sous sa taille minimale ; le rendu ne dessine pas de logo (négatif). La TEXTURE se fond à la livraison, avec sa fusion et son opacité (le défaut des réglages d'Héraldiste quand la charte ne les déclare pas, dit). Le FOND et les IMAGES DE RÉFÉRENCE de la charte prennent les places de référence que l'utilisateur laisse libres (image, image_2, image_3 — jamais les siennes), avec un rôle qui dit leur obligation ; un contre-exemple ne se transmet pas, un EXEMPLE D'APPLICATION non plus : il se compare (constat de composition) — montrée au rendu, l'affiche Tremplin III était recopiée, texte, dates, QR code et faux wordmark compris (job f2228891, 2026-09-24). Ce que le LOGO ÉCRIT (son texte, déclaré ou lu par l'analyse) est ôté de la consigne et des textes incrustés (« laisser_au_logo ») : le wordmark l'écrit, rien ne le recompose dans une autre police ; le constat le cherche hors du logo. Les références ne sont vues qu'au premier bloc du rendu : sur une vidéo longue, le constat de conformité dit ce qui en reste."
   }
 }

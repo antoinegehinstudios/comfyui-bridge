@@ -1721,7 +1721,12 @@ l'outil d'encodage, en FLUX, avec fondu, ombre et bandeau ; la police est un
 fichier du poste résolu par son nom (`_data/polices.json` fait le menu
 `police`, une ligne par police présente dans `C:/Windows/Fonts`). Aucun nœud du
 moteur n'écrit une police du poste sans tenir toute la vidéo en mémoire — c'est
-pourquoi le texte est un service de la livraison, pas du rendu.
+pourquoi le texte est un service de la livraison, pas du rendu. Un texte peut
+porter `fond` (la couleur pleine que la charte déclare sous ses titres) et
+`laisser_au_logo` (ce qu'un logo posé sur la même vidéo écrit déjà — un
+wordmark : ôté du texte avec la préposition qui l'introduit, pour qu'il ne soit
+jamais recomposé dans une autre police ; un texte qui n'était que ce nom n'est
+pas incrusté ; c'est dit).
 
 Les IMAGES et la TEXTURE s'incrustent au même passage (module
 `adapter/incrustations.py`, depuis le 2026-09-24) : `recoller` accepte `images`

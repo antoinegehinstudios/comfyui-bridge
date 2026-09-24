@@ -23,6 +23,10 @@ Un texte est un objet :
 * ``fondu_s`` : entrée et sortie en fondu, en secondes ;
 * ``boite`` : un bandeau sombre translucide sous le texte, pour la lisibilité
   sur une image claire ;
+* ``laisser_au_logo`` : ce qu'un logo posé sur la même vidéo ÉCRIT déjà (un
+  wordmark : « GRABUGE FEST ») — ôté du texte, avec la préposition qui
+  l'introduit, pour qu'il ne soit pas recomposé dans une autre police ; un
+  texte qui n'était que ce nom n'est pas incrusté ; c'est dit ;
 * ``fond`` : une couleur PLEINE sous chaque ligne — celle qu'une charte déclare
   pour ses titres (« texte #0c0c0c sur fond #ffffff ») : le couple a été choisi
   pour se lire ensemble, le texte seul ne se lit pas forcément sur la vidéo
@@ -219,8 +223,41 @@ def filtre_drawtext(texte: dict[str, Any], largeur: int, hauteur: int,
     return sortie
 
 
+PREPOSITIONS_AVANT_UN_NOM = (r"(?:(?<![a-z0-9])(?:de la|du|des|de|au|aux|a la|a|of the|of|by|for|from|at the|at)\s+"
+                             r"|(?<![a-z0-9])[dl]'\s*)")
+
+
+def _plier(texte: str) -> str:
+    """Sans accent, en minuscules, lettre pour lettre (même longueur : une position trouvée vaut dans l'original)."""
+    import unicodedata
+
+    return "".join(((unicodedata.normalize("NFKD", ch).encode("ascii", "ignore").decode("ascii") or ch)[:1] or ch).lower()
+                   for ch in str(texte))
+
+
+def oter_le_nom(texte: str, nom: str) -> tuple[str, list[str]]:
+    """`texte` sans `nom` — lettres seules, sans accent ni casse, avec la préposition qui l'introduit : `(reste, ôtés)`."""
+    import re
+
+    lettres = [ch for ch in _plier(nom) if ch.isalnum()]
+    if not str(texte or "").strip() or not lettres:
+        return str(texte or ""), []
+    corps = r"[\W_]*".join(re.escape(ch) for ch in lettres)
+    motif = re.compile(rf"{PREPOSITIONS_AVANT_UN_NOM}?(?<![a-z0-9]){corps}(?![a-z0-9])")
+    texte = str(texte)
+    trouves = [(m.start(), m.end()) for m in motif.finditer(_plier(texte))]
+    if not trouves:
+        return texte, []
+    otes = [texte[a:b] for a, b in trouves]
+    for a, b in reversed(trouves):
+        texte = texte[:a] + texte[b:]
+    texte = re.sub(r"\s{2,}", " ", texte)
+    texte = re.sub(r"\s+([,.;!?])", r"\1", texte)
+    return texte.strip(" ,;:·—–-|"), otes
+
+
 def filtres(textes: Any, largeur: int, hauteur: int, duree_s: float | None = None,
-            dossier: str | Path | None = None) -> tuple[list[str], int]:
+            dossier: str | Path | None = None, signaler=None) -> tuple[list[str], int]:
     """Les filtres de tous les textes, dans l'ordre, et le nombre de textes VIDES ignorés.
 
     Un texte vide n'est pas une faute : une chaîne expose « accroche » et
@@ -237,10 +274,15 @@ def filtres(textes: Any, largeur: int, hauteur: int, duree_s: float | None = Non
     for t in textes:
         if not isinstance(t, dict):
             continue
+        t = dict(t)
+        if str(t.get("laisser_au_logo") or "").strip() and str(t.get("texte") or "").strip():
+            t["texte"], otes = oter_le_nom(t["texte"], str(t["laisser_au_logo"]))
+            if otes and signaler:
+                signaler(f"« {' », « '.join(otes)} » ôté du texte incrusté : le wordmark l'écrit déjà"
+                         + (f" — reste « {t['texte']} »" if t["texte"] else " — il ne restait rien : pas d'incrustation"))
         if not str(t.get("texte") or "").strip():
             vides += 1
             continue
-        t = dict(t)
         if duree_s is not None:
             for cle in ("debut_s", "fin_s"):
                 v = t.get(cle)
