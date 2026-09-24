@@ -255,3 +255,29 @@ def test_un_texte_se_pose_sous_le_precedent_a_la_hauteur_reelle_de_son_bloc(tmp_
                                        {"texte": "", "police": str(POLICE), "position": "bas", "sous_le_precedent": True},
                                        {"texte": "c", "police": str(POLICE), "position": "haut", "sous_le_precedent": True}], 600, 750)
     assert "decalage" not in autre[2] and "sous_le_precedent" not in autre[2]
+
+
+@SANS_FFMPEG
+def test_une_image_sans_fichier_dit_pourquoi_elle_n_est_pas_posee(tmp_path):
+    """Le logo décidé absent (image d'ambiance) n'est pas posé, et sa raison — celle de l'étape qui a décidé —
+    va au journal et au récit ; un logo posé dit aussi la sienne."""
+    source = _degrade(tmp_path / "source.png", (400, 400))
+    dits: list[str] = []
+    fait = composition_image.composer(
+        source, tmp_path / "livree.png", 400, 400, signaler=dits.append,
+        images=[{"fichier": None, "ancrage": "haut-centre", "raison": "une image d'ambiance : pas de logo"}])
+    assert fait["images_posees"] == [] and fait["images_non_posees"] == [{"rang": 0, "raison": "une image d'ambiance : pas de logo"}]
+    assert any("image 1 non posée : une image d'ambiance" in d for d in dits)
+    with Image.open(fait["livrable"]) as im:
+        assert im.convert("RGB").getpixel((200, 20)) == (40, 90, 160)          # rien n'est posé en haut
+    logo = _logo(tmp_path / "logo.png")
+    dits.clear()
+    fait = composition_image.composer(
+        source, tmp_path / "livree-2.png", 400, 400, signaler=dits.append,
+        images=[{"fichier": str(logo), "ancrage": "bas-droite", "largeur": 0.3, "marge": 0.05, "raison": "un message est posé"}])
+    assert len(fait["images_posees"]) == 1 and fait["images_non_posees"] == []
+    assert any("image 1 posée : un message est posé" in d for d in dits)
+    # sans raison, le mot d'avant
+    fait = composition_image.composer(source, tmp_path / "livree-3.png", 400, 400, images=[{"fichier": ""}])
+    assert fait["images_non_posees"][0]["raison"] == "aucun fichier à poser (rien d'imposé)"
+

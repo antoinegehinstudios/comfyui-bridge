@@ -59,3 +59,13 @@ non exposé) et « soignée » (base, 25 pas, cfg et négatif réels).
 - [x] Preuves : suite complète verte ; passerelle relancée (PID 41016), `/io` relu ; maestro selftest 67/67 (commit 048edf0) ; Héraldiste 106 tests (commit a3590bc, chantier/menu-impose).
 - [ ] Reste : brume et livre tiennent « bords » à « fondus » sans l'exposer (détecté par le graphe) — l'exposer si l'on veut qu'il se règle sous elles.
 - [x] Connecteur Héraldiste → passerelle → maestro standardisé : Héraldiste n'expose que des FAITS (`faits`, schéma `heraldiste/menu` 1.1.0, `/v1/schema/menu`) ; l'usage (quel champ, `si`, `dit`) est déclaré dans la réconciliation ; maestro inchangé.
+
+## 2026-09-24, soir — la décision du logo et le colorway du nœud de la charte
+
+- [x] Noyau : `selon: {champ, sauf}` (un champ qui n'existe que hors de ces valeurs) ; valeur conditionnelle `{"si", "alors", "sinon"}` vérifiée à la lecture.
+- [x] Composer : une image sans fichier dit sa `raison` (journal, `images_non_posees`).
+- [x] Chaînes : champ `logo` → `1.logo` ; visuel social : message → `1.accroche` / `1.appel` ; livraison : `logo_fichier_pendant` + `logo_raison` ; direction : `colorway_en` et zone calme conditionnelle ; conformité : `1.logo_attendu`.
+- [x] maestro : `selon.sauf` (86640be, selftest 69/69).
+- [x] Sans collision : aucun redémarrage du moteur, nœud de la session sœur intact, `_data/chaines` basculé seulement à la relance, file et moteur vides.
+- [x] Preuves sur le moteur (Grabuge Fest v4, rapide, graine 71) : ambiance → pas de logo, pas de zone calme, part dans la palette 0,913 ; « avec » → logo posé haut-centre dans une zone laissée calme, retrouvé sur 100 % des images, 0,927 ; visuel avec message → logo posé, 0,999 ; « sans » → pas de logo et le nom de la marque GARDÉ dans le sous-message (défaut vu sur la première preuve : le nom était ôté sans logo — corrigé par un `laisser_au_logo` conditionnel), 0,971. Consigne : « brand color mood: brown, orange » (avant : les 19 couleurs, 0,965 sur la même graine).
+- [x] Deux bascules de `_data/chaines`, à 22:11:37 et 22:27:33, chacune file et moteur vides, la seconde déclenchée par une boucle qui a attendu la fin d'un visuel social d'un autre process ; sauvegardes dans le scratchpad (`bascule-avant*`).

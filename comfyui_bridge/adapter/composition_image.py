@@ -136,7 +136,9 @@ def composer(image: str | Path, sortie: str | Path, largeur: int | None = None,
     Rend `livrable`, `mesure` (largeur, hauteur, octets — les mêmes clés qu'un
     rendu), `source`, `cadrage` (facteur, pixels rognés), et ce qui a été posé :
     `textes_demandes`, `textes_poses`, `textes_vides`, `textes_dits[]` (par
-    texte : posé, lignes, taille en px), `images_posees`, `texture_posee`."""
+    texte : posé, lignes, taille en px), `images_posees`, `images_non_posees[]`
+    (rang, raison : une image sans fichier dit pourquoi — sa clé `raison`, que
+    la chaîne lit chez l'étape qui a décidé), `texture_posee`."""
     source = Path(image)
     if not source.is_file():
         raise MediaAssemblyError(f"composition : image introuvable ({image})")
@@ -163,6 +165,7 @@ def composer(image: str | Path, sortie: str | Path, largeur: int | None = None,
     textes_dits: list[dict[str, Any]] = []
     vides = 0
     poses: list[dict[str, Any]] = []
+    non_posees: list[dict[str, Any]] = []
     try:
         if texture:
             entrees, chaines, courant, dits = incrustations.filtre_texture(
@@ -197,12 +200,28 @@ def composer(image: str | Path, sortie: str | Path, largeur: int | None = None,
                 filtre.append(courant + ",".join(lignes) + f"[vtxt{n}]")
                 courant = f"[vtxt{n}]"
         if images:
-            entrees, chaines, courant, dits, poses = incrustations.filtres_images(
-                images, W, H, 1, rang, dossier, courant, 1.0)
-            args += entrees
-            filtre += chaines
-            for d in dits:
-                dit(d)
+            if not isinstance(images, list):
+                raise MediaAssemblyError("composition : « images » doit être une liste")
+            # Une image sans fichier n'est pas posée, et dit pourquoi : sa `raison` (la décision
+            # d'une étape d'amont — « pas de logo sur une image d'ambiance »), sinon « rien d'imposé ».
+            a_poser: list[dict[str, Any]] = []
+            for n, spec in enumerate(images):
+                raison = str(spec.get("raison") or "").strip() if isinstance(spec, dict) else ""
+                if isinstance(spec, dict) and spec.get("fichier"):
+                    a_poser.append({k: v for k, v in spec.items() if k != "raison"})
+                    if raison:
+                        dit(f"image {n + 1} posée : {raison}")
+                    continue
+                raison = raison or "aucun fichier à poser (rien d'imposé)"
+                non_posees.append({"rang": n, "raison": raison})
+                dit(f"image {n + 1} non posée : {raison}")
+            if a_poser:
+                entrees, chaines, courant, dits, poses = incrustations.filtres_images(
+                    a_poser, W, H, 1, rang, dossier, courant, 1.0)
+                args += entrees
+                filtre += chaines
+                for d in dits:
+                    dit(d)
         args += ["-filter_complex", ";".join(filtre), "-map", courant, "-frames:v", "1",
                  "-update", "1", "-pix_fmt", "rgb24", str(cible)]
         montage_video._lancer(montage_video.outil(), args, f"composition de {source.name}")
@@ -221,7 +240,7 @@ def composer(image: str | Path, sortie: str | Path, largeur: int | None = None,
             "textes_demandes": sum(1 for t in (textes or []) if isinstance(t, dict)
                                    and str(t.get("texte") or "").strip()),
             "textes_poses": poses_textes, "textes_vides": vides, "textes_dits": textes_dits,
-            "images_posees": poses,
+            "images_posees": poses, "images_non_posees": non_posees,
             "texture_posee": bool(texture and isinstance(texture, dict) and texture.get("fichier"))}
 
 

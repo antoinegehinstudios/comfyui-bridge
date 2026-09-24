@@ -210,6 +210,21 @@ vérifiée contre `resources/gabarits/creation.json` au chargement
 (`core.gabarit`), chaque écart nommé ; `presentation.gabarit` le publie ; la
 lecture humaine est `resources/chaines-exemples/GABARIT-creation.md`.
 
+**Le logo et les couleurs d'une charte sur une image (2026-09-24 au soir)** : le nœud
+`HeraldisteCharte` DÉCIDE du logo (règles d'usage d'Antoine : « selon le message »,
+« avec », « sans » ; une image fixe n'a pas de carton final, le logo y vit en zone
+émetteur) et le dit (`logo_pose`, `logo_raison`, `logo_attendu`,
+`logo_fichier_pendant`) ; `logo_fichier` et `couleurs_en` restent des FAITS, posés ou
+non. Les deux modes image exposent `logo` (sous une charte seulement : `selon:
+{champ: charte, sauf: [aucune]}`) → `1.logo` ; le visuel social envoie son message
+comme `1.accroche` / `1.appel` ; la livraison pose `logo_fichier_pendant` et dit
+`logo_raison` ; la direction reçoit `colorway_en` et la zone calme par une VALEUR
+CONDITIONNELLE (`{"si": …, "alors": …, "sinon": …}`, noyau `resoudre`) ; la conformité
+reçoit `1.logo_attendu`. Les données vivantes (`_data/chaines`) ne se basculent qu'au
+moment de relancer la passerelle, file vide : une chaîne est lue une fois par
+processus, au premier usage, et un format que le code chargé ne connaît pas ferait
+échouer le job d'un autre.
+
 **Créer une image (2026-09-24)** : deux modes publiés sous la catégorie
 `creer-une-image` — `image-creation` (« Créer une image ») et
 `image-visuel-social` (« Créer un visuel pour les réseaux ») — sur UN socle

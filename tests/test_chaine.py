@@ -512,3 +512,54 @@ def test_un_champ_que_rien_ne_lit_est_refuse_comme_faux_champ():
     technique = noyau.lire_technique(t, "t")
     with pytest.raises(WorkflowMappingError, match="ment"):
         noyau.verifier_techniques(chaine, {"t": technique})
+
+
+def test_selon_peut_dire_sauf():
+    """Un champ qui n'existe que HORS de certaines valeurs du maître : le logo d'une charte n'existe que sous
+    une charte, quelle qu'elle soit (la liste des chartes n'est pas écrite dans la chaîne). « valeurs » et
+    « sauf » s'excluent ; l'une des deux, non vide, est requise."""
+    brut = {"version": 1, "chaine": "c", "resume": "r",
+            "expose": {"charte": {"type": "COMBO", "defaut": "aucune", "options": ["aucune", "x"], "libelle": "Charte"},
+                       "logo": {"type": "COMBO", "defaut": "avec", "options": ["avec", "sans"], "libelle": "Logo",
+                                "selon": {"champ": "charte", "sauf": ["aucune"]}}},
+            "etapes": [{"id": "rendu", "rendre": {"workflow": "g", "prompt": "$logo", "seed": 1, "inputs": {"1.x": "$charte"}}}],
+            "livrable": "$rendu.livrable"}
+    assert noyau.lire(brut, "c").champs["logo"].selon == {"champ": "charte", "sauf": ["aucune"]}
+    import copy
+    for faux in ({"champ": "charte", "sauf": []}, {"champ": "charte", "sauf": ["a"], "valeurs": ["b"]},
+                 {"champ": "charte"}, {"champ": "logo", "sauf": ["a"]}):
+        f = copy.deepcopy(brut)
+        f["expose"]["logo"]["selon"] = faux
+        with pytest.raises(WorkflowMappingError, match="selon"):
+            noyau.lire(f, "c")
+
+
+def test_une_valeur_conditionnelle_choisit_sa_branche_sur_ce_que_si_designe():
+    """{"si": "$renvoi", "alors": x, "sinon": y} : x quand ce que « si » désigne n'est pas vide (la règle de
+    « quand »), y sinon ; l'aperçu (strict=False) montre la condition tant que « si » n'est pas connu ; une forme
+    fausse, un « si » qui n'est pas un renvoi, un renvoi vers l'aval : refusés à la lecture."""
+    zone = {"si": "$a.recit.fichier", "alors": "$a.recit.ancrage", "sinon": ""}
+    assert noyau.resoudre(zone, {}, {"a": {"recit": {"fichier": "x.png", "ancrage": "haut"}}}) == "haut"
+    for vide in (None, "", "  ", False, [], {}):
+        assert noyau.resoudre(zone, {}, {"a": {"recit": {"fichier": vide, "ancrage": "haut"}}}) == ""
+    assert noyau.resoudre(zone, {}, {}, strict=False) == zone
+    assert noyau.resoudre({"k": [zone]}, {}, {"a": {"recit": {"fichier": 1, "ancrage": "bas"}}}) == {"k": ["bas"]}
+    brut = {"version": 1, "chaine": "c", "resume": "r", "expose": {"sujet": {"type": "STRING", "defaut": "", "libelle": "S"}},
+            "etapes": [{"id": "a", "rendre": {"workflow": "g", "prompt": "$sujet", "seed": 1}},
+                       {"id": "b", "rendre": {"workflow": "g", "prompt": "$sujet", "seed": 1,
+                                              "inputs": {"1.zone": {"si": "$a.recit.f", "alors": "$a.recit.z", "sinon": ""}}}}],
+            "livrable": "$b.livrable"}
+    noyau.lire(brut, "c")
+    import copy
+    f = copy.deepcopy(brut)
+    f["etapes"][1]["rendre"]["inputs"]["1.zone"] = {"si": "$a.recit.f", "alors": "x"}
+    with pytest.raises(WorkflowMappingError, match="conditionnelle"):
+        noyau.lire(f, "c")
+    f["etapes"][1]["rendre"]["inputs"]["1.zone"] = {"si": "pas un renvoi", "alors": "x", "sinon": ""}
+    with pytest.raises(WorkflowMappingError, match="renvoi"):
+        noyau.lire(f, "c")
+    f = copy.deepcopy(brut)
+    f["etapes"][0]["rendre"]["inputs"] = {"1.zone": {"si": "$b.recit.f", "alors": "x", "sinon": ""}}
+    with pytest.raises(WorkflowMappingError, match="APRÈS"):
+        noyau.lire(f, "c")
+

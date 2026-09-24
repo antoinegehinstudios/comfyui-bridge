@@ -412,18 +412,55 @@ def _impose_par(nom: str, brut: Any, contexte: str) -> dict[str, Any] | None:
 
 
 def _selon(nom: str, brut: Any, contexte: str) -> dict[str, Any] | None:
-    """`{"champ": …, "valeurs": [...]}` — ou rien. Une forme fausse est refusée :
-    un lanceur qui lirait une condition boiteuse cacherait ou montrerait un
-    champ au hasard."""
+    """`{"champ": …, "valeurs": [...]}` — le champ n'existe que sous ces valeurs
+    du maître —, ou `{"champ": …, "sauf": [...]}` — il n'existe que HORS de
+    celles-là (le logo d'une charte n'existe que sous une charte, quelle qu'elle
+    soit : la liste des chartes n'est pas écrite dans la chaîne) —, ou rien.
+    Une forme fausse est refusée : un lanceur qui lirait une condition boiteuse
+    cacherait ou montrerait un champ au hasard."""
     if brut is None:
         return None
-    if (not isinstance(brut, dict) or not str(brut.get("champ") or "").strip()
-            or not isinstance(brut.get("valeurs"), list) or not brut["valeurs"]):
+    forme = ("valeurs" if isinstance(brut, dict) and "valeurs" in brut and "sauf" not in brut
+             else "sauf" if isinstance(brut, dict) and "sauf" in brut and "valeurs" not in brut else None)
+    if (forme is None or not str(brut.get("champ") or "").strip()
+            or not isinstance(brut.get(forme), list) or not brut[forme]):
         raise WorkflowMappingError(
-            f"{contexte} : « selon » de {nom!r} attend {{\"champ\": \"<nom>\", \"valeurs\": [...]}}")
+            f"{contexte} : « selon » de {nom!r} attend {{\"champ\": \"<nom>\", \"valeurs\": [...]}} "
+            f"ou {{\"champ\": \"<nom>\", \"sauf\": [...]}}")
     if str(brut["champ"]) == nom:
         raise WorkflowMappingError(f"{contexte} : « selon » de {nom!r} ne peut pas le désigner lui-même")
-    return {"champ": str(brut["champ"]), "valeurs": [str(v) for v in brut["valeurs"]]}
+    return {"champ": str(brut["champ"]), forme: [str(v) for v in brut[forme]]}
+
+
+# Une VALEUR CONDITIONNELLE : {"si": "$renvoi", "alors": x, "sinon": y} — x quand ce
+# que « si » désigne n'est pas vide (la règle de « quand », `_vide`), y sinon. C'est
+# ainsi qu'une chaîne écrit l'USAGE d'un fait qu'une étape lui livre (Antoine,
+# 2026-09-24 : « l'usage qui en est fait est propre au réalisateur ») — la zone calme
+# que la direction demande au modèle n'existe que si le logo est posé pendant l'image.
+_CONDITIONNELLE = frozenset({"si", "alors", "sinon"})
+
+
+def est_conditionnelle(valeur: Any) -> bool:
+    return isinstance(valeur, dict) and "si" in valeur
+
+
+def _conditionnelles_tiennent(valeur: Any, contexte: str) -> None:
+    """Toute valeur conditionnelle, aussi profond qu'elle soit, a sa forme ; sinon refusée ici."""
+    if isinstance(valeur, dict):
+        if "si" in valeur:
+            if set(valeur) != _CONDITIONNELLE:
+                raise WorkflowMappingError(
+                    f"{contexte} : une valeur conditionnelle s'écrit {{\"si\": \"$…\", \"alors\": …, \"sinon\": …}} "
+                    f"(trouvé : {', '.join(sorted(map(str, valeur)))})")
+            if not (isinstance(valeur["si"], str) and valeur["si"].startswith("$")):
+                raise WorkflowMappingError(
+                    f"{contexte} : « si » d'une valeur conditionnelle attend un renvoi (« $champ » ou "
+                    f"« $etape.cle »), pas {valeur['si']!r}")
+        for v in valeur.values():
+            _conditionnelles_tiennent(v, contexte)
+    elif isinstance(valeur, (list, tuple)):
+        for v in valeur:
+            _conditionnelles_tiennent(v, contexte)
 
 
 def _renvoi(valeur: Any) -> bool:
@@ -564,6 +601,7 @@ def _etape(brut: Any, rang: int, chaine: str) -> Etape:
             f"{', '.join(GENRES)} (trouvé : {', '.join(genres) or 'aucun'})")
     genre = genres[0]
     params = brut[genre]
+    _conditionnelles_tiennent(params, f"chaîne {chaine!r} : étape {ident!r}")
     # UNE ÉTAPE FACULTATIVE DIT DE QUOI ELLE DÉPEND : « quand » est un renvoi,
     # jamais une valeur écrite en dur (une étape qu'on veut toujours sauter
     # n'a pas à exister). Demandé le 2026-09-15 : « si pas de CTA spécifié, on
@@ -763,6 +801,7 @@ def lire_technique(brut: Any, nom_declare: str | None = None) -> Technique:
         if inconnues:
             raise WorkflowMappingError(
                 f"{contexte} : rôle {str(cle)!r} — clé(s) inconnue(s) : {', '.join(inconnues)}")
+        _conditionnelles_tiennent(entrees, f"{contexte} : rôle {str(cle)!r}")
         roles[str(cle)] = Role(nom=str(cle), workflow=workflow, inputs=dict(entrees))
     listes = brut.get("controles") or {}
     if not isinstance(listes, dict):
@@ -1042,6 +1081,11 @@ def resoudre(valeur: Any, valeurs: dict[str, Any], resultats: dict[str, Any],
                 raise WorkflowMappingError(f"« {valeur} » n'a rien à désigner à ce moment")
             return valeur
         return trouve
+    if est_conditionnelle(valeur):
+        condition = resoudre(valeur["si"], valeurs, resultats, strict)
+        if not strict and condition == valeur["si"]:
+            return valeur          # pas encore connu : l'aperçu montre la condition, il n'invente pas la branche
+        return resoudre(valeur["sinon"] if _vide(condition) else valeur["alors"], valeurs, resultats, strict)
     if isinstance(valeur, dict):
         return {k: resoudre(v, valeurs, resultats, strict) for k, v in valeur.items()}
     if isinstance(valeur, list):

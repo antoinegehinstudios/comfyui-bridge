@@ -38,10 +38,21 @@ REGLAGES_DE_STYLE = ("cadrage", "lumiere", "palette", "ambiance")
 COMMUNS = {"charte": "aucune", "prompt": "", "style": None, "cadrage": "libre", "lumiere": "libre", "palette": "libre",
            "ambiance": "libre", "width": 1080, "height": 1350, "seed": 71}
 IMPOSE_PAR_LA_CHARTE = {"champ": "charte", "sauf": ["aucune"]}
+# La direction reçoit les couleurs DOMINANTES (le colorway du nœud), et la zone calme du logo SEULEMENT quand le
+# nœud pose un logo pendant l'image — une valeur conditionnelle : l'usage d'un fait, écrit chez le réalisateur.
+ZONE_CALME_SI_LOGO_POSE = {"si": "$contrainte.recit.logo_fichier_pendant", "alors": "$contrainte.recit.logo_ancrage",
+                           "sinon": ""}
+# Le nom que le wordmark écrit ne s'ôte du message que si le logo est posé (vu le 2026-09-24 à 22:23 : « sans »
+# logo, « Grabuge Fest » ôté du sous-message — la marque disparaissait de l'image).
+NOM_OTE_SI_LOGO_POSE = {"si": "$contrainte.recit.logo_fichier_pendant", "alors": "$contrainte.recit.logo_texte",
+                        "sinon": ""}
 CE_QUE_LA_CHARTE_IMPOSE_A_LA_DIRECTION = {"1.charte": "$charte", "1.style_impose": "$contrainte.recit.positif",
-                                          "1.palette_imposee": "$contrainte.recit.couleurs_en",
+                                          "1.palette_imposee": "$contrainte.recit.colorway_en",
                                           "1.negatif_impose": "$contrainte.recit.negatif",
-                                          "1.zone_du_logo": "$contrainte.recit.logo_ancrage"}
+                                          "1.zone_du_logo": ZONE_CALME_SI_LOGO_POSE}
+LOGO_SOUS_UNE_CHARTE = {"type": "COMBO", "defaut": "selon le message", "options": ["selon le message", "avec", "sans"],
+                        "selon": {"champ": "charte", "sauf": ["aucune"]}, "libelle": "Logo de la charte",
+                        "categorie": "charte"}
 CONSTATS_DE_LA_CHARTE = ["la_charte_demandee_est_appliquee", "la_palette_de_la_charte_est_dans_la_consigne",
                          "la_palette_de_la_charte_est_tenue", "le_logo_impose_est_pose", "le_logo_impose_est_intact",
                          "le_logo_impose_tient_sa_taille", "les_regles_mesurables_de_la_charte_sont_tenues",
@@ -81,11 +92,18 @@ def test_les_deux_modes_partagent_le_meme_socle(standard, social):
         assert contrainte["quand"] == {"valeur": "$charte", "op": "ne", "attendu": "aucune"}
         assert contrainte["rendre"]["workflow"] == "image-heraldiste"
         assert contrainte["rendre"]["inputs"]["1.charte"] == "$charte" and contrainte["rendre"]["inputs"]["1.prompt"] == "$prompt"
+        # Le LOGO : un champ qui n'existe que sous une charte (selon « sauf »), juste après elle ; le nœud décide
+        # (selon le message | avec | sans) et le dit ; la chaîne lit sa décision, jamais le fichier brut.
+        assert list(brut["expose"])[:2] == ["charte", "logo"]
+        assert {k: v for k, v in brut["expose"]["logo"].items() if k != "aide"} == LOGO_SOUS_UNE_CHARTE
+        assert contrainte["rendre"]["inputs"]["1.logo"] == "$logo"
         sinon = contrainte["sinon"]["recit"]
         assert sinon["charte"] == "aucune" and sinon["tenue"] is True and sinon["appliquee"] is False
-        for cle in ("positif", "couleurs_en", "negatif", "logo_fichier", "logo_ancrage", "texture_fichier",
-                    "references_transmises", "fond", "logo_texte"):
+        for cle in ("positif", "couleurs_en", "colorway_en", "negatif", "logo_fichier", "logo_fichier_pendant",
+                    "logo_ancrage", "logo_raison", "logo_attendu", "texture_fichier", "references_transmises", "fond",
+                    "logo_texte"):
             assert cle in sinon, cle
+        assert sinon["logo_fichier_pendant"] is None and sinon["logo_attendu"] == "aucun"
         assert direction["workflow"] == "image-direction"
         for cle, renvoi in {**ENTREES_DE_LA_DIRECTION, **CE_QUE_LA_CHARTE_IMPOSE_A_LA_DIRECTION}.items():
             assert direction["inputs"][cle] == renvoi, cle
@@ -94,23 +112,27 @@ def test_les_deux_modes_partagent_le_meme_socle(standard, social):
         assert (livraison["image"], livraison["largeur"], livraison["hauteur"]) == (
             "$rendu.livrable", "$width", "$height")
         # Le logo et la texture de la charte se posent à la livraison, avec ses mesures.
+        # Le logo se pose quand le nœud l'a décidé (`logo_fichier_pendant`), et sa raison est dite dans tous les cas.
         logo = livraison["images"][0]
-        assert logo == {"fichier": "$contrainte.recit.logo_fichier", "ancrage": "$contrainte.recit.logo_ancrage",
+        assert logo == {"fichier": "$contrainte.recit.logo_fichier_pendant", "ancrage": "$contrainte.recit.logo_ancrage",
                         "largeur": "$contrainte.recit.logo_largeur", "marge": "$contrainte.recit.logo_marge",
-                        "hauteur_min_px": "$contrainte.recit.logo_hauteur_min_px", "espace_min": "$contrainte.recit.logo_zone"}
+                        "hauteur_min_px": "$contrainte.recit.logo_hauteur_min_px", "espace_min": "$contrainte.recit.logo_zone",
+                        "raison": "$contrainte.recit.logo_raison"}
         assert livraison["texture"]["fichier"] == "$contrainte.recit.texture_fichier"
         # Le constat d'Héraldiste porte sur l'IMAGE livrée, une seule, par son chemin.
         assert conformite["quand"] == {"valeur": "$charte", "op": "ne", "attendu": "aucune"}
         assert conformite["rendre"]["workflow"] == "video-heraldiste-conformite"
-        assert conformite["rendre"]["inputs"] == {"1.video": "$livraison.livrable", "1.charte": "$charte", "1.images": 1}
+        # … et ne cherche le logo que là où la décision l'attend (partout, ou nulle part).
+        assert conformite["rendre"]["inputs"] == {"1.video": "$livraison.livrable", "1.charte": "$charte", "1.images": 1,
+                                                  "1.logo_attendu": "$contrainte.recit.logo_attendu"}
         assert conformite["sinon"]["recit"]["tenue"] is True and conformite["sinon"]["recit"]["regles_non_tenues"] == []
 
 
 def test_les_champs_et_leurs_defauts(standard, social):
     defauts = {k: v.get("defaut") for k, v in standard["expose"].items()}
-    assert defauts == {**COMMUNS, "style": "photographie", "technique": None}
+    assert defauts == {**COMMUNS, "logo": "selon le message", "style": "photographie", "technique": None}
     defauts = {k: v.get("defaut") for k, v in social["expose"].items()}
-    assert defauts == {**COMMUNS, **TEXTE, "style": "affiche-minimaliste", "technique": None}
+    assert defauts == {**COMMUNS, **TEXTE, "logo": "selon le message", "style": "affiche-minimaliste", "technique": None}
     for brut in (standard, social):
         expose = brut["expose"]
         # La charte EN PREMIER : « sinon c'est pas logique » (Antoine, 2026-09-24).
@@ -188,10 +210,26 @@ def test_le_message_est_pose_pas_peint_et_la_zone_demandee(social):
     assert [t["texte"] for t in textes] == ["$message", "$sous_message"]
     assert all(t["police"] == "$contrainte.recit.police" and t["position"] == "$texte_position"
                and t["couleur"] == "$contrainte.recit.couleur" and t["fond"] == "$contrainte.recit.fond"
-               and t["boite"] == "$bandeau" and t["laisser_au_logo"] == "$contrainte.recit.logo_texte" for t in textes)
+               and t["boite"] == "$bandeau" and t["laisser_au_logo"] == NOM_OTE_SI_LOGO_POSE for t in textes)
+    # Sans logo posé, le nom de la marque reste dans le message ; le constat du texte du logo est alors sans objet.
+    controle = next(x for x in etapes["constat_de_la_charte"]["constater"] if x["id"] == "ce_que_le_logo_ecrit_n_est_pas_reecrit")
+    assert controle["valeur"] == {"si": "$contrainte.recit.logo_fichier_pendant",
+                                  "alors": "$conformite.recit.logo_texte_non_reecrit", "sinon": True}
+    sans_logo = {"contrainte": {"recit": {"logo_fichier_pendant": None, "logo_texte": "Grabuge Fest"}},
+                 "conformite": {"recit": {"logo_texte_non_reecrit": False}}}
+    avec_logo = {"contrainte": {"recit": {"logo_fichier_pendant": "E:/logo.png", "logo_texte": "Grabuge Fest"}},
+                 "conformite": {"recit": {"logo_texte_non_reecrit": False}}}
+    assert noyau.resoudre(textes[1]["laisser_au_logo"], {}, sans_logo) == ""
+    assert noyau.resoudre(textes[1]["laisser_au_logo"], {}, avec_logo) == "Grabuge Fest"
+    assert noyau.resoudre(controle["valeur"], {}, sans_logo) is True
+    assert noyau.resoudre(controle["valeur"], {}, avec_logo) is False
     assert textes[0]["taille"] == "$taille_message" and textes[1]["sous_le_precedent"] is True and "decalage" not in textes[1]
-    # Le message est posé par la livraison, jamais confié au graphe de peinture ni à la charte.
-    assert "$message" not in json.dumps(etapes["rendu"]) and "$message" not in json.dumps(contrainte)
+    # Le message est posé par la livraison, jamais confié au graphe de peinture ; la charte ne le reçoit que pour
+    # DÉCIDER du logo (« un message est posé : la marque signe »), comme accroche et appel — jamais dans sa consigne.
+    assert "$message" not in json.dumps(etapes["rendu"])
+    entrees_charte = contrainte["rendre"]["inputs"]
+    assert entrees_charte["1.prompt"] == "$prompt"
+    assert {k for k, v in entrees_charte.items() if "message" in json.dumps(v)} == {"1.accroche", "1.appel"}
     constats = {c["id"]: c for c in etapes["constat"]["constater"]}
     assert constats["chaque_texte_demande_est_pose"]["attendu"] == "$livraison.textes_demandes"
     du_message = etapes["constat_du_message"]
@@ -299,3 +337,25 @@ def test_sur_ce_poste_les_modes_sont_publies_et_leurs_graphes_tiennent():
     assert turbo["3"]["inputs"]["cfg"] == 1.0
     base = json.loads(pathlib.Path(r["workflows"]["image-z-image"]["workflow"]).read_text(encoding="utf-8"))
     assert base["40"]["class_type"] == "StringConcatenate" and base["7"]["inputs"]["text"] == ["40", 0]
+
+
+def test_le_visuel_social_dit_au_noeud_qu_un_message_est_pose(social):
+    """Le nœud de la charte signe d'un logo une création qui porte un message (règle d'usage du 2026-09-24) : le
+    visuel social lui envoie son message et son sous-message comme accroche et appel ; la création standard, qui
+    n'en a pas, ne lui envoie rien de tel."""
+    entrees = next(e for e in social["etapes"] if e["id"] == "contrainte")["rendre"]["inputs"]
+    assert entrees["1.accroche"] == "$message" and entrees["1.appel"] == "$sous_message"
+    standard = json.loads((EXEMPLES / "image-creation.json").read_text(encoding="utf-8"))
+    entrees = next(e for e in standard["etapes"] if e["id"] == "contrainte")["rendre"]["inputs"]
+    assert "1.accroche" not in entrees and "1.appel" not in entrees
+
+
+def test_la_zone_calme_ne_se_demande_que_si_le_logo_est_pose_pendant_l_image(standard):
+    """La direction lit la décision du nœud par une valeur conditionnelle : l'ancrage quand le logo est posé
+    pendant l'image, rien sinon — une image d'ambiance ne garde pas une zone vide pour un logo absent."""
+    zone = next(e for e in standard["etapes"] if e["id"] == "direction")["rendre"]["inputs"]["1.zone_du_logo"]
+    pose = {"contrainte": {"recit": {"logo_fichier_pendant": "E:/logo.png", "logo_ancrage": "haut-centre"}}}
+    absent = {"contrainte": {"recit": {"logo_fichier_pendant": None, "logo_ancrage": "haut-centre"}}}
+    assert noyau.resoudre(zone, {}, pose) == "haut-centre"
+    assert noyau.resoudre(zone, {}, absent) == ""
+
