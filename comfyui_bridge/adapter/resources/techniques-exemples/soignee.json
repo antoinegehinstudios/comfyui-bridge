@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "technique": "soignee",
+  "libelle": "Soignée (Z-Image, 25 pas, guidage et négatif)",
+  "resume": "Le modèle de base Z-Image (Alibaba Tongyi, Apache-2.0, 6 milliards de paramètres en int8) : vingt-cinq pas avec guidage réel (cfg) et un prompt négatif qui pèse. Trois à cinq fois plus long que la technique rapide, plus de latitude créative.",
+  "par_defaut": false,
+  "expose": {
+    "steps": {
+      "type": "INT",
+      "defaut": 25,
+      "min": 10,
+      "max": 50,
+      "libelle": "Pas de débruitage",
+      "categorie": "technique",
+      "aide": "Le nombre de pas du modèle de base : 25 est le réglage du gabarit officiel. Moins va plus vite et laisse l'image moins finie ; au-delà de 35, le gain se voit peu. Chaque pas coûte le même temps."
+    },
+    "cfg": {
+      "type": "FLOAT",
+      "defaut": 4.0,
+      "min": 1.0,
+      "max": 8.0,
+      "step": 0.5,
+      "libelle": "Guidage (cfg)",
+      "categorie": "technique",
+      "aide": "De combien le modèle s'écarte de ce qu'il ferait sans consigne : 1 = aucun guidage (et le négatif ne pèse plus), 3 à 5 = fidèle à la consigne (4 est le réglage officiel), au-delà de 6 les couleurs saturent et les formes se durcissent."
+    },
+    "negatif": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "À éviter (facultatif)",
+      "categorie": "avance",
+      "aide": "Ce que l'image ne doit pas montrer, ajouté au négatif du style (et de la palette). Ne pèse que sous cette technique, parce que seul son guidage lit un négatif."
+    }
+  },
+  "roles": {
+    "image": {
+      "workflow": "image-z-image",
+      "inputs": {
+        "27.text": "$direction.recit.prompt",
+        "40.string_a": "$direction.recit.negatif",
+        "40.string_b": "$negatif",
+        "13.width": "$direction.recit.largeur_rendu",
+        "13.height": "$direction.recit.hauteur_rendu",
+        "3.steps": "$steps",
+        "3.cfg": "$cfg"
+      }
+    }
+  },
+  "controles": {},
+  "notes": {
+    "ce_que_le_noeud_recoit": "La consigne composée par la direction (27.text) ; le négatif du style et de la direction (40.string_a) joint à celui de l'utilisateur (40.string_b) par un StringConcatenate avant l'encodeur du négatif (7) ; la taille native de rendu (13.width, 13.height) ; les pas (3.steps) et le guidage (3.cfg). La graine vient de la chaîne par sa liaison (3.seed).",
+    "reglages_figes": "sampler res_multistep, scheduler simple ; shift 3,0 (ModelSamplingAuraFlow) — ceux du gabarit officiel de ComfyUI pour Z-Image (docs.comfy.org/tutorials/image/z-image/z-image). Poids : z_image_int8_convrot.safetensors (Comfy-Org, 6,2 Go), le même encodeur et le même VAE que la technique rapide."
+  }
+}

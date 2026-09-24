@@ -133,8 +133,12 @@ def couche_de_texture(fichier: Any, largeur: int, hauteur: int, taille_relative:
 
 
 def filtre_texture(texture: Any, largeur: int, hauteur: int, fps: int, rang: int, dossier: str | Path,
-                   entree: str) -> tuple[list[str], list[str], str, list[str]]:
-    """La texture fondue sur la vidéo : `(arguments d'entrée, chaînes de filtres, étiquette de sortie, ce qui est dit)`."""
+                   entree: str, format_sortie: str = "yuv420p") -> tuple[list[str], list[str], str, list[str]]:
+    """La texture fondue sur la vidéo : `(arguments d'entrée, chaînes de filtres, étiquette de sortie, ce qui est dit)`.
+
+    ``format_sortie`` : le format de pixels après la fusion — celui de l'encodage
+    vidéo par défaut ; une image fixe composée demande ``rgb24``, sans quoi sa
+    chrominance serait sous-échantillonnée avant même d'être écrite."""
     if not texture or not isinstance(texture, dict) or not texture.get("fichier"):
         return [], [], entree, (["aucune texture à poser"] if texture else [])
     fusion = str(texture.get("fusion") or "normal")
@@ -147,7 +151,7 @@ def filtre_texture(texture: Any, largeur: int, hauteur: int, fps: int, rang: int
     couche_de_texture(texture["fichier"], largeur, hauteur, texture.get("taille_relative")).save(chemin)
     args = ["-loop", "1", "-framerate", str(int(fps)), "-i", str(chemin)]
     chaines = [f"[{rang}:v]format=gbrp,setsar=1[tex]", f"{entree}format=gbrp[vbase]",
-               f"[vbase][tex]blend=all_expr='A+(({FUSIONS[fusion]})-A)*{opacite:.4f}':shortest=1,format=yuv420p[vtex]"]
+               f"[vbase][tex]blend=all_expr='A+(({FUSIONS[fusion]})-A)*{opacite:.4f}':shortest=1,format={format_sortie}[vtex]"]
     dit = f"texture « {Path(str(texture['fichier'])).name} » fondue : {fusion} à {round(opacite * 100)} %"
     return args, chaines, "[vtex]", [dit]
 

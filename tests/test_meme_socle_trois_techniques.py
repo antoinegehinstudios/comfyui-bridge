@@ -346,8 +346,12 @@ def _recit_qui_tient(controles: list[dict], recit: dict) -> dict:
 
 
 def _techniques_de_reference() -> dict:
-    return {f.stem: noyau.lire_technique(json.loads(f.read_text(encoding="utf-8")), f.stem)
+    """Les techniques DE CE PLAN parmi les copies de référence : celles qui
+    tiennent le rôle « deroulement » (depuis le 2026-09-24, le dossier porte
+    aussi celles d'un autre plan — créer une image, rôle « image »)."""
+    lues = {f.stem: noyau.lire_technique(json.loads(f.read_text(encoding="utf-8")), f.stem)
             for f in sorted(TECHNIQUES.glob("*.json"))}
+    return {nom: t for nom, t in lues.items() if "deroulement" in t.roles}
 
 
 def _recits(techniques: dict) -> dict:
@@ -765,6 +769,8 @@ def test_sur_ce_poste_chaque_role_de_chaque_technique_declare_les_tranches():
     noeuds = {}
     for fichier in sorted((donnees / "techniques").glob("*.json")):
         technique = noyau.lire_technique(json.loads(fichier.read_text(encoding="utf-8")), fichier.stem)
+        if "deroulement" not in technique.roles:
+            continue                      # une technique d'un autre plan (créer une image)
         for role in ("deroulement", "conclusion", "appel"):
             nom = technique.roles[role].workflow
             chemin = pathlib.Path(catalogue["workflows"][nom]["workflow"])

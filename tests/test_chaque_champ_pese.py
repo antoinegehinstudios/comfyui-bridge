@@ -122,7 +122,7 @@ def _cibles_de(champ: str, chaine: noyau.Chaine, techniques: dict) -> list[tuple
 @pytest.mark.parametrize("nom,chemin,entrees", _chaines_publiees(), ids=lambda x: x if isinstance(x, str) else "")
 def test_chaque_champ_expose_est_lu_et_atteint_une_entree_qui_existe(nom, chemin, entrees):
     chaine = noyau.lire(_json(chemin), nom)
-    techniques = _techniques() if chaine.champ_de_technique else {}
+    techniques = noyau.techniques_pour(chaine, _techniques()) if chaine.champ_de_technique else {}
     noyau.verifier_techniques(chaine, techniques)
     lecteurs = {}
     for etape in chaine.etapes:
@@ -171,8 +171,8 @@ def test_aucun_champ_n_est_derive(nom, chemin, entrees):
     d'un formulaire). Une chaîne qui ne choisit aucune technique n'admet aucun
     de leurs champs (mesuré le 2026-09-19 : un mode sans technique publiait les
     papiers et les encres d'un autre parmi ce qu'il accepte)."""
-    techniques = _techniques()
     chaine = noyau.lire(_json(chemin), nom)
+    techniques = noyau.techniques_pour(chaine, _techniques())
     declares = set(chaine.champs)
     if chaine.champ_de_technique is not None:
         for technique in techniques.values():
@@ -202,8 +202,9 @@ def test_chaque_raccourci_est_valide_ou_publie_perime_avec_sa_raison():
         if mode not in chaines:
             continue                      # un raccourci de graphe : jugé par l'API
         chaine = noyau.lire(_json(chaines[mode][0]), mode)
-        admis = noyau.champs_admis(chaine, techniques)
-        technique = noyau.technique_choisie(chaine, valeurs, techniques)
+        siennes = noyau.techniques_pour(chaine, techniques)
+        admis = noyau.champs_admis(chaine, siennes)
+        technique = noyau.technique_choisie(chaine, valeurs, siennes)
         retenus = noyau.champs_retenus(chaine, technique)
         fautes = []
         for champ, brute in valeurs.items():

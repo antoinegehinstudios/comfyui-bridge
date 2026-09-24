@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "chaine": "image-creation",
+  "resume": "CRÉER UNE IMAGE — le flux de création maître (2026-09-24). Une consigne, un style d'image et quatre réglages de style créatif (cadrage, lumière, palette, ambiance) sont composés par la DIRECTION en une consigne dont le récit dit mot pour mot ce que chaque paramètre a ajouté ; une TECHNIQUE interchangeable (rapide : Z-Image Turbo, soignée : Z-Image avec guidage et négatif) peint à la taille native du modèle ; la LIVRAISON porte l'image à la taille exacte demandée (couvrir puis rogner quelques pixels, jamais de bandes) et la chaîne CONSTATE. Aucun paramètre fantôme : ce qu'une technique ne lit pas n'est pas proposé sous elle.",
+  "expose": {
+    "prompt": {
+      "type": "STRING",
+      "defaut": "",
+      "requis": true,
+      "libelle": "Ce que l'image montre",
+      "categorie": "sujet",
+      "aide": "Le sujet, décrit comme à un photographe ou à un illustrateur : ce qu'on voit, où, dans quelle matière. Le style et les réglages ajoutent leurs mots autour ; vos mots restent tels quels (le modèle lit le français)."
+    },
+    "style": {
+      "type": "COMBO",
+      "defaut": "photographie",
+      "options_depuis": {"menu": "style_image"},
+      "libelle": "Style",
+      "categorie": "style",
+      "aide": "Le médium et la matière de l'image — photo, illustration, peinture, gravure, affiche, matières — un gabarit de consigne du catalogue d'image de direction de style (styles/images.json). Chaque style enveloppe votre sujet de ses mots et refuse les siens au négatif."
+    },
+    "cadrage": {
+      "type": "COMBO",
+      "defaut": "libre",
+      "options_depuis": {"menu": "cadrage_image"},
+      "libelle": "Cadrage",
+      "categorie": "style",
+      "aide": "Le plan et le point de vue (gros plan, plan large, vue de dessus, contre-plongée, sujet isolé…). « Libre » n'ajoute rien : le style et le sujet décident. Toute autre valeur ajoute ses mots à la consigne — le récit de la direction les cite."
+    },
+    "lumiere": {
+      "type": "COMBO",
+      "defaut": "libre",
+      "options_depuis": {"menu": "lumiere_image"},
+      "libelle": "Lumière",
+      "categorie": "style",
+      "aide": "Sous quelle lumière (jour douce, heure dorée, studio, contre-jour, clair-obscur, néon…). « Libre » n'ajoute rien ; toute autre valeur ajoute ses mots à la consigne."
+    },
+    "palette": {
+      "type": "COMBO",
+      "defaut": "libre",
+      "options_depuis": {"menu": "palette_image"},
+      "libelle": "Palette",
+      "categorie": "style",
+      "aide": "La dominante de couleur (chaude, froide, pastel, vive, sombre, terre, monochrome, noir et blanc…). « Libre » n'ajoute rien ; une palette qui refuse quelque chose (noir et blanc : la couleur) l'ajoute aussi au négatif."
+    },
+    "ambiance": {
+      "type": "COMBO",
+      "defaut": "libre",
+      "options_depuis": {"menu": "ambiance_image"},
+      "libelle": "Ambiance",
+      "categorie": "style",
+      "aide": "Le ton (calme, dramatique, joyeuse, mystérieuse, luxueuse, brute, onirique, épurée…). « Libre » n'ajoute rien ; toute autre valeur ajoute ses mots à la consigne."
+    },
+    "technique": {
+      "type": "COMBO",
+      "options_depuis": {"techniques": true},
+      "libelle": "Technique",
+      "categorie": "technique",
+      "aide": "La façon de peindre : rapide (Z-Image Turbo, huit pas, sans guidage — un négatif n'y pèserait pas, il n'est pas proposé) ou soignée (Z-Image, vingt-cinq pas, guidage et négatif réels). Une technique de plus est un fichier de plus chez la passerelle."
+    },
+    "width": {
+      "type": "INT",
+      "defaut": 1080,
+      "min": 256,
+      "max": 4096,
+      "libelle": "Largeur",
+      "unite": "px",
+      "categorie": "format",
+      "aide": "La largeur de l'image livrée, exacte. Le modèle rend à sa taille native (des multiples de seize, au plus 2048 de grand côté et 2,2 mégapixels) dans la même proportion, et la livraison ramène à cette taille : dans les plafonds, elle ne fait que rogner quelques pixels ; au-delà, elle agrandit (lanczos) et le constate."
+    },
+    "height": {
+      "type": "INT",
+      "defaut": 1350,
+      "min": 256,
+      "max": 4096,
+      "libelle": "Hauteur",
+      "unite": "px",
+      "categorie": "format",
+      "aide": "La hauteur de l'image livrée, exacte. Orientation et résolution la règlent ; elle reste réglable ici. 1080 × 1350 (4:5) est le format d'une publication de réseau social ; 1080 × 1080 le carré ; 1080 × 1920 la story."
+    },
+    "seed": {
+      "type": "INT",
+      "defaut": 71,
+      "libelle": "Graine",
+      "categorie": "avance",
+      "aide": "Le hasard du rendu. La même graine, la même consigne et la même technique redonnent la même image ; la changer donne une autre version du même sujet."
+    }
+  },
+  "etapes": [
+    {
+      "id": "direction",
+      "rendre": {
+        "workflow": "image-direction",
+        "inputs": {
+          "1.style": "$style",
+          "1.sujet": "$prompt",
+          "1.cadrage": "$cadrage",
+          "1.lumiere": "$lumiere",
+          "1.palette": "$palette",
+          "1.ambiance": "$ambiance",
+          "1.largeur": "$width",
+          "1.hauteur": "$height"
+        }
+      }
+    },
+    {
+      "id": "rendu",
+      "rendre": {
+        "role": "image",
+        "technique": "$technique",
+        "seed": "$seed"
+      }
+    },
+    {
+      "id": "livraison",
+      "composer": {
+        "image": "$rendu.livrable",
+        "largeur": "$width",
+        "hauteur": "$height"
+      }
+    },
+    {
+      "id": "constat",
+      "constater": [
+        {
+          "id": "la_largeur_demandee_est_tenue",
+          "valeur": "$livraison.mesure.width",
+          "op": "eq",
+          "attendu": "$width",
+          "aide": "L'image livrée doit faire exactement la largeur demandée : la livraison couvre puis rogne au centre, jamais de bandes. Non tenu : la composition a échoué à cette taille — dire le job."
+        },
+        {
+          "id": "la_hauteur_demandee_est_tenue",
+          "valeur": "$livraison.mesure.height",
+          "op": "eq",
+          "attendu": "$height",
+          "aide": "L'image livrée doit faire exactement la hauteur demandée. Non tenu : dire le job."
+        },
+        {
+          "id": "l_image_n_est_pas_agrandie_a_la_livraison",
+          "valeur": "$direction.recit.agrandissement_a_la_livraison",
+          "op": "lte",
+          "attendu": 1.0,
+          "aide": "Dans les plafonds du modèle (2048 px de grand côté, 2,2 mégapixels), le rendu est au moins aussi grand que la demande et la livraison ne fait que rogner. Non tenu : la demande dépasse les plafonds, le rendu a été fait à la taille native dans la même proportion puis agrandi d'autant (lanczos) — l'image est livrée, moins fine qu'un rendu natif ; pour une image nette à cette taille, demander au plus 2048 px de grand côté. C'est un constat."
+        },
+        {
+          "id": "le_sujet_est_dans_la_consigne",
+          "valeur": "$direction.recit.mots_par_parametre.sujet",
+          "op": "exists",
+          "aide": "La direction a écrit votre sujet dans la consigne, tel quel. Non tenu : la direction n'a pas rendu de récit — dire le job."
+        }
+      ]
+    },
+    {
+      "id": "controle",
+      "verifier": [
+        {
+          "id": "livrable_pese",
+          "valeur": "$livraison.mesure.bytes",
+          "op": "gte",
+          "attendu": 50000,
+          "aide": "Le fichier livré doit peser au moins 50 ko : une image de plus d'un mégapixel qui pèse moins est vide ou uniforme. Relancer ; si cela se répète, dire le job."
+        }
+      ]
+    }
+  ],
+  "livrable": "$livraison.livrable",
+  "notes": {
+    "pourquoi": "Antoine, 2026-09-24 : « je veux à la mise au catalogue maestro la possibilité de créer des images, avec paramètres, la même logique de templatisation/paramètres que Révéler une image ; un flux de création maître qui annonce ses ensembles de paramètres ajustés personnalisés ; des paramètres d'ajustement de style créatif qui ne mentent pas ; un mode création standard, et un autre, création de visuel pour médias sociaux ». Ce mode est le standard ; image-visuel-social est l'autre, sur le même socle.",
+    "le_socle": "Quatre étapes agnostiques : direction (la consigne, le récit des mots, la taille native) → rendu (un RÔLE, « image », tenu par la technique choisie) → livraison (composer : taille exacte, textes, logos, texture) → constat. Ce que la peinture lit (poids, pas, guidage, négatif) vit dans _data/techniques/<nom>.json ; une technique de plus est un fichier de plus. Ce que la direction lit (styles, lumières, ambiances, cadrages, palettes) vit dans les catalogues du paquet comfyui-direction-de-style ; un style de plus est une entrée de plus.",
+    "aucun_fantome": "Un réglage exposé pèse ou n'est pas exposé : le négatif et le guidage n'existent que sous la technique soignée (le Turbo, à cfg 1, les ignorerait) ; chaque réglage de style ajoute ses mots à la consigne et le récit de la direction les cite par paramètre (mots_par_parametre) ; « libre » est le seul choix qui n'ajoute rien, et il le dit. La preuve d'un poids est un vrai run : même graine, deux styles, deux images.",
+    "la_taille": "Le modèle rend à des multiples de seize, dans ses plafonds ; la demande est honorée par la livraison, exacte (constatée), qui rogne au plus quelques pixels au centre. Une demande au-delà des plafonds est agrandie et CONSTATÉE (l_image_n_est_pas_agrandie_a_la_livraison), jamais refusée.",
+    "ce_qui_vient": "La charte graphique d'Héraldiste (champ « charte », étape de contrainte entre direction et rendu, logo et police à la livraison, constat de conformité sur l'image) — la livraison (composer) accepte déjà textes, images et texture."
+  }
+}

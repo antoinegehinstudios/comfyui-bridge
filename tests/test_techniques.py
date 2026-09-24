@@ -901,3 +901,41 @@ def test_un_raccourci_qui_porte_un_reglage_d_une_autre_technique_est_publie_peri
     assert vus["grain-sous-le-voile"]["perime"] == {
         "champs": ["grain"],
         "raison": "« grain » : n'est pas un réglage de la technique voile — sans effet sous elle"}
+
+
+def test_les_techniques_d_une_chaine_sont_celles_qui_tiennent_ses_roles():
+    """2026-09-24 : le dossier des techniques est UN pour toutes les chaînes.
+    Une technique qui ne tient aucun rôle de la chaîne est d'un autre plan :
+    écartée sans bruit — ni au menu, ni parmi les champs admis, ni jugée. Une
+    technique qui n'en tient qu'une part est gardée, et refusée en nommant le
+    rôle qui manque : c'est une faute d'écriture, pas une autre chaîne."""
+    chaine = noyau.lire(CHAINE_A_TECHNIQUES, "chaine-a-techniques")
+    trait = noyau.lire_technique(TECHNIQUE_TRAIT)
+    autre_plan = noyau.lire_technique({"technique": "image-rapide", "roles": {"image": {"workflow": "g"}},
+                                       "controles": {}, "par_defaut": True,
+                                       "expose": {"pas": {"type": "INT", "defaut": 8, "libelle": "Pas"}}})
+    toutes = {"trait": trait, "image-rapide": autre_plan}
+    siennes = noyau.techniques_pour(chaine, toutes)
+    assert list(siennes) == ["trait"]
+    noyau.verifier_techniques(chaine, siennes)                 # l'autre plan ne la fait pas refuser
+    assert "pas" not in noyau.champs_admis(chaine, siennes)    # ni n'ajoute ses champs
+    assert noyau.technique_choisie(chaine, {}, siennes).nom == "trait"   # ni ne s'impose par défaut
+    # Une chaîne sans rôle n'a aucune technique : elle n'en choisit pas, et deux
+    # techniques de deux plans qui se disent chacune par défaut ne la font pas
+    # refuser (mesuré sur « video-prolongement » avant la première relance).
+    sans_role = noyau.lire({**CHAINE_A_TECHNIQUES, "expose": {"largeur": CHAINE_A_TECHNIQUES["expose"]["largeur"]},
+                            "etapes": [{"id": "peinture", "rendre": {"workflow": "graphe-au-trait",
+                                                                      "width": "$largeur", "height": "$largeur"}}]},
+                           "sans-role")
+    deux_defauts = {"trait": noyau.lire_technique({**TECHNIQUE_TRAIT, "par_defaut": True}), "image-rapide": autre_plan}
+    assert noyau.techniques_pour(sans_role, deux_defauts) == {}
+    noyau.verifier_techniques(sans_role, noyau.techniques_pour(sans_role, deux_defauts))
+    # Une part des rôles seulement : gardée, et refusée en nommant le manque.
+    deux_roles = noyau.lire({**CHAINE_A_TECHNIQUES,
+                             "etapes": CHAINE_A_TECHNIQUES["etapes"][:1]
+                             + [{"id": "finition", "rendre": {"role": "finition", "technique": "$technique"}}]
+                             + CHAINE_A_TECHNIQUES["etapes"][1:],
+                             "livrable": "$finition.livrable"}, "deux-roles")
+    assert list(noyau.techniques_pour(deux_roles, toutes)) == ["trait"]
+    with pytest.raises(WorkflowMappingError, match="finition"):
+        noyau.verifier_techniques(deux_roles, noyau.techniques_pour(deux_roles, toutes))

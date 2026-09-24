@@ -442,9 +442,13 @@ def test_l_encre_porte_les_controles_de_la_peinture(technique_encre):
     for controle in lue.controles["plan"]:
         assert set(controle) == {"id", "valeur", "op", "attendu", "aide"}, controle["id"]
         assert controle["aide"].strip(), controle["id"]
-    # Chaque technique dit ce qu'elle exige du plan, fût-ce rien (liste vide).
+    # Chaque technique DE CE PLAN dit ce qu'elle exige du plan, fût-ce rien
+    # (liste vide) ; une technique d'un autre plan (créer une image, rôle
+    # « image », 2026-09-24) n'a rien à dire d'une révélation.
     for fichier in sorted(TECHNIQUES.glob("*.json")):
         autre = noyau.lire_technique(json.loads(fichier.read_text(encoding="utf-8")), fichier.stem)
+        if "deroulement" not in autre.roles:
+            continue
         assert "plan" in autre.controles, fichier.name
         assert (autre.controles["plan"] == ()) == (fichier.stem != "encre"), fichier.name
 
@@ -459,6 +463,9 @@ def test_la_chaine_et_ses_techniques_tiennent_ensemble(ink):
         lue = noyau.lire_technique(json.loads(fichier.read_text(encoding="utf-8")), fichier.stem)
         techniques[lue.nom] = lue
     assert "encre" in techniques and len(techniques) >= 2
+    # Les techniques de CE plan : celles qui tiennent ses rôles (2026-09-24 :
+    # le dossier porte aussi celles qui créent une image, d'un autre plan).
+    techniques = noyau.techniques_pour(chaine, techniques)
     noyau.verifier_techniques(chaine, techniques)
     # L'encre est celle qui s'ouvre — parce qu'elle SE DIT par défaut, pas
     # parce que la chaîne la nomme.

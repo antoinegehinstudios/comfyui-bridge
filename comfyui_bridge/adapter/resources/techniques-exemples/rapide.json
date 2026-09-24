@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "technique": "rapide",
+  "libelle": "Rapide (Z-Image Turbo, 8 pas)",
+  "resume": "Le modèle distillé Z-Image Turbo (Alibaba Tongyi, Apache-2.0, 6 milliards de paramètres en int8) : huit pas sans guidage, une image en quelques dizaines de secondes sur ce poste. Sans guidage (cfg 1), un prompt négatif n'aurait aucun effet : il n'est pas proposé ici.",
+  "par_defaut": true,
+  "expose": {
+    "steps": {
+      "type": "INT",
+      "defaut": 8,
+      "min": 4,
+      "max": 12,
+      "libelle": "Pas de débruitage",
+      "categorie": "technique",
+      "aide": "Le nombre de pas du modèle distillé : 8 est sa calibration. Moins (4 à 6) va plus vite et laisse des détails moins finis ; plus (10 à 12) n'apporte presque rien. Chaque pas coûte le même temps."
+    }
+  },
+  "roles": {
+    "image": {
+      "workflow": "image-z-image-turbo",
+      "inputs": {
+        "27.text": "$direction.recit.prompt",
+        "13.width": "$direction.recit.largeur_rendu",
+        "13.height": "$direction.recit.hauteur_rendu",
+        "3.steps": "$steps"
+      }
+    }
+  },
+  "controles": {},
+  "notes": {
+    "ce_que_le_noeud_recoit": "La consigne composée par la direction (27.text), la taille native de rendu (13.width, 13.height : des multiples de seize dans les plafonds, la livraison ramène à la taille demandée), le nombre de pas (3.steps). La graine vient de la chaîne par sa liaison (3.seed). Le négatif est mis à zéro dans le graphe (ConditioningZeroOut) : à cfg 1, le KSampler calcule pos + (pos − neg) × (cfg − 1) = pos, quel que soit neg — l'exposer serait un fantôme (Antoine, 2026-09-19 : « les paramètres fantômes sont à bannir »).",
+    "reglages_figes": "cfg 1,0 ; sampler res_multistep, scheduler simple ; shift 3,0 (ModelSamplingAuraFlow) — ceux du gabarit officiel de ComfyUI pour Z-Image Turbo (docs.comfy.org/tutorials/image/z-image/z-image-turbo). Poids : z_image_turbo_int8_convrot.safetensors (Comfy-Org, 6,2 Go), encodeur qwen_3_4b.safetensors (8 Go, type lumina2), VAE ae.safetensors (335 Mo)."
+  }
+}

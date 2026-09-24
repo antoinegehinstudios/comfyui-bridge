@@ -387,8 +387,15 @@ class WorkflowCatalog:
         return self._chaines[spec.name]
 
     def techniques(self) -> dict[str, Any]:
-        """Les techniques déclarées, par leur nom."""
+        """TOUTES les techniques déclarées, par leur nom — pour ce qui ne parle
+        d'aucune chaîne. Une chaîne, elle, lit `techniques_de`."""
         return dict(self._techniques)
+
+    def techniques_de(self, chaine: Any) -> dict[str, Any]:
+        """Les techniques entre lesquelles CETTE chaîne choisit : celles qui
+        tiennent ses rôles (voir `core.chaine.techniques_pour`)."""
+        from ..core import chaine as noyau
+        return noyau.techniques_pour(chaine, self._techniques)
 
     def technique(self, nom: str | None):
         """UNE technique par son nom, ou None. Un nom inconnu n'est pas une
@@ -697,7 +704,10 @@ def _spec_de_chaine(name: str, entry: dict[str, Any], catalogue: Path,
     defauts: dict[str, Any] = {}
     try:
         lue = noyau.lire(json.loads(chemin.read_text(encoding="utf-8")), name)
-        noyau.verifier_techniques(lue, techniques or {})
+        # Les techniques de CETTE chaîne : celles qui tiennent ses rôles. Les
+        # autres sont d'un autre plan, et n'ont rien à lui dire (2026-09-24).
+        techniques = noyau.techniques_pour(lue, techniques)
+        noyau.verifier_techniques(lue, techniques)
         expose = tuple(noyau.champs_admis(lue, techniques))
         # Les défauts publiés sont ceux du plan ET de la technique par DÉFAUT :
         # c'est ce qu'un formulaire ouvre, et ce contre quoi un écart se juge.

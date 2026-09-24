@@ -36,6 +36,7 @@ GENRES: tuple[str, ...] = (
     "extraire_queue",    # les N dernières images d'une vidéo, en clip
     "extraire_image",    # une image d'une vidéo
     "recoller",          # joindre des parts en un livrable
+    "composer",          # une IMAGE FIXE à sa taille exacte, avec textes, logos, texture
     "mesurer_raccords",  # la ressemblance de part en part, aux frontières
     "verifier",          # des contrôles sur ce qui a été mesuré : non tenus, ils ARRÊTENT
     "constater",         # les mêmes contrôles, CONSTATÉS : écrits au récit, jamais bloquants
@@ -64,6 +65,12 @@ _CLES: dict[str, tuple[frozenset[str], frozenset[str]]] = {
     "recoller": (frozenset({"parts", "fps", "largeur", "hauteur", "chevauchement", "textes", "images", "texture"}),
                  frozenset({"parts"})),
     "mesurer_raccords": (frozenset({"parts", "chevauchement"}), frozenset({"parts"})),
+    # « composer » est au livrable IMAGE ce que « recoller » est au livrable
+    # vidéo : la taille demandée est atteinte ici (rééchantillonnage, jamais de
+    # bandes), et c'est ici que se posent les textes, les images (un logo) et
+    # une texture — les mêmes objets, les mêmes filtres que le recollage.
+    "composer": (frozenset({"image", "largeur", "hauteur", "textes", "images", "texture"}),
+                 frozenset({"image"})),
 }
 
 _OPS: tuple[str, ...] = ("eq", "ne", "lte", "gte", "between", "exists")
@@ -708,6 +715,35 @@ def lire_technique(brut: Any, nom_declare: str | None = None) -> Technique:
                      resume=str(brut.get("resume") or ""),
                      champs=champs, roles=roles, controles=controles,
                      par_defaut=par_defaut, donnees=dict(brut))
+
+
+def techniques_pour(chaine: Chaine, techniques: dict[str, Technique] | None
+                    ) -> dict[str, Technique]:
+    """Les techniques qui tiennent CETTE chaîne : celles qui portent au moins un
+    des rôles qu'elle nomme.
+
+    Les techniques vivent dans un seul dossier, pour toutes les chaînes : une
+    façon de peindre une révélation (« encre », « brume ») n'a rien à faire dans
+    le menu d'une chaîne qui crée une image, et une façon de créer une image
+    (le rôle « image ») ne tient aucun rôle d'une révélation. Avant le
+    2026-09-24, une seule chaîne nommait des rôles, et la question ne se posait
+    pas : toute technique déclarée était jugée contre toute chaîne, et une
+    technique d'un autre plan l'aurait fait refuser au démarrage.
+
+    Une technique qui ne tient AUCUN rôle de la chaîne est une technique d'un
+    autre plan : écartée sans bruit. Une technique qui en tient une PART
+    seulement n'est pas écartée : elle est gardée, et `verifier_techniques` la
+    refuse en nommant le rôle qui manque — c'est une faute d'écriture, pas une
+    autre chaîne. Une chaîne qui ne nomme AUCUN rôle n'en a aucune : elle ne
+    choisit pas de technique (voir `champs_admis`), et rien ne doit la juger —
+    mesuré avant la première relance : « video-prolongement », sans rôle,
+    recevait toutes les techniques et voyait deux « par défaut » (l'encre de la
+    révélation, la rapide de la création), et le catalogue refusait de charger.
+    """
+    roles = {e.role for e in chaine.etapes if e.role is not None}
+    if not roles:
+        return {}
+    return {nom: t for nom, t in (techniques or {}).items() if roles & set(t.roles)}
 
 
 def verifier_techniques(chaine: Chaine, techniques: dict[str, Technique]) -> None:

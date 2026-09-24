@@ -23,6 +23,9 @@ Un texte est un objet :
 * ``fondu_s`` : entrée et sortie en fondu, en secondes ;
 * ``boite`` : un bandeau sombre translucide sous le texte, pour la lisibilité
   sur une image claire ;
+* ``decalage`` : en part de la hauteur, ajouté à l'ancre de ``position`` (un
+  sous-titre à ``"bas"`` avec ``decalage: 0.1`` se pose sous le titre à
+  ``"bas"``) ; hors de l'image, le texte est refusé ;
 * ``laisser_au_logo`` : ce qu'un logo posé sur la même vidéo ÉCRIT déjà (un
   wordmark : « GRABUGE FEST ») — ôté du texte, avec la préposition qui
   l'introduit, pour qu'il ne soit pas recomposé dans une autre police ; un
@@ -198,7 +201,14 @@ def filtre_drawtext(texte: dict[str, Any], largeur: int, hauteur: int,
     else:
         alpha = "1"
     interligne = int(round(taille * 1.25))
-    centre = {"bas": "h*0.80", "centre": "h*0.50", "haut": "h*0.14"}[position]
+    # « decalage » : en part de la hauteur, ajouté à l'ancre de la position —
+    # ce qui permet à un sous-titre de se poser SOUS le titre, à la même
+    # position nommée, sans le recouvrir (une image composée, 2026-09-24).
+    decalage = float(texte.get("decalage") or 0.0)
+    ancre = {"bas": 0.80, "centre": 0.50, "haut": 0.14}[position] + decalage
+    if not 0.0 <= ancre <= 1.0:
+        raise MediaAssemblyError(f"incrustation : « {contenu[:30]} » décalé hors de l'image ({ancre:.2f})")
+    centre = f"h*{ancre:.2f}"
     haut_bloc = len(lignes) * interligne
     liseré = max(1, taille // 40)
     ombre = max(1, taille // 24)

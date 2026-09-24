@@ -1,0 +1,264 @@
+{
+  "version": 1,
+  "chaine": "image-visuel-social",
+  "resume": "CRÉER UN VISUEL POUR LES RÉSEAUX — le même socle que « Créer une image » (direction → rendu par une technique → livraison → constat), pour une affiche, une image de carrousel, un visuel qui porte un MESSAGE. Le message et son sous-titre sont posés PAR-DESSUS l'image à la livraison, tels quels, dans une police du poste (jamais confiés au modèle, qui les réécrirait à sa façon) ; la direction demande au modèle une zone calme là où le texte ira. Format par défaut 1080 × 1350 (4:5).",
+  "expose": {
+    "prompt": {
+      "type": "STRING",
+      "defaut": "",
+      "requis": true,
+      "libelle": "Ce que l'image montre",
+      "categorie": "sujet",
+      "aide": "Le visuel derrière le message : le sujet, le décor, la matière. Le style et les réglages ajoutent leurs mots autour ; la zone du texte est laissée calme par la direction."
+    },
+    "message": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Le message (titre)",
+      "categorie": "texte",
+      "aide": "Le texte principal, posé tel quel par-dessus l'image à la livraison, dans la police choisie — jamais peint par le modèle. Replié sur trois lignes au plus. Vide : aucun texte, et aucune zone n'est demandée au modèle."
+    },
+    "sous_message": {
+      "type": "STRING",
+      "defaut": "",
+      "libelle": "Le sous-titre (facultatif)",
+      "categorie": "texte",
+      "aide": "Une seconde ligne, plus petite, posée sous le message (même position, décalée d'un dixième de la hauteur). Vide : rien."
+    },
+    "police": {
+      "type": "COMBO",
+      "defaut": "Segoe UI Bold",
+      "options_depuis": {"menu": "police"},
+      "libelle": "Police",
+      "categorie": "texte",
+      "aide": "La police des textes posés, parmi celles du poste."
+    },
+    "texte_position": {
+      "type": "COMBO",
+      "defaut": "bas",
+      "options": ["bas", "centre", "haut"],
+      "libelle": "Position des textes",
+      "categorie": "texte",
+      "aide": "Où le message se pose — et où la direction demande au modèle de laisser une zone calme, sans détail ni texte peint : bas (le tiers inférieur, l'usage), centre, haut."
+    },
+    "couleur_texte": {
+      "type": "COMBO",
+      "defaut": "white",
+      "options": ["white", "black"],
+      "libelle": "Couleur des textes",
+      "categorie": "texte",
+      "aide": "Blanc (avec un fin liseré et une ombre sombres, lisible sur presque tout) ou noir. Une charte de marque viendra imposer la sienne."
+    },
+    "bandeau": {
+      "type": "BOOLEAN",
+      "defaut": false,
+      "libelle": "Bandeau sous les textes",
+      "categorie": "texte",
+      "aide": "Un bandeau sombre translucide sous chaque ligne, pour la lisibilité sur une image claire ou chargée. Par défaut non : la direction a demandé une zone calme au modèle."
+    },
+    "taille_message": {
+      "type": "FLOAT",
+      "defaut": 0.075,
+      "min": 0.03,
+      "max": 0.15,
+      "step": 0.005,
+      "libelle": "Taille du message",
+      "categorie": "texte",
+      "aide": "La hauteur des lettres du message, en part de la hauteur de l'image (0,075 = 7,5 %, ≈ 100 px sur 1350). Le sous-titre fait un peu plus de la moitié. Un message trop long pour trois lignes est réduit jusqu'à tenir, et la livraison le dit."
+    },
+    "style": {
+      "type": "COMBO",
+      "defaut": "affiche-minimaliste",
+      "options_depuis": {"menu": "style_image"},
+      "libelle": "Style",
+      "categorie": "style",
+      "aide": "Le médium et la matière du visuel — le catalogue d'image de direction de style (styles/images.json). « Affiche minimaliste » par défaut : un sujet fort, du vide pour le message."
+    },
+    "cadrage": {
+      "type": "COMBO",
+      "defaut": "libre",
+      "options_depuis": {"menu": "cadrage_image"},
+      "libelle": "Cadrage",
+      "categorie": "style",
+      "aide": "Le plan et le point de vue. « Libre » n'ajoute rien ; toute autre valeur ajoute ses mots à la consigne."
+    },
+    "lumiere": {
+      "type": "COMBO",
+      "defaut": "libre",
+      "options_depuis": {"menu": "lumiere_image"},
+      "libelle": "Lumière",
+      "categorie": "style",
+      "aide": "Sous quelle lumière. « Libre » n'ajoute rien ; toute autre valeur ajoute ses mots à la consigne."
+    },
+    "palette": {
+      "type": "COMBO",
+      "defaut": "libre",
+      "options_depuis": {"menu": "palette_image"},
+      "libelle": "Palette",
+      "categorie": "style",
+      "aide": "La dominante de couleur. « Libre » n'ajoute rien ; une palette qui refuse quelque chose l'ajoute aussi au négatif."
+    },
+    "ambiance": {
+      "type": "COMBO",
+      "defaut": "libre",
+      "options_depuis": {"menu": "ambiance_image"},
+      "libelle": "Ambiance",
+      "categorie": "style",
+      "aide": "Le ton. « Libre » n'ajoute rien ; toute autre valeur ajoute ses mots à la consigne."
+    },
+    "technique": {
+      "type": "COMBO",
+      "options_depuis": {"techniques": true},
+      "libelle": "Technique",
+      "categorie": "technique",
+      "aide": "La façon de peindre : rapide (Z-Image Turbo, huit pas, sans guidage — un négatif n'y pèserait pas, il n'est pas proposé) ou soignée (Z-Image, vingt-cinq pas, guidage et négatif réels)."
+    },
+    "width": {
+      "type": "INT",
+      "defaut": 1080,
+      "min": 256,
+      "max": 4096,
+      "libelle": "Largeur",
+      "unite": "px",
+      "categorie": "format",
+      "aide": "La largeur de l'image livrée, exacte. 1080 × 1350 (4:5) est le format d'une publication et d'une image de carrousel ; 1080 × 1080 le carré ; 1080 × 1920 la story. Le modèle rend à sa taille native dans la même proportion, la livraison ramène à celle-ci."
+    },
+    "height": {
+      "type": "INT",
+      "defaut": 1350,
+      "min": 256,
+      "max": 4096,
+      "libelle": "Hauteur",
+      "unite": "px",
+      "categorie": "format",
+      "aide": "La hauteur de l'image livrée, exacte. Orientation et résolution la règlent ; elle reste réglable ici."
+    },
+    "seed": {
+      "type": "INT",
+      "defaut": 71,
+      "libelle": "Graine",
+      "categorie": "avance",
+      "aide": "Le hasard du rendu. La même graine, la même consigne et la même technique redonnent la même image ; la changer donne une autre version — pour un carrousel, garder la graine et changer le message garde le même visuel."
+    }
+  },
+  "etapes": [
+    {
+      "id": "direction",
+      "rendre": {
+        "workflow": "image-direction",
+        "inputs": {
+          "1.style": "$style",
+          "1.sujet": "$prompt",
+          "1.cadrage": "$cadrage",
+          "1.lumiere": "$lumiere",
+          "1.palette": "$palette",
+          "1.ambiance": "$ambiance",
+          "1.largeur": "$width",
+          "1.hauteur": "$height",
+          "1.zone_de_texte": "$texte_position",
+          "1.texte_prevu": "$message"
+        }
+      }
+    },
+    {
+      "id": "rendu",
+      "rendre": {
+        "role": "image",
+        "technique": "$technique",
+        "seed": "$seed"
+      }
+    },
+    {
+      "id": "livraison",
+      "composer": {
+        "image": "$rendu.livrable",
+        "largeur": "$width",
+        "hauteur": "$height",
+        "textes": [
+          {
+            "texte": "$message",
+            "police": "$police",
+            "position": "$texte_position",
+            "taille": "$taille_message",
+            "couleur": "$couleur_texte",
+            "boite": "$bandeau"
+          },
+          {
+            "texte": "$sous_message",
+            "police": "$police",
+            "position": "$texte_position",
+            "decalage": 0.1,
+            "taille": 0.042,
+            "couleur": "$couleur_texte",
+            "boite": "$bandeau"
+          }
+        ]
+      }
+    },
+    {
+      "id": "constat",
+      "constater": [
+        {
+          "id": "la_largeur_demandee_est_tenue",
+          "valeur": "$livraison.mesure.width",
+          "op": "eq",
+          "attendu": "$width",
+          "aide": "L'image livrée doit faire exactement la largeur demandée : la livraison couvre puis rogne au centre, jamais de bandes. Non tenu : dire le job."
+        },
+        {
+          "id": "la_hauteur_demandee_est_tenue",
+          "valeur": "$livraison.mesure.height",
+          "op": "eq",
+          "attendu": "$height",
+          "aide": "L'image livrée doit faire exactement la hauteur demandée. Non tenu : dire le job."
+        },
+        {
+          "id": "chaque_texte_demande_est_pose",
+          "valeur": "$livraison.textes_poses",
+          "op": "eq",
+          "attendu": "$livraison.textes_demandes",
+          "aide": "Chaque texte non vide (message, sous-titre) doit être posé sur l'image, dans la police choisie. Non tenu : la police est introuvable sur le poste, ou le texte a été refusé — le journal de l'étape « livraison » dit lequel et pourquoi. C'est un constat : l'image est livrée."
+        },
+        {
+          "id": "l_image_n_est_pas_agrandie_a_la_livraison",
+          "valeur": "$direction.recit.agrandissement_a_la_livraison",
+          "op": "lte",
+          "attendu": 1.0,
+          "aide": "Dans les plafonds du modèle (2048 px de grand côté, 2,2 mégapixels), le rendu est au moins aussi grand que la demande et la livraison ne fait que rogner. Non tenu : la demande dépasse les plafonds, le rendu a été agrandi d'autant (lanczos) — livré, moins fin ; demander au plus 2048 px de grand côté. C'est un constat."
+        }
+      ]
+    },
+    {
+      "id": "constat_du_message",
+      "quand": "$message",
+      "constater": [
+        {
+          "id": "la_zone_du_message_a_ete_demandee",
+          "valeur": "$direction.recit.zone_de_texte",
+          "op": "eq",
+          "attendu": "$texte_position",
+          "aide": "Quand un message est prévu, la direction demande au modèle une zone calme à la position du texte (et lui interdit d'y peindre du texte). Non tenu : le récit de la direction ne porte pas la zone — dire le job."
+        }
+      ]
+    },
+    {
+      "id": "controle",
+      "verifier": [
+        {
+          "id": "livrable_pese",
+          "valeur": "$livraison.mesure.bytes",
+          "op": "gte",
+          "attendu": 50000,
+          "aide": "Le fichier livré doit peser au moins 50 ko : une image de plus d'un mégapixel qui pèse moins est vide ou uniforme. Relancer ; si cela se répète, dire le job."
+        }
+      ]
+    }
+  ],
+  "livrable": "$livraison.livrable",
+  "notes": {
+    "pourquoi": "Antoine, 2026-09-24 : « un autre mode, création de visuel pour média sociaux, type affiche, ou qui montre un message, pour genre carrousel. Deux blocs distincts dans maestro, afin de tester sur les deux ».",
+    "le_texte_est_pose_pas_peint": "Un modèle de diffusion écrit un texte à sa façon (fautes, glyphes) ; un message doit être exact, dans une police choisie, à une taille lisible. Il est donc posé à la LIVRAISON (composer, les mêmes filtres que l'accroche d'une vidéo : police du poste, repli sur trois lignes, liseré et ombre, bandeau si demandé), et la DIRECTION demande au modèle une zone calme à sa position et lui interdit d'y peindre des lettres. Le récit de la direction dit la zone demandée ; la livraison dit chaque texte posé (lignes, taille en px) ; la chaîne constate que chaque texte demandé est posé.",
+    "carrousel": "Un visuel par demande ; la même graine et le même sujet avec un autre message donnent le même visuel sous un autre texte — un carrousel se fait en rejouant avec un message différent (Rejouer, ou un raccourci par slide). Une livraison à plusieurs images serait une autre grammaire (maestro n'en montre qu'une).",
+    "ce_qui_vient": "La charte graphique d'Héraldiste : sa police et ses couleurs de titre remplaceront police et couleur_texte, son logo sera posé à la livraison (composer : images), son constat de conformité sur l'image."
+  }
+}

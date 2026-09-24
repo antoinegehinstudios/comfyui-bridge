@@ -506,7 +506,7 @@ def _options_du_catalogue(c, filtre: Any) -> tuple[list[str], dict[str, Any]]:
     return [nom for _, _, nom in sorted(trouves)], libelles
 
 
-def _options_declarees(c, depuis: Any) -> tuple[list[str], dict[str, Any]]:
+def _options_declarees(c, depuis: Any, chaine=None) -> tuple[list[str], dict[str, Any]]:
     """La liste d'un champ qui dit d'OÙ elle vient, et de quoi l'habiller.
 
     Deux sources, une seule règle : la liste appartient au fournisseur. Le
@@ -519,7 +519,8 @@ def _options_declarees(c, depuis: Any) -> tuple[list[str], dict[str, Any]]:
         # chaîne ni le code ne les listent, sans quoi la chaîne porterait la
         # dépendance dont on vient de la débarrasser.
         from ..adapter import techniques as _techniques
-        vues = _techniques.vues(c.catalog.techniques())
+        vues = _techniques.vues(c.catalog.techniques_de(chaine) if chaine is not None
+                                else c.catalog.techniques())
         return ([v["valeur"] for v in vues],
                 {"libelles": {v["valeur"]: {"libelle": v["libelle"], "resume": v["resume"]}
                               for v in vues}})
@@ -539,18 +540,18 @@ def _options_exposees(c, chaine, technique=None) -> dict[str, tuple]:
     sorties: dict[str, tuple] = {}
     for nom, champ in _noyau.champs_retenus(chaine, technique).items():
         if champ.options_depuis is not None:
-            sorties[nom] = tuple(_options_declarees(c, champ.options_depuis)[0])
+            sorties[nom] = tuple(_options_declarees(c, champ.options_depuis, chaine)[0])
         elif champ.options is not None:
             sorties[nom] = tuple(champ.options)
     return sorties
 
 
-def _entree_de_champ(c, nom: str, champ, aides: dict | None = None) -> dict:
+def _entree_de_champ(c, nom: str, champ, aides: dict | None = None, chaine=None) -> dict:
     """UN champ exposé, tel qu'un formulaire le rend."""
     menu = _menu_declare(c, nom)
     options = champ.options
     if champ.options_depuis is not None:
-        options, source = _options_declarees(c, champ.options_depuis)
+        options, source = _options_declarees(c, champ.options_depuis, chaine)
         # Le menu déclaré AU NOM DU CHAMP reste le plus proche : il peut
         # retitrer ce que la source rend, jamais l'inverse.
         menu = {**source, **menu}
@@ -590,8 +591,8 @@ def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
     choisie. Rendre les seules options de la technique par défaut aurait figé la
     liste sur elle.
     """
-    techniques = c.catalog.techniques() if chaine.champ_de_technique else {}
-    entrees = [_entree_de_champ(c, nom, champ, aides)
+    techniques = c.catalog.techniques_de(chaine) if chaine.champ_de_technique else {}
+    entrees = [_entree_de_champ(c, nom, champ, aides, chaine)
                for nom, champ in chaine.champs.items() if champ.media is None]
     # Les champs des techniques APRÈS les communs, dans l'ordre des techniques
     # puis de leur déclaration : un formulaire les affiche à la suite du champ
@@ -617,14 +618,14 @@ def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
         # la liste d'une autre.
         porteuse = techniques[defaut.nom] if defaut is not None and nom in defaut.champs \
             else techniques[qui[0]]
-        entree = _entree_de_champ(c, nom, porteuse.champs[nom], aides)
+        entree = _entree_de_champ(c, nom, porteuse.champs[nom], aides, chaine)
         entree["selon"] = {"champ": chaine.champ_de_technique, "valeurs": qui}
         if len(qui) > 1:
             entree["selon_options"] = {}
             entree["selon_defauts"] = {}
             for nom_technique in qui:
                 champ = techniques[nom_technique].champs[nom]
-                habille = _entree_de_champ(c, nom, champ, aides)
+                habille = _entree_de_champ(c, nom, champ, aides, chaine)
                 entree["selon_options"][nom_technique] = habille.get("choix") \
                     or habille.get("options") or []
                 entree["selon_defauts"][nom_technique] = champ.defaut
@@ -655,7 +656,7 @@ def _media_inputs_chaine(chaine) -> list[dict]:
 def _technique_par_defaut(c, chaine):
     """La technique qu'un formulaire ouvre : celle que le champ déclare par défaut."""
     from ..core import chaine as _noyau
-    return _noyau.technique_choisie(chaine, {}, c.catalog.techniques())
+    return _noyau.technique_choisie(chaine, {}, c.catalog.techniques_de(chaine))
 
 
 def _techniques_vues(c, chaine) -> list[dict]:
@@ -664,7 +665,7 @@ def _techniques_vues(c, chaine) -> list[dict]:
     from ..adapter import techniques as _techniques
     if chaine.champ_de_technique is None:
         return []
-    return _techniques.vues(c.catalog.techniques())
+    return _techniques.vues(c.catalog.techniques_de(chaine))
 
 
 def _etapes_annoncees(chaine, technique=None) -> list[dict]:
@@ -698,7 +699,7 @@ def _valeurs_chaine(c, chaine, corps: dict) -> tuple[dict, list[str]]:
     """
     from ..core import chaine as _noyau
     demande = _demande_plate(corps)
-    techniques = c.catalog.techniques()
+    techniques = c.catalog.techniques_de(chaine)
     technique = _noyau.technique_choisie(chaine, demande, techniques)
     return _noyau.valeurs(chaine, demande, _options_exposees(c, chaine, technique), techniques)
 
@@ -731,7 +732,7 @@ def _etapes_a_rendre(c, chaine, valeurs: dict) -> list[tuple[Any, dict, str]]:
     tient son rôle : c'est le nom résolu qui a une mesure, pas le rôle."""
     from ..adapter.chaines import workflow_annonce
     from ..core import chaine as _noyau
-    technique = _noyau.technique_choisie(chaine, valeurs, c.catalog.techniques())
+    technique = _noyau.technique_choisie(chaine, valeurs, c.catalog.techniques_de(chaine))
     depart = _noyau.resultats_initiaux(chaine, technique)
     sortie = []
     for etape in chaine.rendus:
@@ -883,7 +884,7 @@ def _readiness_chaine(c, chaine) -> dict:
     avertissements: list[dict] = []
     bloquante: dict | None = None
     non_juges: list[str] = []
-    defaut = _noyau.technique_choisie(chaine, {}, c.catalog.techniques())
+    defaut = _noyau.technique_choisie(chaine, {}, c.catalog.techniques_de(chaine))
 
     def juger(nom: str, etape_id: str, technique: str | None, bloque: bool) -> None:
         nonlocal bloquante
@@ -909,7 +910,7 @@ def _readiness_chaine(c, chaine) -> dict:
 
     for etape in chaine.rendus:
         if etape.role is not None:
-            for nom_technique, technique in sorted(c.catalog.techniques().items()):
+            for nom_technique, technique in sorted(c.catalog.techniques_de(chaine).items()):
                 role = technique.roles.get(etape.role)
                 if role is not None:
                     juger(role.workflow, etape.id, nom_technique,
@@ -1037,13 +1038,13 @@ def _decrire_champ(c, spec, chaine=None, technique=None):
 
     def d_une_chaine(nom: str) -> dict:
         champ = (_noyau.champs_retenus(chaine, technique).get(nom)
-                 or _noyau.champs_admis(chaine, c.catalog.techniques()).get(nom))
+                 or _noyau.champs_admis(chaine, c.catalog.techniques_de(chaine)).get(nom))
         if champ is None:
             return {}
         menu = _menu_declare(c, nom)
         options = champ.options
         if champ.options_depuis is not None:
-            options, source = _options_declarees(c, champ.options_depuis)
+            options, source = _options_declarees(c, champ.options_depuis, chaine)
             # Le menu déclaré AU NOM DU CHAMP reste le plus proche, comme au
             # formulaire : il retitre ce que la source rend, jamais l'inverse.
             menu = {**source, **menu}
@@ -1079,7 +1080,7 @@ def _vue_raccourci(c, spec, fiche: dict) -> dict:
     # elle, alors que jugé contre une autre il en aurait été un — et chacun de
     # ses réglages aurait alors figuré sur la carte.
     technique = (_noyau.technique_choisie(chaine, fiche.get("valeurs") or {},
-                                          c.catalog.techniques())
+                                          c.catalog.techniques_de(chaine))
                  if chaine is not None else None)
     defauts = _noyau.defauts(chaine, technique) if chaine is not None else spec.defaults
     vue = dict(fiche)
@@ -1123,7 +1124,7 @@ def _perime_de_raccourci(c, spec, valeurs: dict, sources: dict | None = None) ->
                       for nom in sources if nom not in medias)
     if spec.est_chaine:
         chaine = c.catalog.chaine(spec)
-        techniques = c.catalog.techniques()
+        techniques = c.catalog.techniques_de(chaine)
         admis = _noyau.champs_admis(chaine, techniques)
         technique = _noyau.technique_choisie(chaine, valeurs, techniques)
         retenus = _noyau.champs_retenus(chaine, technique)
@@ -1169,7 +1170,7 @@ def _valeurs_de_raccourci(c, spec, valeurs: dict) -> dict:
     from ..core import chaine as _noyau
     if spec.est_chaine:
         chaine = c.catalog.chaine(spec)
-        techniques = c.catalog.techniques()
+        techniques = c.catalog.techniques_de(chaine)
         champs = _noyau.champs_admis(chaine, techniques)
         inconnus = sorted(k for k in valeurs if k not in champs)
         if inconnus:
@@ -1235,14 +1236,17 @@ async def _apercu_de_raccourci(c, spec, ident: str, job) -> None:
     en image animée. Un run qui n'a livré aucune vidéo (une analyse, un plan)
     n'est pas une erreur — il n'a simplement rien à montrer.
     """
-    from ..adapter import montage_video
+    from ..adapter import composition_image
     if job is None:
         return
-    videos = [a for a in job.artifacts if a.kind == "video" and a.path
+    # Une vidéo d'abord ; sinon une image (un mode qui crée une image a un
+    # livrable fixe, et son raccourci mérite sa vignette autant qu'un autre).
+    medias = [a for a in job.artifacts if a.kind in ("video", "image") and a.path
               and Path(a.path).is_file()]
-    if not videos:
+    medias.sort(key=lambda a: 0 if a.kind == "video" else 1)
+    if not medias:
         return
-    await run_in_threadpool(montage_video.apercu_anime, Path(videos[0].path),
+    await run_in_threadpool(composition_image.apercu_de_livrable, Path(medias[0].path),
                             raccourcis.cible_apercu(_raccourcis_base(c), spec.name, ident))
 
 
@@ -1695,7 +1699,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             corps = await request.json()
             valeurs, non_appliques = _valeurs_chaine(
                 c, chaine, corps if isinstance(corps, dict) else {})
-            technique = _noyau.technique_choisie(chaine, valeurs, c.catalog.techniques())
+            technique = _noyau.technique_choisie(chaine, valeurs, c.catalog.techniques_de(chaine))
             # Pas de graphe : une chaîne n'en a pas. Ce qu'il y a à voir avant de
             # dépenser, c'est la SUITE des étapes (avec le graphe que la technique
             # donne à chaque rôle) et les valeurs qu'elles recevront — celles de
@@ -1953,7 +1957,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         `{"path": "…"}` (un fichier du dossier de sortie, jamais ailleurs). La
         passerelle fabrique le GIF elle-même : un lanceur ne manipule pas
         d'images, il désigne."""
-        from ..adapter import montage_video
+        from ..adapter import composition_image
         c = request.app.state.container
         c.catalog.get_spec(name)
         corps = await request.json()
@@ -1962,11 +1966,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         source: Path | None = None
         if corps.get("job_id"):
             job = c.store.get(str(corps["job_id"]))
-            videos = [a for a in job.artifacts if a.kind == "video" and a.path]
-            if not videos:
+            medias = [a for a in job.artifacts if a.kind in ("video", "image") and a.path]
+            medias.sort(key=lambda a: 0 if a.kind == "video" else 1)
+            if not medias:
                 raise UnknownWorkflowInputError(
-                    f"le job {job.id} n'a livré aucune vidéo", workflow=name, job_id=job.id)
-            source = Path(videos[0].path)
+                    f"le job {job.id} n'a livré ni vidéo ni image", workflow=name, job_id=job.id)
+            source = Path(medias[0].path)
         elif corps.get("path"):
             source = Path(str(corps["path"]))
         else:
@@ -1981,7 +1986,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not source.is_file():
             raise UnknownWorkflowInputError(f"{source} introuvable", workflow=name)
         cible = _apercus_dir(c) / name            # l'extension suit le format produit
-        fait = await run_in_threadpool(montage_video.apercu_anime, source, cible)
+        fait = await run_in_threadpool(composition_image.apercu_de_livrable, source, cible)
         return {"workflow": name, "apercu_url": f"/v1/workflows/{name}/apercu",
                 "source": str(source.resolve()), **fait}
 

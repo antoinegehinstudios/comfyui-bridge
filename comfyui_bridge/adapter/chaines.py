@@ -542,6 +542,16 @@ class RunnerDeChaines:
                                           textes=params.get("textes"),
                                           images=params.get("images"),
                                           texture=params.get("texture"))
+        if etape.genre == "composer":
+            from . import composition_image
+            source = self._fichier_local(params["image"], travail)
+            sortie = self._sortie(job_id, label, etape.id, ".png", chaine=chaine_nom)
+            return composition_image.composer(
+                source, sortie, largeur=int(params.get("largeur") or 0) or None,
+                hauteur=int(params.get("hauteur") or 0) or None,
+                textes=params.get("textes"), images=params.get("images"),
+                texture=params.get("texture"),
+                signaler=lambda dit: self._c.store.append_log(job_id, f"étape {etape.id} : {dit}"))
         if etape.genre == "mesurer_raccords":
             parts = self._parts_locales(params["parts"], travail)
             return montage_video.mesurer_raccords(
@@ -561,7 +571,7 @@ class RunnerDeChaines:
     def technique_voulue(self, chaine: noyau.Chaine, valeurs: dict[str, Any]):
         """La technique que CES valeurs emploient — connue dès l'acceptation, ce
         qui permet d'annoncer les graphes des rôles avant de rien lancer."""
-        return noyau.technique_choisie(chaine, valeurs or {}, self._c.catalog.techniques())
+        return noyau.technique_choisie(chaine, valeurs or {}, self._c.catalog.techniques_de(chaine))
 
     def _technique_de(self, etape: noyau.Etape, valeurs: dict[str, Any],
                       resultats: dict[str, Any]):
@@ -1882,7 +1892,12 @@ def _resume(resultat: dict[str, Any]) -> dict[str, Any]:
     garde = {}
     for cle in ("livrable", "fichier", "depot", "images", "job_id", "job_ids", "tranches",
                 "tours", "jonctions", "mesure", "pire", "moyenne", "nombre", "parts",
-                "memoire", "sans_effet"):
+                "memoire", "sans_effet",
+                # ce qu'une composition d'image (ou un recollage) a POSÉ : la
+                # taille source et le cadrage, chaque texte (posé ? combien de
+                # lignes, quelle taille), les images et la texture
+                "source", "cadrage", "textes_demandes", "textes_poses", "textes_vides",
+                "textes_dits", "images_posees", "texture_posee"):
         if cle in resultat:
             garde[cle] = resultat[cle]
     if "controles" in resultat:

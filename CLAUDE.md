@@ -157,6 +157,31 @@ dans `comfyui-ink-reveal`) épingle plan, défauts, contrat des étapes et
 constantes : le faire échouer est une décision à écrire, voir la section « Le
 socle ink » du README.
 
+**Créer une image (2026-09-24)** : deux modes publiés sous la catégorie
+`creer-une-image` — `image-creation` (« Créer une image ») et
+`image-visuel-social` (« Créer un visuel pour les réseaux ») — sur UN socle
+de quatre étapes : `direction` (graphe `image-direction`, nœud
+`DirectionDImage` du paquet `comfyui-direction-de-style` : le style enveloppe
+le sujet, cadrage / lumière / palette / ambiance ajoutent leurs mots, le récit
+les cite par paramètre, la taille NATIVE de rendu est calculée — multiples de
+seize, ≤ 2048 de côté, ≤ 2,2 MP) → `rendu` (le RÔLE `image`, tenu par la
+technique choisie : `rapide` = Z-Image Turbo int8, 8 pas, cfg 1, négatif mis à
+zéro donc NON exposé ; `soignee` = Z-Image base int8, 25 pas, cfg et négatif
+réels — poids Comfy-Org dans `models/`, encodeur `qwen_3_4b` type `lumina2`)
+→ `livraison` (genre `composer` : l'image portée à la taille EXACTE demandée,
+couvrir puis rogner au centre, jamais de bandes ; textes / images / texture
+avec les mêmes clés qu'au recollage — le message d'un visuel social est POSÉ
+là, tel quel, dans une police du poste, jamais confié au modèle, et la
+direction a demandé une zone calme à sa position) → `constat` (taille tenue,
+texte posé, pas d'agrandissement) → `controle` (fichier qui pèse). Les
+techniques vivent dans le dossier commun `_data/techniques/` : une chaîne ne
+voit que celles qui tiennent SES rôles (`core.chaine.techniques_pour`,
+`Catalog.techniques_de`) — c'est ce qui permet à `rapide`/`soignee` (rôle
+`image`) de coexister avec `encre`/`brume`/`livre` (rôles de la révélation)
+sans qu'aucune chaîne ne refuse au démarrage. L'aperçu d'un mode ou d'un
+raccourci se fabrique aussi depuis une IMAGE livrée (vignette WebP fixe).
+Témoin : `tests/test_socle_image.py` ; composer : `tests/test_composition_image.py`.
+
 **Une étape peut ne livrer aucun média** : un run qui n'écrit qu'un `.json`
 réussit, et ce fichier est son livrable comme son `recit` (`_principal`,
 `adapter/chaines.py`). C'est le cas de `analyse` et `intention`.
