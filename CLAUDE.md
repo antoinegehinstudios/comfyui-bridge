@@ -157,6 +157,32 @@ dans `comfyui-ink-reveal`) épingle plan, défauts, contrat des étapes et
 constantes : le faire échouer est une décision à écrire, voir la section « Le
 socle ink » du README.
 
+**Créer une image, sous une charte (2026-09-24, après-midi)** : la charte
+Héraldiste se choisit EN PREMIER dans les deux modes (champ `charte`, rubrique
+`charte` en tête du formulaire — Antoine : « la charte ne doit pas être
+sélectionnée sur la fin, sinon c'est pas logique ») et pèse sur tout ce qui
+suit : l'étape `contrainte` (graphe `image-heraldiste`, nœud `HeraldisteCharte`,
+sautée sans charte avec un `sinon` aux mêmes clés) précède la `direction`, qui
+reçoit `positif` (les mots de style de la marque), `couleurs_en` (SA palette, à
+la place de celle qu'on aurait choisie — le champ `palette` porte
+`selon: {charte: [aucune]}` et ne s'affiche plus sous une charte ; la direction
+dit ce qu'elle a écarté, `palette_dite`), `negatif` (ses interdits) et
+`logo_ancrage` (une zone calme est demandée là où le logo sera posé) ; la
+`livraison` (composer) pose le logo tel quel, fond la texture, et — visuel
+social — écrit le message dans la police et la couleur des titres de la charte
+sur son fond de titre (`police`, `couleur_texte`, `bandeau` sous `selon`
+aussi), en ôtant ce que le wordmark écrit déjà ; `conformite` (graphe
+`video-heraldiste-conformite`, nœud `HeraldisteConformite`, qui lit une image
+fixe par son chemin absolu, `1.images` = 1) mesure l'image livrée ;
+`constat_de_la_charte` constate : charte appliquée, palette dans la consigne et
+tenue, logo posé / intact / à sa taille, règles mesurables, et ce que ce modèle
+ne sait PAS honorer — les interdits sous la technique rapide (cfg 1 :
+`$technique.negatif.applique`, déclaré dans chaque fichier de technique) et
+les images de référence de la charte (`references_transmises` non vide : ce
+modèle n'en prend aucune). Un champ de CHAÎNE peut porter `selon` (noyau
+`Champ.selon`, refusé s'il désigne un champ absent ou lui-même) : la même clé
+que celle des réglages de technique, un lanceur n'a qu'une règle.
+
 **Créer une image (2026-09-24)** : deux modes publiés sous la catégorie
 `creer-une-image` — `image-creation` (« Créer une image ») et
 `image-visuel-social` (« Créer un visuel pour les réseaux ») — sur UN socle

@@ -575,6 +575,10 @@ def _entree_de_champ(c, nom: str, champ, aides: dict | None = None, chaine=None)
         entree["categorie"] = champ.categorie
     if champ.aide:
         entree["aide"] = champ.aide
+    # Un champ que la chaîne déclare « selon » un autre : le lanceur ne le montre
+    # que sous les valeurs dites (la palette s'efface devant celle d'une charte).
+    if champ.selon:
+        entree["selon"] = dict(champ.selon)
     return entree
 
 

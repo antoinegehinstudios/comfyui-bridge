@@ -4,6 +4,10 @@
   "libelle": "Rapide (Z-Image Turbo, 8 pas)",
   "resume": "Le modèle distillé Z-Image Turbo (Alibaba Tongyi, Apache-2.0, 6 milliards de paramètres en int8) : huit pas sans guidage, une image en quelques dizaines de secondes sur ce poste. Sans guidage (cfg 1), un prompt négatif n'aurait aucun effet : il n'est pas proposé ici.",
   "par_defaut": true,
+  "negatif": {
+    "applique": false,
+    "dit": "à cfg 1, le prompt négatif n'est pas lu (ConditioningZeroOut) : les interdits d'une charte ne pèsent que par la consigne positive ; choisir la technique soignée pour qu'ils pèsent"
+  },
   "expose": {
     "steps": {
       "type": "INT",

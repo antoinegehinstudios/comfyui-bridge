@@ -121,6 +121,13 @@ class Champ:
     # rien connaître des champs.
     categorie: str | None = None
     aide: str | None = None
+    # « selon » : le champ n'a de sens que sous certaines valeurs d'un AUTRE
+    # champ de la chaîne — `{"champ": "charte", "valeurs": ["aucune"]}` : la
+    # palette qu'on choisit s'efface devant celle qu'une charte impose, et un
+    # lanceur ne la montre pas sous une charte (2026-09-24). La même clé que
+    # celle qu'une technique fait naître sur ses réglages : un lanceur n'a
+    # qu'une règle à connaître.
+    selon: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -372,7 +379,23 @@ def _champ(nom: str, brut: Any, contexte: str) -> Champ:
         requis=bool(brut.get("requis", False)),
         categorie=_texte_ou_rien(nom, brut, "categorie", contexte),
         aide=_texte_ou_rien(nom, brut, "aide", contexte),
+        selon=_selon(nom, brut.get("selon"), contexte),
     )
+
+
+def _selon(nom: str, brut: Any, contexte: str) -> dict[str, Any] | None:
+    """`{"champ": …, "valeurs": [...]}` — ou rien. Une forme fausse est refusée :
+    un lanceur qui lirait une condition boiteuse cacherait ou montrerait un
+    champ au hasard."""
+    if brut is None:
+        return None
+    if (not isinstance(brut, dict) or not str(brut.get("champ") or "").strip()
+            or not isinstance(brut.get("valeurs"), list) or not brut["valeurs"]):
+        raise WorkflowMappingError(
+            f"{contexte} : « selon » de {nom!r} attend {{\"champ\": \"<nom>\", \"valeurs\": [...]}}")
+    if str(brut["champ"]) == nom:
+        raise WorkflowMappingError(f"{contexte} : « selon » de {nom!r} ne peut pas le désigner lui-même")
+    return {"champ": str(brut["champ"]), "valeurs": [str(v) for v in brut["valeurs"]]}
 
 
 def _renvoi(valeur: Any) -> bool:
@@ -599,6 +622,11 @@ def lire(brut: Any, nom_declare: str | None = None) -> Chaine:
         raise WorkflowMappingError("cette chaîne ne se nomme pas (clé « chaine »)")
     champs = {str(k): _champ(str(k), v, f"chaîne {nom!r}")
               for k, v in (brut.get("expose") or {}).items()}
+    for champ in champs.values():
+        if champ.selon and champ.selon["champ"] not in champs:
+            raise WorkflowMappingError(
+                f"chaîne {nom!r} : « selon » de {champ.nom!r} désigne un champ que la chaîne "
+                f"n'expose pas ({champ.selon['champ']!r})")
     brutes = brut.get("etapes")
     if not isinstance(brutes, list) or not brutes:
         raise WorkflowMappingError(f"chaîne {nom!r} : « etapes » doit être une liste non vide")

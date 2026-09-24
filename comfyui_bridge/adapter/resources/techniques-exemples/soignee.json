@@ -4,6 +4,10 @@
   "libelle": "Soignée (Z-Image, 25 pas, guidage et négatif)",
   "resume": "Le modèle de base Z-Image (Alibaba Tongyi, Apache-2.0, 6 milliards de paramètres en int8) : vingt-cinq pas avec guidage réel (cfg) et un prompt négatif qui pèse. Trois à cinq fois plus long que la technique rapide, plus de latitude créative.",
   "par_defaut": false,
+  "negatif": {
+    "applique": true,
+    "dit": "le prompt négatif est lu par le guidage (cfg > 1) : les interdits d'une charte y pèsent"
+  },
   "expose": {
     "steps": {
       "type": "INT",

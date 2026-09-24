@@ -29,12 +29,23 @@ EXEMPLES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "chaines-exempl
 TECHNIQUES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "techniques-exemples"
 DONNEES = RACINE / "_data"
 
-SOCLE = [("direction", "rendre"), ("rendu", "rendre"), ("livraison", "composer")]
-PLAN_STANDARD = SOCLE + [("constat", "constater"), ("controle", "verifier")]
-PLAN_SOCIAL = SOCLE + [("constat", "constater"), ("constat_du_message", "constater"), ("controle", "verifier")]
+SOCLE = [("contrainte", "rendre"), ("direction", "rendre"), ("rendu", "rendre"), ("livraison", "composer"),
+         ("conformite", "rendre")]
+PLAN_STANDARD = SOCLE + [("constat", "constater"), ("constat_de_la_charte", "constater"), ("controle", "verifier")]
+PLAN_SOCIAL = SOCLE + [("constat", "constater"), ("constat_du_message", "constater"),
+                       ("constat_de_la_charte", "constater"), ("controle", "verifier")]
 REGLAGES_DE_STYLE = ("cadrage", "lumiere", "palette", "ambiance")
-COMMUNS = {"prompt": "", "style": None, "cadrage": "libre", "lumiere": "libre", "palette": "libre",
+COMMUNS = {"charte": "aucune", "prompt": "", "style": None, "cadrage": "libre", "lumiere": "libre", "palette": "libre",
            "ambiance": "libre", "width": 1080, "height": 1350, "seed": 71}
+SOUS_LA_CHARTE = {"champ": "charte", "valeurs": ["aucune"]}
+CE_QUE_LA_CHARTE_IMPOSE_A_LA_DIRECTION = {"1.charte": "$charte", "1.style_impose": "$contrainte.recit.positif",
+                                          "1.palette_imposee": "$contrainte.recit.couleurs_en",
+                                          "1.negatif_impose": "$contrainte.recit.negatif",
+                                          "1.zone_du_logo": "$contrainte.recit.logo_ancrage"}
+CONSTATS_DE_LA_CHARTE = ["la_charte_demandee_est_appliquee", "la_palette_de_la_charte_est_dans_la_consigne",
+                         "la_palette_de_la_charte_est_tenue", "le_logo_impose_est_pose", "le_logo_impose_est_intact",
+                         "le_logo_impose_tient_sa_taille", "les_regles_mesurables_de_la_charte_sont_tenues",
+                         "les_interdits_de_la_charte_pesent", "aucune_image_de_reference_de_la_charte_n_est_attendue"]
 TEXTE = {"message": "", "sous_message": "", "police": "Segoe UI Bold", "texte_position": "bas",
          "couleur_texte": "white", "bandeau": False, "taille_message": 0.075}
 ENTREES_DE_LA_DIRECTION = {"1.style": "$style", "1.sujet": "$prompt", "1.cadrage": "$cadrage",
@@ -63,14 +74,36 @@ def test_les_deux_modes_partagent_le_meme_socle(standard, social):
     assert [(e.id, e.genre) for e in noyau.lire(social, "image-visuel-social").etapes] == PLAN_SOCIAL
     for brut in (standard, social):
         assert brut["livrable"] == "$livraison.livrable"
-        direction, rendu, livraison = brut["etapes"][0]["rendre"], brut["etapes"][1]["rendre"], brut["etapes"][2]["composer"]
+        etapes = {e["id"]: e for e in brut["etapes"]}
+        contrainte, direction = etapes["contrainte"], etapes["direction"]["rendre"]
+        rendu, livraison, conformite = etapes["rendu"]["rendre"], etapes["livraison"]["composer"], etapes["conformite"]
+        # La charte se lit EN PREMIER, quand elle est nommée ; sans elle, son « sinon » rend les mêmes clés à vide.
+        assert contrainte["quand"] == {"valeur": "$charte", "op": "ne", "attendu": "aucune"}
+        assert contrainte["rendre"]["workflow"] == "image-heraldiste"
+        assert contrainte["rendre"]["inputs"]["1.charte"] == "$charte" and contrainte["rendre"]["inputs"]["1.prompt"] == "$prompt"
+        sinon = contrainte["sinon"]["recit"]
+        assert sinon["charte"] == "aucune" and sinon["tenue"] is True and sinon["appliquee"] is False
+        for cle in ("positif", "couleurs_en", "negatif", "logo_fichier", "logo_ancrage", "texture_fichier",
+                    "references_transmises", "fond", "logo_texte"):
+            assert cle in sinon, cle
         assert direction["workflow"] == "image-direction"
-        for cle, renvoi in ENTREES_DE_LA_DIRECTION.items():
-            assert direction["inputs"][cle] == renvoi
+        for cle, renvoi in {**ENTREES_DE_LA_DIRECTION, **CE_QUE_LA_CHARTE_IMPOSE_A_LA_DIRECTION}.items():
+            assert direction["inputs"][cle] == renvoi, cle
         # Le rendu nomme un RÔLE, jamais un graphe ; la graine passe par sa liaison, la taille par la direction.
         assert rendu == {"role": "image", "technique": "$technique", "seed": "$seed"}
         assert (livraison["image"], livraison["largeur"], livraison["hauteur"]) == (
             "$rendu.livrable", "$width", "$height")
+        # Le logo et la texture de la charte se posent à la livraison, avec ses mesures.
+        logo = livraison["images"][0]
+        assert logo == {"fichier": "$contrainte.recit.logo_fichier", "ancrage": "$contrainte.recit.logo_ancrage",
+                        "largeur": "$contrainte.recit.logo_largeur", "marge": "$contrainte.recit.logo_marge",
+                        "hauteur_min_px": "$contrainte.recit.logo_hauteur_min_px", "espace_min": "$contrainte.recit.logo_zone"}
+        assert livraison["texture"]["fichier"] == "$contrainte.recit.texture_fichier"
+        # Le constat d'Héraldiste porte sur l'IMAGE livrée, une seule, par son chemin.
+        assert conformite["quand"] == {"valeur": "$charte", "op": "ne", "attendu": "aucune"}
+        assert conformite["rendre"]["workflow"] == "video-heraldiste-conformite"
+        assert conformite["rendre"]["inputs"] == {"1.video": "$livraison.livrable", "1.charte": "$charte", "1.images": 1}
+        assert conformite["sinon"]["recit"]["tenue"] is True and conformite["sinon"]["recit"]["regles_non_tenues"] == []
 
 
 def test_les_champs_et_leurs_defauts(standard, social):
@@ -80,6 +113,13 @@ def test_les_champs_et_leurs_defauts(standard, social):
     assert defauts == {**COMMUNS, **TEXTE, "style": "affiche-minimaliste", "technique": None}
     for brut in (standard, social):
         expose = brut["expose"]
+        # La charte EN PREMIER : « sinon c'est pas logique » (Antoine, 2026-09-24).
+        assert list(expose)[0] == "charte" and expose["charte"]["categorie"] == "charte"
+        assert expose["charte"]["options_depuis"] == {"menu": "charte"} and expose["charte"]["defaut"] == "aucune"
+        # Ce que la charte supplante ne s'affiche plus sous elle.
+        assert expose["palette"]["selon"] == SOUS_LA_CHARTE
+        for nom in ("style", "cadrage", "lumiere", "ambiance", "technique", "width", "height", "seed", "prompt"):
+            assert "selon" not in expose[nom], nom
         assert expose["prompt"]["requis"] is True and expose["prompt"]["categorie"] == "sujet"
         assert expose["technique"]["options_depuis"] == {"techniques": True} and "defaut" not in expose["technique"]
         assert expose["style"]["options_depuis"] == {"menu": "style_image"}
@@ -90,6 +130,10 @@ def test_les_champs_et_leurs_defauts(standard, social):
             assert champ.get("categorie") and str(champ.get("aide", "")).strip(), nom
     assert social["expose"]["bandeau"]["type"] == "BOOLEAN"
     assert social["expose"]["texte_position"]["options"] == ["bas", "centre", "haut"]
+    for nom in ("police", "couleur_texte", "bandeau"):
+        assert social["expose"][nom]["selon"] == SOUS_LA_CHARTE, nom
+    for nom in ("message", "sous_message", "texte_position", "taille_message"):
+        assert "selon" not in social["expose"][nom], nom
 
 
 def test_les_techniques_de_ce_plan_tiennent_le_role_image_et_aucun_fantome(standard, social, techniques):
@@ -121,25 +165,54 @@ def test_les_techniques_de_ce_plan_tiennent_le_role_image_et_aucun_fantome(stand
 
 
 def test_le_message_est_pose_pas_peint_et_la_zone_demandee(social):
-    direction = social["etapes"][0]["rendre"]["inputs"]
+    etapes = {e["id"]: e for e in social["etapes"]}
+    direction = etapes["direction"]["rendre"]["inputs"]
     assert direction["1.zone_de_texte"] == "$texte_position" and direction["1.texte_prevu"] == "$message"
-    textes = social["etapes"][2]["composer"]["textes"]
+    # La typographie vient de la contrainte : celle de la charte, ou — sans charte — celle qu'on a choisie (le « sinon »).
+    contrainte = etapes["contrainte"]
+    assert contrainte["rendre"]["inputs"]["1.police"] == "$police" and contrainte["rendre"]["inputs"]["1.couleur"] == "$couleur_texte"
+    assert contrainte["sinon"]["recit"]["police"] == "$police" and contrainte["sinon"]["recit"]["couleur"] == "$couleur_texte"
+    textes = etapes["livraison"]["composer"]["textes"]
     assert [t["texte"] for t in textes] == ["$message", "$sous_message"]
-    assert all(t["police"] == "$police" and t["position"] == "$texte_position"
-               and t["couleur"] == "$couleur_texte" and t["boite"] == "$bandeau" for t in textes)
+    assert all(t["police"] == "$contrainte.recit.police" and t["position"] == "$texte_position"
+               and t["couleur"] == "$contrainte.recit.couleur" and t["fond"] == "$contrainte.recit.fond"
+               and t["boite"] == "$bandeau" and t["laisser_au_logo"] == "$contrainte.recit.logo_texte" for t in textes)
     assert textes[0]["taille"] == "$taille_message" and textes[1]["decalage"] == 0.1
-    # Le message est posé par la livraison, jamais confié au graphe de peinture.
-    assert "$message" not in json.dumps(social["etapes"][1])
-    constats = {c["id"]: c for c in social["etapes"][3]["constater"]}
+    # Le message est posé par la livraison, jamais confié au graphe de peinture ni à la charte.
+    assert "$message" not in json.dumps(etapes["rendu"]) and "$message" not in json.dumps(contrainte)
+    constats = {c["id"]: c for c in etapes["constat"]["constater"]}
     assert constats["chaque_texte_demande_est_pose"]["attendu"] == "$livraison.textes_demandes"
-    du_message = social["etapes"][4]
+    du_message = etapes["constat_du_message"]
     assert du_message["quand"] == "$message"
     assert du_message["constater"][0]["attendu"] == "$texte_position"
 
 
+def test_ce_que_la_charte_impose_se_constate_et_ce_qu_elle_ne_peut_pas_imposer_se_dit(standard, social, techniques):
+    """« Au vu de ce qu'impose la charte graphique, cela doit peser » : appliquée,
+    palette dans la consigne et tenue sur l'image, logo posé / intact / à sa
+    taille, règles mesurables ; et ce que ce modèle ne sait pas honorer (les
+    interdits sous une technique sans guidage, les images de référence) est
+    CONSTATÉ — jamais refusé, jamais tu."""
+    for brut in (standard, social):
+        etape = next(e for e in brut["etapes"] if e["id"] == "constat_de_la_charte")
+        assert etape["quand"] == {"valeur": "$charte", "op": "ne", "attendu": "aucune"}
+        ids = [c["id"] for c in etape["constater"]]
+        assert [i for i in ids if i in CONSTATS_DE_LA_CHARTE] == CONSTATS_DE_LA_CHARTE
+        constats = {c["id"]: c for c in etape["constater"]}
+        assert constats["les_interdits_de_la_charte_pesent"]["valeur"] == "$technique.negatif.applique"
+        assert constats["aucune_image_de_reference_de_la_charte_n_est_attendue"]["attendu"] == []
+        assert constats["la_palette_de_la_charte_est_tenue"]["attendu"] == "$conformite.recit.part_attendue"
+        assert all(str(c.get("aide", "")).strip() for c in etape["constater"])
+    assert "ce_que_le_logo_ecrit_n_est_pas_reecrit" in [c["id"] for c in next(
+        e for e in social["etapes"] if e["id"] == "constat_de_la_charte")["constater"]]
+    # Chaque technique dit si elle lit le négatif : c'est ce que le constat lit dans son fichier.
+    assert techniques["rapide"].donnees["negatif"]["applique"] is False
+    assert techniques["soignee"].donnees["negatif"]["applique"] is True
+
+
 def test_la_taille_se_constate_et_seul_le_fichier_vide_refuse(standard, social):
     for brut in (standard, social):
-        constats = {c["id"]: c for c in brut["etapes"][3]["constater"]}
+        constats = {c["id"]: c for c in next(e for e in brut["etapes"] if e["id"] == "constat")["constater"]}
         assert constats["la_largeur_demandee_est_tenue"]["valeur"] == "$livraison.mesure.width"
         assert constats["la_largeur_demandee_est_tenue"]["attendu"] == "$width"
         assert constats["la_hauteur_demandee_est_tenue"]["attendu"] == "$height"
@@ -169,7 +242,12 @@ def test_sur_ce_poste_les_modes_sont_publies_et_leurs_graphes_tiennent():
     r = json.loads(reconciliation.read_text(encoding="utf-8"))
     assert r["categories"]["creer-une-image"]["ordre"] == 0
     rubriques = [c["valeur"] for c in r["categories_de_champs"]]
-    assert rubriques[0] == "sujet" and "style" in rubriques
+    assert rubriques[:2] == ["charte", "sujet"] and "style" in rubriques
+    assert pathlib.Path(r["menus"]["charte"]["source_fichier"]["chemin"]).is_file()
+    for nom, noeud, cles in (("image-heraldiste", "HeraldisteCharte", ("charte", "prompt", "police", "couleur")),
+                             ("video-heraldiste-conformite", "HeraldisteConformite", ("video", "charte", "images"))):
+        graphe = json.loads(pathlib.Path(r["workflows"][nom]["workflow"]).read_text(encoding="utf-8"))
+        assert graphe["1"]["class_type"] == noeud and all(c in graphe["1"]["inputs"] for c in cles), nom
     assert {x["valeur"] for x in r["formats"]["resolutions"]} >= {"carre-1080", "4-5-1080"}
     for nom in ("style_image", "cadrage_image", "lumiere_image", "palette_image", "ambiance_image"):
         assert pathlib.Path(r["menus"][nom]["source_fichier"]["chemin"]).is_file(), nom

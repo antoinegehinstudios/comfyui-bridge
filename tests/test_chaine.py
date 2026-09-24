@@ -415,3 +415,30 @@ def test_une_etape_sautee_nomme_les_champs_qu_elle_seule_lisait():
                                       {"cta": "", "police": "", "fps": 30, "technique": "t"}) == []
     # Sans technique (un rôle sans personne derrière) : ce que l'étape lit seule.
     assert noyau.sans_effet_si_sautee(chaine, appel, None, {"cta": "", "police": "G"}) == []
+
+
+def test_un_champ_de_chaine_peut_dependre_d_un_autre_par_selon():
+    """2026-09-24 : la palette qu'on choisit s'efface devant celle qu'une charte
+    impose — la chaîne le déclare (« selon »), le lanceur ne montre le champ
+    que sous les valeurs dites. Une forme fausse ou un champ inconnu refusent."""
+    brut = {"version": 1, "chaine": "c", "resume": "r",
+            "expose": {"charte": {"type": "COMBO", "defaut": "aucune", "options": ["aucune", "x"], "libelle": "Charte"},
+                       "palette": {"type": "COMBO", "defaut": "libre", "options": ["libre", "chaude"], "libelle": "Palette",
+                                   "selon": {"champ": "charte", "valeurs": ["aucune"]}}},
+            "etapes": [{"id": "rendu", "rendre": {"workflow": "g", "prompt": "$palette", "seed": 1,
+                                                   "inputs": {"1.x": "$charte"}}}],
+            "livrable": "$rendu.livrable"}
+    chaine = noyau.lire(brut, "c")
+    assert chaine.champs["palette"].selon == {"champ": "charte", "valeurs": ["aucune"]}
+    assert chaine.champs["charte"].selon is None
+    import copy
+    faux = copy.deepcopy(brut)
+    faux["expose"]["palette"]["selon"] = {"champ": "inconnu", "valeurs": ["a"]}
+    with pytest.raises(WorkflowMappingError, match="n'expose pas"):
+        noyau.lire(faux, "c")
+    faux["expose"]["palette"]["selon"] = {"champ": "charte"}
+    with pytest.raises(WorkflowMappingError, match="selon"):
+        noyau.lire(faux, "c")
+    faux["expose"]["palette"]["selon"] = {"champ": "palette", "valeurs": ["libre"]}
+    with pytest.raises(WorkflowMappingError, match="lui-même"):
+        noyau.lire(faux, "c")
