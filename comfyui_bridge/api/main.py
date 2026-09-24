@@ -553,8 +553,9 @@ def _entree_de_champ(c, nom: str, champ, aides: dict | None = None, chaine=None)
     if champ.options_depuis is not None:
         options, source = _options_declarees(c, champ.options_depuis, chaine)
         # Le menu déclaré AU NOM DU CHAMP reste le plus proche : il peut
-        # retitrer ce que la source rend, jamais l'inverse.
-        menu = {**source, **menu}
+        # retitrer ce que la source rend — jamais effacer ses libellés.
+        from ..adapter import menus as _menus
+        menu = _menus.retitrer(source, menu)
     entree: dict[str, Any] = {
         "field": nom, "param": nom, "node": None, "input": None,
         "type": champ.type, "value": champ.defaut, "derived": False,
@@ -1046,8 +1047,8 @@ def _decrire_champ(c, spec, chaine=None, technique=None):
         if champ.options_depuis is not None:
             options, source = _options_declarees(c, champ.options_depuis, chaine)
             # Le menu déclaré AU NOM DU CHAMP reste le plus proche, comme au
-            # formulaire : il retitre ce que la source rend, jamais l'inverse.
-            menu = {**source, **menu}
+            # formulaire : il retitre ce que la source rend — jamais effacer ses libellés.
+            menu = _menus.retitrer(source, menu)
         choix, _manque = _menus.choix(list(options) if options is not None else None, menu)
         return {"libelle": champ.libelle or menu.get("libelle") or nom,
                 "unite": _menus.unite(nom, champ.unite or menu.get("unite")),

@@ -145,6 +145,26 @@ def valeurs(menu: dict[str, Any] | None,
     return list(table), manque
 
 
+def retitrer(source: dict[str, Any] | None, menu: dict[str, Any] | None) -> dict[str, Any]:
+    """La SOURCE d'un champ (le fichier, la table qu'il nomme par « options_depuis »)
+    habillée par le menu déclaré AU NOM du champ : ce menu retitre le champ (son
+    libellé, son aide) et, valeur par valeur, ce qu'il connaît de la source — il
+    n'EFFACE jamais les libellés que la source apporte pour les valeurs qu'il
+    ignore. Mesuré le 2026-09-24 : le menu « ambiance » de l'encre (lanterne,
+    chandelle…) recouvrait tout le catalogue d'ambiances d'une image, dont les
+    valeurs s'affichaient en clés nues dans le lanceur. Une source illisible garde
+    les libellés du menu tels quels : mieux vaut un titre que rien."""
+    source, menu = dict(source or {}), dict(menu or {})
+    table, _manque = _libelles(source) if source else ({}, None)
+    propres = menu.get("libelles") if isinstance(menu.get("libelles"), dict) else {}
+    fusion = {**source, **{k: v for k, v in menu.items() if k != "libelles"}}
+    if table:
+        fusion["libelles"] = {**table, **{k: v for k, v in propres.items() if k in table}}
+    elif propres:
+        fusion["libelles"] = dict(propres)
+    return fusion
+
+
 def choix(options: list[Any] | tuple[Any, ...] | None,
           menu: dict[str, Any] | None) -> tuple[list[dict[str, Any]] | None, str | None]:
     """Les options du fournisseur, habillées de ce qui a été déclaré.

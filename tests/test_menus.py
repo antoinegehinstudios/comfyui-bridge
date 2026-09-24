@@ -87,3 +87,27 @@ def test_un_menu_se_filtre_sur_ce_que_la_ligne_porte(tmp_path):
     # Une table écrite à la main se filtre de même, sur ses propres clés.
     ecrit = {"libelles": {"a": {"libelle": "A", "genre": "x"}, "b": {"libelle": "B", "genre": "y"}}}
     assert menus.valeurs(ecrit, {"genre": "y"})[0] == ["b"]
+
+
+def test_un_menu_au_nom_du_champ_retitre_la_source_sans_effacer_ses_libelles(tmp_path):
+    """2026-09-24 : le menu « ambiance » de l'encre (lanterne, chandelle…)
+    recouvrait le catalogue d'ambiances d'une image, dont les valeurs
+    s'affichaient en clés nues. Le menu homonyme retitre le champ et ce qu'il
+    connaît de la source ; il n'efface pas le reste."""
+    fichier = tmp_path / "ambiances.json"
+    fichier.write_text(json.dumps({"styles": {"libre": {"libelle": "Libre", "famille": "—"},
+                                              "calme": {"libelle": "Calme", "famille": "—"}}}),
+                       encoding="utf-8")
+    source = {"libelle": "Ambiance", "source_fichier": {"chemin": str(fichier), "table": "styles",
+                                                        "libelle": "libelle", "groupe": "famille"}}
+    homonyme = {"libelle": "Ambiance (encre)", "aide": "la lumière de la page",
+                "libelles": {"lanterne": {"libelle": "Lanterne"}, "calme": {"libelle": "Calme (retitré)"}}}
+    fusion = menus.retitrer(source, homonyme)
+    assert fusion["libelle"] == "Ambiance (encre)" and fusion["aide"] == "la lumière de la page"
+    choix, manque = menus.choix(["libre", "calme"], fusion)
+    assert manque is None
+    assert [c["libelle"] for c in choix] == ["Libre", "Calme (retitré)"]      # la source, retitrée où le menu la connaît
+    assert "lanterne" not in fusion["libelles"]                              # ce que la source ignore ne s'y ajoute pas
+    # Sans source lisible, les libellés du menu restent tels quels ; sans menu, la source seule.
+    assert menus.retitrer({"libelle": "X"}, homonyme)["libelles"] == homonyme["libelles"]
+    assert [c["libelle"] for c in menus.choix(["libre"], menus.retitrer(source, None))[0]] == ["Libre"]
