@@ -243,7 +243,8 @@ def oter_le_nom(texte: str, nom: str) -> tuple[str, list[str]]:
     if not str(texte or "").strip() or not lettres:
         return str(texte or ""), []
     corps = r"[\W_]*".join(re.escape(ch) for ch in lettres)
-    motif = re.compile(rf"{PREPOSITIONS_AVANT_UN_NOM}?(?<![a-z0-9]){corps}(?![a-z0-9])")
+    # jamais dans une adresse (www.grabugefest.fr, @grabugefest, contact@…) : ni après « . @ / », ni avant « .fr »
+    motif = re.compile(rf"{PREPOSITIONS_AVANT_UN_NOM}?(?<![a-z0-9.@/_-]){corps}(?![a-z0-9]|\.[a-z]|@)")
     texte = str(texte)
     trouves = [(m.start(), m.end()) for m in motif.finditer(_plier(texte))]
     if not trouves:

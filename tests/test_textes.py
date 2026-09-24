@@ -135,6 +135,8 @@ def test_un_texte_laisse_au_logo_ce_qu_il_ecrit(tmp_path):
     assert any("ôté du texte incrusté" in d and "reste « 2027 · TREMPLIN IV »" in d for d in dits), dits
     assert any("il ne restait rien" in d for d in dits), dits
     assert textes.oter_le_nom("Affiche de Grabuge Fest", "grabugefest") == ("Affiche", ["de Grabuge Fest"])
+    for adresse in ("Inscriptions sur grabugefest.fr", "www.grabugefest.fr", "contact@grabugefest.fr", "suivez @grabugefest"):
+        assert textes.oter_le_nom(adresse, "GRABUGE FEST") == (adresse, []), f"une adresse n'est pas le nom : {adresse}"
 
 
 def test_sans_textes_rien(tmp_path):
