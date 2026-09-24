@@ -111,3 +111,41 @@ def test_un_menu_au_nom_du_champ_retitre_la_source_sans_effacer_ses_libelles(tmp
     # Sans source lisible, les libellés du menu restent tels quels ; sans menu, la source seule.
     assert menus.retitrer({"libelle": "X"}, homonyme)["libelles"] == homonyme["libelles"]
     assert [c["libelle"] for c in menus.choix(["libre"], menus.retitrer(source, None))[0]] == ["Libre"]
+
+
+def test_ce_qu_une_valeur_impose_se_declare_sur_les_faits_du_fournisseur(tmp_path):
+    """2026-09-24, Antoine : « Héraldiste expose des éléments factuels, l'usage
+    qui en est fait est propre au réalisateur ». La source porte des FAITS
+    (une colonne, dans sa langue) ; la déclaration dit ici quel champ chaque
+    fait impose, sous quelle condition, en quels mots. Un fait vide n'impose
+    rien ; une condition non donnée non plus ; un lanceur reçoit `impose`
+    en champs de la chaîne, jamais la langue du fournisseur."""
+    fichier = tmp_path / "menu.json"
+    fichier.write_text(json.dumps({"chartes": {
+        "aucune": {"libelle": "Aucune", "marque": "—"},
+        "pleine@1": {"libelle": "Pleine", "marque": "pleine", "faits": {
+            "palette_en": "red (#E1000F)", "interdits_en": "blur",
+            "titres": {"famille": "Marianne", "fichier": "http://x/f", "couleur": "#1a1a1a", "fond": "#ffffff"}}},
+        "creuse@1": {"libelle": "Creuse", "marque": "creuse", "faits": {
+            "palette_en": "", "interdits_en": "",
+            "titres": {"famille": "Sans fichier", "fichier": None, "couleur": None, "fond": None}}},
+        "muette@1": {"libelle": "Muette", "marque": "muette"}}}), encoding="utf-8")
+    menu = {"source_fichier": {"chemin": str(fichier), "table": "chartes", "libelle": "libelle", "groupe": "marque",
+                               "impose": {"colonne": "faits", "champs": {
+                                   "palette": {"fait": "palette_en"},
+                                   "negatif": {"fait": "interdits_en"},
+                                   "police": {"fait": "titres.famille", "si": "titres.fichier"},
+                                   "couleur_texte": {"fait": "titres.couleur"},
+                                   "bandeau": {"fait": "titres.fond", "dit": "un fond plein {valeur} sous le texte"}}}}}
+    choix, manque = menus.choix(["aucune", "pleine@1", "creuse@1", "muette@1"], menu)
+    assert manque is None
+    par = {c["valeur"]: c for c in choix}
+    assert par["pleine@1"]["impose"] == {"palette": "red (#E1000F)", "negatif": "blur", "police": "Marianne",
+                                         "couleur_texte": "#1a1a1a", "bandeau": "un fond plein #ffffff sous le texte"}
+    assert par["creuse@1"]["impose"] == {}          # des faits vides, une police sans fichier : rien n'est imposé
+    assert "impose" not in par["muette@1"]          # sans faits, rien n'est dit : le lanceur grise par la seule déclaration
+    assert "impose" not in par["aucune"]
+    # la forme nue : une colonne déjà en champs de la chaîne, relayée telle quelle
+    fichier.write_text(json.dumps({"chartes": {"x": {"libelle": "X", "marque": "x", "impose": {"palette": "rouge"}}}}), encoding="utf-8")
+    nue = {"source_fichier": {"chemin": str(fichier), "table": "chartes", "libelle": "libelle", "impose": "impose"}}
+    assert menus.choix(["x"], nue)[0][0]["impose"] == {"palette": "rouge"}

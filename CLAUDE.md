@@ -191,10 +191,12 @@ est refusé au chargement (`core.chaine.champs_que_rien_ne_lit`, en fin de
 `verifier_techniques`) ; (2) **un champ IMPOSÉ se grise, il ne se cache pas** —
 `impose_par: {champ, sauf}` sur un champ de chaîne ou de technique (le maître
 doit exister), publié tel quel dans `/io` ; ce que chaque valeur du maître
-impose vient du fournisseur du menu (colonne « impose », projetée par
-`source_fichier.impose: {colonne, champs}` — Héraldiste dit `negatif`,
-`palette`, `police_titres`, `couleur_titres`, `fond_titres`, seulement ce que
-la charte donne ; la réconciliation traduit vers les champs des chaînes) et
+impose se déclare sur les FAITS du fournisseur du menu (`source_fichier.impose:
+{colonne: "faits", champs: {<champ>: {fait, si, dit}}}` — Héraldiste expose
+`positif_en`, `palette_en`, `interdits_en`, `titres`, `texte`, tels que son
+brief les dit, schéma `heraldiste/menu` ; quel champ un fait impose, sous
+quelle condition, en quels mots, c'est l'USAGE, et il vit ici, chez le
+réalisateur — jamais chez le fournisseur ; un fait vide n'impose rien) et
 part dans `choix[].impose` ; le lanceur ne grise que ce qui est imposé ; (3)
 **ce qu'une technique ne règle pas se DÉTECTE et se dit** —
 `adapter.techniques.manques(technique, voisines, graphe_de)` : un réglage

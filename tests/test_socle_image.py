@@ -256,12 +256,14 @@ def test_sur_ce_poste_les_modes_sont_publies_et_leurs_graphes_tiennent():
     rubriques = [c["valeur"] for c in r["categories_de_champs"]]
     assert rubriques[:2] == ["charte", "sujet"] and "style" in rubriques
     assert pathlib.Path(r["menus"]["charte"]["source_fichier"]["chemin"]).is_file()
-    # Ce que chaque charte impose, relayé au lanceur : Héraldiste parle sa langue (police_titres…), la
-    # réconciliation traduit vers les champs des chaînes — et rien d'autre ne part.
+    # Héraldiste expose des FAITS (colonne « faits » de son menu) ; l'USAGE — quel champ un fait impose,
+    # sous quelle condition, en quels mots — est déclaré ICI, chez le réalisateur (2026-09-24).
     impose = r["menus"]["charte"]["source_fichier"]["impose"]
-    assert impose["colonne"] == "impose" and impose["champs"] == {
-        "negatif": "negatif", "palette": "palette", "police_titres": "police",
-        "couleur_titres": "couleur_texte", "fond_titres": "bandeau"}
+    assert impose["colonne"] == "faits"
+    assert set(impose["champs"]) == {"palette", "negatif", "police", "couleur_texte", "bandeau"}
+    assert impose["champs"]["police"] == {"fait": "titres.famille", "si": "titres.fichier"}
+    assert impose["champs"]["bandeau"]["fait"] == "titres.fond" and "{valeur}" in impose["champs"]["bandeau"]["dit"]
+    assert all("fait" in u for u in impose["champs"].values())
     for nom, noeud, cles in (("image-heraldiste", "HeraldisteCharte", ("charte", "prompt", "police", "couleur")),
                              ("video-heraldiste-conformite", "HeraldisteConformite", ("video", "charte", "images"))):
         graphe = json.loads(pathlib.Path(r["workflows"][nom]["workflow"]).read_text(encoding="utf-8"))

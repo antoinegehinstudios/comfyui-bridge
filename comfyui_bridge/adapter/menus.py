@@ -86,20 +86,34 @@ def _libelles(menu: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     projection = {"libelle": str(source.get("libelle") or "libelle"),
                   "resume": str(source.get("resume") or "resume"),
                   "groupe": str(source.get("groupe") or "groupe")}
-    # « impose » : la colonne du fournisseur qui dit ce que CETTE valeur impose
-    # aux autres champs (une charte : sa palette, ses interdits, sa police) —
-    # un objet {clé du fournisseur: valeur lisible}. Déclarée par son nom (relayée
-    # telle quelle), ou par {colonne, champs: {clé du fournisseur: champ de la
-    # chaîne}} : le fournisseur parle sa langue, la réconciliation traduit, et
-    # ce qui n'a pas de champ ici ne part pas. Un lanceur grise et remplit les
-    # champs imposés avec. Absente, rien : le lanceur grise par la seule
-    # déclaration « impose_par » du champ, sans dire de valeur.
+    # « impose » : ce que CETTE valeur du menu impose aux autres champs, dit à
+    # partir des FAITS que le fournisseur porte (une colonne : un objet, dans
+    # sa langue — une charte : sa palette en anglais, ses interdits, sa
+    # typographie). Le fournisseur n'écrit jamais l'usage ; c'est ici, chez le
+    # réalisateur, que la déclaration dit quel champ un fait impose, sous
+    # quelle condition, en quels mots (Antoine, 2026-09-24 : « Héraldiste expose
+    # des éléments factuels, l'usage qui en est fait est propre au
+    # réalisateur »). Un lanceur grise et remplit les champs imposés avec.
+    # Absente, rien : le lanceur grise par la seule déclaration « impose_par »
+    # du champ, sans dire de valeur.
     return {valeur: {**{cle: ligne.get(champ) for cle, champ in projection.items()},
                      **_impose_de(ligne, source.get("impose"))}
             for valeur, ligne in table.items()}, None
 
 
 def _impose_de(ligne: dict[str, Any], declaration: Any) -> dict[str, Any]:
+    """Deux formes de déclaration :
+
+    * le NOM d'une colonne — relayée telle quelle, quand le fournisseur parle
+      déjà en champs de la chaîne (un objet {champ: valeur lisible}) ;
+    * ``{"colonne": "faits", "champs": {<champ de la chaîne>: {"fait": "titres.famille",
+      "si": "titres.fichier", "dit": "un fond plein {valeur} sous le texte"}}}`` —
+      ``fait`` : le chemin (à points) du fait dans la colonne ; ``si`` : un autre
+      fait qui doit être donné pour que celui-ci impose (la police ne s'incruste
+      que par son fichier) ; ``dit`` : les mots d'un humain, avec ``{valeur}``.
+      Un fait vide (absent, null, « », liste ou objet vides, faux) n'impose
+      rien : la charte sans interdit laisse « à éviter » libre.
+    """
     if isinstance(declaration, str):
         colonne, champs = declaration, None
     elif isinstance(declaration, dict) and declaration.get("colonne"):
@@ -111,7 +125,31 @@ def _impose_de(ligne: dict[str, Any], declaration: Any) -> dict[str, Any]:
         return {}
     if not isinstance(champs, dict):
         return {"impose": dict(porte)}
-    return {"impose": {str(champ): porte[cle] for cle, champ in champs.items() if cle in porte}}
+    impose: dict[str, Any] = {}
+    for champ, usage in champs.items():
+        if not isinstance(usage, dict) or not usage.get("fait"):
+            continue
+        valeur = _fait(porte, str(usage["fait"]))
+        if _vide(valeur) or (usage.get("si") and _vide(_fait(porte, str(usage["si"])))):
+            continue
+        dit = usage.get("dit")
+        impose[str(champ)] = str(dit).replace("{valeur}", str(valeur)) if isinstance(dit, str) and dit else valeur
+    return {"impose": impose}
+
+
+def _fait(porte: dict[str, Any], chemin: str) -> Any:
+    courant: Any = porte
+    for pas in chemin.split("."):
+        if not isinstance(courant, dict) or pas not in courant:
+            return None
+        courant = courant[pas]
+    return courant
+
+
+def _vide(valeur: Any) -> bool:
+    if isinstance(valeur, str):
+        return not valeur.strip()
+    return valeur is None or valeur is False or valeur == [] or valeur == {}
 
 
 def _lignes_brutes(menu: dict[str, Any]) -> dict[str, Any]:

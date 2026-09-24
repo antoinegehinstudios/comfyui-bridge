@@ -58,3 +58,4 @@ non exposé) et « soignée » (base, 25 pas, cfg et négatif réels).
 - [x] Gabarit « creation » manifesté par les deux modes, vérifié au chargement (`core/gabarit.py`, `resources/gabarits/creation.json`, `GABARIT-creation.md`).
 - [x] Preuves : suite complète verte ; passerelle relancée (PID 41016), `/io` relu ; maestro selftest 67/67 (commit 048edf0) ; Héraldiste 106 tests (commit a3590bc, chantier/menu-impose).
 - [ ] Reste : brume et livre tiennent « bords » à « fondus » sans l'exposer (détecté par le graphe) — l'exposer si l'on veut qu'il se règle sous elles.
+- [x] Connecteur Héraldiste → passerelle → maestro standardisé : Héraldiste n'expose que des FAITS (`faits`, schéma `heraldiste/menu` 1.1.0, `/v1/schema/menu`) ; l'usage (quel champ, `si`, `dit`) est déclaré dans la réconciliation ; maestro inchangé.
