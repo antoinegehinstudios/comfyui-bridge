@@ -94,6 +94,30 @@
       "categorie": "references",
       "aide": "La charte graphique (Héraldiste) que la création doit respecter : sa palette et ses mots de style complètent la consigne, ses interdits le négatif, sa police et sa couleur de texte habillent l'accroche et l'appel, et la vidéo livrée reçoit un constat de conformité (part de l'image dans la palette). « Aucune charte » : rien ne change."
     },
+    "logo": {
+      "type": "COMBO",
+      "defaut": "selon le message",
+      "options": [
+        "selon le message",
+        "avec",
+        "sans"
+      ],
+      "libelle": "Logo de la marque",
+      "categorie": "charte",
+      "aide": "L'usage reconnu (règles d'usage d'Héraldiste) : le logo signe une création qui porte un message — une accroche, un appel, un support promotionnel dans la consigne — et une image d'ambiance s'en passe : la marque y tient par ses couleurs, sa police, sa texture. « Pas de logo » dans la consigne est honoré. « Avec » et « sans » forcent. La décision et sa raison sont dites dans le récit de l'étape « contrainte »."
+    },
+    "logo_ou": {
+      "type": "COMBO",
+      "defaut": "carton final",
+      "options": [
+        "carton final",
+        "zone émetteur",
+        "les deux"
+      ],
+      "libelle": "Où le logo vit",
+      "categorie": "charte",
+      "aide": "Carton final (l'usage vidéo) : aucun logo pendant la scène ; sur les 1,5 dernières secondes, le fond de la marque couvre le cadre, le logo centré à 60 % de la largeur, l'appel en bas. Zone émetteur (l'usage affiche) : le logo en haut pendant toute la vidéo, à la place mesurée sur les affiches de la marque. Les deux : zone émetteur et carton."
+    },
     "accroche": {
       "type": "STRING",
       "defaut": "",
@@ -192,7 +216,13 @@
           "1.image_2": "$image_2",
           "1.role_2": "$role_image_2",
           "1.image_3": "$image_3",
-          "1.role_3": "$role_image_3"
+          "1.role_3": "$role_image_3",
+          "1.logo": "$logo",
+          "1.logo_ou": "$logo_ou",
+          "1.accroche": "$accroche",
+          "1.appel": "$appel",
+          "1.texte_position": "$texte_position",
+          "1.duree_s": "$duration_s"
         }
       },
       "sinon": {
@@ -221,6 +251,21 @@
           "logo_hauteur_min_px": null,
           "logo_zone": null,
           "logo_texte": null,
+          "texte_laisse_au_logo": null,
+          "logo_pose": false,
+          "logo_attendu": "aucun",
+          "logo_fichier_pendant": null,
+          "carton_fond_fichier": null,
+          "carton_logo_fichier": null,
+          "carton_debut_s": null,
+          "carton_s": 0,
+          "carton_logo_largeur": null,
+          "accroche_position": "$texte_position",
+          "accroche_debut_s": 0.5,
+          "accroche_fin_s": 4.5,
+          "appel_position": "$texte_position",
+          "appel_debut_s": -4.0,
+          "appel_fin_s": -0.2,
           "texture_fichier": null,
           "texture_fusion": null,
           "texture_opacite": null,
@@ -266,26 +311,26 @@
           {
             "texte": "$accroche",
             "police": "$contrainte.recit.police",
-            "position": "$texte_position",
-            "debut_s": 0.5,
-            "fin_s": 4.5,
+            "position": "$contrainte.recit.accroche_position",
+            "debut_s": "$contrainte.recit.accroche_debut_s",
+            "fin_s": "$contrainte.recit.accroche_fin_s",
             "taille": 0.055,
             "fondu_s": 0.4,
             "couleur": "$contrainte.recit.couleur",
             "fond": "$contrainte.recit.fond",
-            "laisser_au_logo": "$contrainte.recit.logo_texte"
+            "laisser_au_logo": "$contrainte.recit.texte_laisse_au_logo"
           },
           {
             "texte": "$appel",
             "police": "$contrainte.recit.police",
-            "position": "$texte_position",
-            "debut_s": -4.0,
-            "fin_s": -0.2,
+            "position": "$contrainte.recit.appel_position",
+            "debut_s": "$contrainte.recit.appel_debut_s",
+            "fin_s": "$contrainte.recit.appel_fin_s",
             "taille": 0.055,
             "fondu_s": 0.4,
             "couleur": "$contrainte.recit.couleur",
             "fond": "$contrainte.recit.fond",
-            "laisser_au_logo": "$contrainte.recit.logo_texte"
+            "laisser_au_logo": "$contrainte.recit.texte_laisse_au_logo"
           }
         ],
         "texture": {
@@ -296,12 +341,26 @@
         },
         "images": [
           {
-            "fichier": "$contrainte.recit.logo_fichier",
+            "fichier": "$contrainte.recit.carton_fond_fichier",
+            "couvrir": true,
+            "sous_les_textes": true,
+            "debut_s": "$contrainte.recit.carton_debut_s"
+          },
+          {
+            "fichier": "$contrainte.recit.logo_fichier_pendant",
             "ancrage": "$contrainte.recit.logo_ancrage",
             "largeur": "$contrainte.recit.logo_largeur",
             "marge": "$contrainte.recit.logo_marge",
             "hauteur_min_px": "$contrainte.recit.logo_hauteur_min_px",
             "espace_min": "$contrainte.recit.logo_zone"
+          },
+          {
+            "fichier": "$contrainte.recit.carton_logo_fichier",
+            "ancrage": "centre",
+            "largeur": "$contrainte.recit.carton_logo_largeur",
+            "hauteur_min_px": "$contrainte.recit.logo_hauteur_min_px",
+            "espace_min": "$contrainte.recit.logo_zone",
+            "debut_s": "$contrainte.recit.carton_debut_s"
           }
         ]
       }
@@ -315,7 +374,9 @@
           "video": "$livraison.livrable"
         },
         "inputs": {
-          "1.charte": "$charte"
+          "1.charte": "$charte",
+          "1.logo_attendu": "$contrainte.recit.logo_attendu",
+          "1.carton_s": "$contrainte.recit.carton_s"
         }
       },
       "sinon": {
@@ -396,7 +457,7 @@
           "valeur": "$conformite.recit.logo_present_partout",
           "op": "eq",
           "attendu": true,
-          "aide": "Un élément imposé par la charte se mesure sur la vidéo LIVRÉE, quelques images échantillonnées, par Héraldiste (repérage de la forme par corrélation des contours, fidélité par ΔE2000 sur ses pixels opaques). Le logo que la charte impose est incrusté TEL QUEL à la livraison (fichier de la charte, placement déclaré ou mesuré sur ses exemples) : il doit être retrouvé sur chaque image mesurée. Non tenu : le recollage ne l'a pas posé, ou un texte le couvre — le récit de « conformite » dit sur quelle part des images. Sans charte ou sans logo imposé : tenu."
+          "aide": "Un élément imposé par la charte se mesure sur la vidéo LIVRÉE, quelques images échantillonnées, par Héraldiste (repérage de la forme par corrélation des contours, fidélité par ΔE2000 sur ses pixels opaques). Le logo, quand la création le pose (champ « logo » : dès qu'il y a un message, sauf « sans » ou « pas de logo » dans la consigne), est incrusté TEL QUEL à la livraison — là où « logo_ou » le met : sur le carton final (les dernières images seulement) ou pendant toute la vidéo (zone émetteur) — et doit être retrouvé sur chaque image où il est attendu. Non tenu : le recollage ne l'a pas posé, ou un texte le couvre — le récit de « conformite » dit sur quelle part des images. Sans charte, sans logo imposé, ou sans logo voulu sur cette création : tenu, et c'est dit."
         },
         {
           "id": "le_logo_impose_est_intact",
@@ -453,6 +514,6 @@
     "references_commentees": "Une image jointe (image, image_2, image_3) et son rôle (role_image…) passent au montage : au run 0, l'amorce devient « texte + références → vidéo » (MiniMaxH3ReferenceToVideo, étiquettes « <Picture i> » dans la consigne, une phrase « <Picture i> is <rôle> » par image) ; les runs suivants repartent de la dernière image, où l'identité est déjà. Les rôles sont des réglages NOMMÉS de l'étape (« parametres »), injectés par les liaisons du montage — la chaîne ne nomme aucun nœud. Sans image, rien ne change : l'amorce ordinaire.",
     "continuite_des_blocs": "Chaque bloc après le premier est CONTINUÉ par référence : les 22 dernières images natives du bloc précédent (préfixe vidéo) et une image d'identité du bloc 0, rendus avec les poids ref2va — une vraie extension (mesuré le 2026-09-18 : SSIM 0,91–0,93 à la couture, caméra et personnage tenus). Chaque bloc a son bruit (graine + bloc) : le même seed rejouait la même trajectoire de caméra. La couture est constatée bloc par bloc (récit « raccord_ssim_min », constat ≥ 0,85) — un constat, jamais un refus.",
     "charte": "L'étape « contrainte » (un pas d'étape ne porte pas le nom d'un champ : « charte » est le champ) ne tourne que si une charte est demandée (« quand ») ; sinon son « sinon » rend les entrées telles quelles. Elle rend la consigne, le négatif, la police et la couleur EFFECTIFS, et — depuis le 2026-09-24 — ce que les éléments imposés de la charte deviennent (voir « elements_imposes »). L'étape « conformite » reçoit la vidéo livrée en média et rend la part dans la palette et la mesure de chaque élément imposé ; les constats en fin de chaîne la disent sans jamais refuser la livraison.",
-    "elements_imposes": "Les éléments que la charte impose pèsent selon leur TYPE, pas seulement par leurs couleurs. Le LOGO s'incruste TEL QUEL à la livraison, après le dernier agrandissement (un seul redimensionnement Lanczos depuis son fichier, puis l'encodage final) : à son ancrage, à sa largeur, avec sa marge, jamais sous sa taille minimale ; le rendu ne dessine pas de logo (négatif). La TEXTURE se fond à la livraison, avec sa fusion et son opacité (le défaut des réglages d'Héraldiste quand la charte ne les déclare pas, dit). Le FOND et les IMAGES DE RÉFÉRENCE de la charte prennent les places de référence que l'utilisateur laisse libres (image, image_2, image_3 — jamais les siennes), avec un rôle qui dit leur obligation ; un contre-exemple ne se transmet pas, un EXEMPLE D'APPLICATION non plus : il se compare (constat de composition) — montrée au rendu, l'affiche Tremplin III était recopiée, texte, dates, QR code et faux wordmark compris (job f2228891, 2026-09-24). Ce que le LOGO ÉCRIT (son texte, déclaré ou lu par l'analyse) est ôté de la consigne et des textes incrustés (« laisser_au_logo ») : le wordmark l'écrit, rien ne le recompose dans une autre police ; le constat le cherche hors du logo. Les références ne sont vues qu'au premier bloc du rendu : sur une vidéo longue, le constat de conformité dit ce qui en reste."
+    "elements_imposes": "Les éléments que la charte impose pèsent selon leur TYPE, pas seulement par leurs couleurs. Le LOGO n'est pas de toutes les créations (règles d'usage d'Héraldiste, references/regles-d-usage.md : requis dès qu'il y a un message ou un support promotionnel, exempté sur une image d'ambiance ; « pas de logo » honoré ; « logo » force dans les deux sens ; la décision est dite dans le récit de la contrainte). Quand il figure, il s'incruste TEL QUEL à la livraison, après le dernier agrandissement (un seul redimensionnement Lanczos depuis son fichier, puis l'encodage final) — sur un CARTON FINAL par défaut (les 1,5 dernières secondes : le fond de la marque couvre le cadre sous l'appel, le logo centré à 60 % de la largeur ; l'accroche finit avant le carton), ou en ZONE ÉMETTEUR pendant toute la vidéo (à son ancrage, à sa largeur, avec sa marge, jamais sous sa taille minimale) ; le rendu ne dessine jamais de logo (négatif). La consigne reçoit un COLORWAY court (dominante, secondaire, accent), pas la palette entière, qui gouverne les éléments posés et se constate sur l'image sans exigence. La TEXTURE se fond à la livraison, avec sa fusion et son opacité (le défaut des réglages d'Héraldiste quand la charte ne les déclare pas, dit). Le FOND et les IMAGES DE RÉFÉRENCE de la charte prennent les places de référence que l'utilisateur laisse libres (image, image_2, image_3 — jamais les siennes), avec un rôle qui dit leur obligation ; un contre-exemple ne se transmet pas, un EXEMPLE D'APPLICATION non plus : il se compare (constat de composition) — montrée au rendu, l'affiche Tremplin III était recopiée, texte, dates, QR code et faux wordmark compris (job f2228891, 2026-09-24). Ce que le LOGO ÉCRIT (son texte, déclaré ou lu par l'analyse) est ôté de la consigne et des textes incrustés (« laisser_au_logo ») : le wordmark l'écrit, rien ne le recompose dans une autre police ; le constat le cherche hors du logo. Les références ne sont vues qu'au premier bloc du rendu : sur une vidéo longue, le constat de conformité dit ce qui en reste."
   }
 }

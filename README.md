@@ -1743,6 +1743,29 @@ formules écrites (la vidéo pour base, la texture pour calque) : le mode « nor
 du filtre `blend` d'ffmpeg rendait la vidéo seule. Un objet sans fichier (une
 charte sans logo) ne pose rien et le dit ; un ancrage, une fusion ou un fichier
 inconnus refusent l'étape. L'étape rend `images_posees` et `texture_posee`.
+Une image peut aussi `couvrir` le cadre (agrandie à couvrir, recadrée au
+centre, jamais déformée — la plaque d'un carton final) et vivre
+`sous_les_textes` (posée avant eux) ; posée depuis la fin (`debut_s` négatif),
+elle n'occupe que les dernières secondes.
+
+Le LOGO n'est pas de toutes les créations (règles d'usage reconnues, lues chez
+Héraldiste dans `references/regles-d-usage.md` ; décisions d'Antoine du
+2026-09-24) : la chaîne « Écrire une vidéo » expose `logo` (« selon le
+message », le défaut : le logo dès qu'un message est incrusté — accroche,
+appel — ou qu'un support promotionnel est demandé, aucun sur une image
+d'ambiance, « pas de logo » dans la consigne honoré ; « avec » ; « sans ») et
+`logo_ou` (« carton final », le défaut en vidéo : rien pendant la scène, puis
+sur les 1,5 dernières secondes le fond de la marque — ou une plaque à sa
+couleur de fond — couvrant sous les textes, le logo centré à 60 % de la
+largeur, l'appel en bas, l'accroche finie avant ; « zone émetteur » : le logo
+en haut pendant toute la vidéo ; « les deux »). La contrainte reçoit le
+message, la position des textes et la durée, DÉCIDE et le dit (`logo_pose`,
+`logo_raison`, `logo_lieu`, `logo_attendu`) ; la livraison pose ce qu'elle a
+décidé (`carton_fond_fichier`, `carton_logo_fichier`, `logo_fichier_pendant`)
+et la conformité reçoit `logo_attendu` : le constat ne cherche le logo que là
+où il est attendu. La consigne du rendu reçoit un colorway court (dominante,
+secondaire, accent), jamais la palette entière — la palette gouverne les
+éléments posés et le constat, le style gouverne l'image.
 
 Les IMAGES DE RÉFÉRENCE COMMENTÉES : jusqu'à trois images jointes (`image`,
 `image_2`, `image_3`), chacune avec son rôle (`role_image`… — « le personnage

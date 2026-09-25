@@ -57,6 +57,16 @@ def test_la_boite_suit_le_placement_et_la_taille_minimale():
     assert trop["zone_tenue_au_bord"] is False, "une image qui remplit la largeur ne peut pas tenir sa zone : c'est dit"
 
 
+def test_une_image_peut_couvrir_le_cadre_sur_les_dernieres_secondes(tmp_path):
+    """La plaque d'un carton final : agrandie à couvrir, recadrée au centre, jamais déformée, posée depuis la fin."""
+    couvrante = tmp_path / "plaque.png"
+    Image.new("RGB", (300, 400), (200, 120, 80)).save(couvrante)
+    args, chaines, sortie, dits, poses = incrustations.filtres_images([{"fichier": str(couvrante), "couvrir": True, "debut_s": -1.5}],
+                                                                       720, 1280, 30, 3, tmp_path, "[v0]", duree_s=5.0)
+    assert Image.open(tmp_path / "image_0.png").size == (720, 1280) and "overlay=x=0:y=0" in chaines[0] and "between(t,3.500,5.000)" in chaines[0]
+    assert any("couvre le cadre" in d for d in dits) and poses[0]["couvre"] is True
+
+
 def test_le_logo_se_pose_tel_quel_a_sa_place(tmp_path):
     parts = [_video(tmp_path / "a.mp4"), _video(tmp_path / "b.mp4")]
     logo = _logo(tmp_path / "logo.png")

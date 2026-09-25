@@ -18,6 +18,11 @@ Une image est un objet :
   part du plus petit côté (la même grammaire que le placement d'Héraldiste) ;
 * ``hauteur_min_px`` : la taille minimale de la charte — un logo que le
   placement ferait plus petit est AGRANDI jusqu'à elle, et c'est dit ;
+* ``couvrir`` : l'image COUVRE le cadre (agrandie à couvrir, recadrée au centre,
+  jamais déformée) — le fond de marque d'un carton final ; ``ancrage``,
+  ``largeur`` et ``marge`` ne comptent plus ;
+* ``sous_les_textes`` : posée avant les textes (une plaque sous l'appel), et
+  non par-dessus tout ;
 * ``espace_min`` : la zone de protection, en hauteurs de l'image — le bord du
   cadre ne s'approche pas plus près ; un placement plus serré est DÉPLACÉ vers
   l'intérieur (jamais rétréci), et c'est dit ; s'il ne tient pas même ainsi,
@@ -176,9 +181,18 @@ def filtres_images(images: Any, largeur: int, hauteur: int, fps: int, premier_ra
             dits.append(f"image {n + 1} : aucun fichier à poser (rien d'imposé)")
             continue
         source = _ouvrir(spec["fichier"], "image").convert("RGBA")
-        b = boite(str(spec.get("ancrage") or "centre"), spec.get("largeur"), spec.get("marge"), int(largeur), int(hauteur),
-                  source.width / source.height, spec.get("hauteur_min_px"), spec.get("espace_min"))
-        posee = source.resize((b["largeur"], b["hauteur"]), Image.LANCZOS)
+        if spec.get("couvrir"):
+            # couvrir le cadre : agrandie jusqu'à le couvrir, recadrée au centre, jamais déformée
+            k = max(int(largeur) / source.width, int(hauteur) / source.height)
+            grande = source.resize((max(int(largeur), round(source.width * k)), max(int(hauteur), round(source.height * k))), Image.LANCZOS)
+            x0, y0 = (grande.width - int(largeur)) // 2, (grande.height - int(hauteur)) // 2
+            posee = grande.crop((x0, y0, x0 + int(largeur), y0 + int(hauteur)))
+            b = {"x": 0, "y": 0, "largeur": int(largeur), "hauteur": int(hauteur), "agrandi_au_minimum": False,
+                 "deplace_pour_la_zone": False, "zone_tenue_au_bord": None, "couvre": True}
+        else:
+            b = boite(str(spec.get("ancrage") or "centre"), spec.get("largeur"), spec.get("marge"), int(largeur), int(hauteur),
+                      source.width / source.height, spec.get("hauteur_min_px"), spec.get("espace_min"))
+            posee = source.resize((b["largeur"], b["hauteur"]), Image.LANCZOS)
         chemin = Path(dossier) / f"image_{n}.png"
         posee.save(chemin)
         args += ["-loop", "1", "-framerate", str(int(fps)), "-i", str(chemin)]
@@ -196,8 +210,10 @@ def filtres_images(images: Any, largeur: int, hauteur: int, fps: int, premier_ra
         courant = sortie
         rang += 1
         nom = Path(str(spec["fichier"])).name
-        dits.append(f"image « {nom} » posée telle quelle : {b['largeur']}×{b['hauteur']} px en {spec.get('ancrage') or 'centre'}"
-                    f" (x {b['x']}, y {b['y']})" + (" — agrandie à la taille minimale" if b["agrandi_au_minimum"] else "")
+        dits.append(f"image « {nom} » " + (f"couvre le cadre ({b['largeur']}×{b['hauteur']} px, recadrée au centre)" if b.get("couvre") else
+                                              f"posée telle quelle : {b['largeur']}×{b['hauteur']} px en {spec.get('ancrage') or 'centre'}"
+                                              f" (x {b['x']}, y {b['y']})")
+                    + (" — agrandie à la taille minimale" if b["agrandi_au_minimum"] else "")
                     + (f" — déplacée vers l'intérieur pour tenir sa zone de protection ({round(float(spec['espace_min']) * b['hauteur'])} px au bord)"
                        if b["deplace_pour_la_zone"] else "")
                     + (" — sa zone de protection ne tient pas dans le cadre à cette taille" if b["zone_tenue_au_bord"] is False else ""))
