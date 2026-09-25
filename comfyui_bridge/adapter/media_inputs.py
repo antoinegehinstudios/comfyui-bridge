@@ -38,6 +38,9 @@ MEDIA_LOADERS: dict[str, tuple[str, str]] = {
     # proposerait rien à joindre.
     "IconographeDocumentation": ("image", "image"),
     "IconologueCulture": ("image", "image"),
+    # Le constat de conformité d'Héraldiste prend une VIDÉO par son nom : la chaîne lui
+    # dépose la vidéo livrée, il en échantillonne quelques images et les envoie au service.
+    "HeraldisteConformite": ("video", "video"),
 }
 
 # Les drapeaux par lesquels ComfyUI annonce qu'une entrée reçoit un fichier.
