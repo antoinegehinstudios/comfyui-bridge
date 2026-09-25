@@ -166,6 +166,12 @@ def _lignes_brutes(menu: dict[str, Any]) -> dict[str, Any]:
         return {}
 
 
+def lignes(menu: dict[str, Any] | None) -> dict[str, Any]:
+    """Les lignes du fournisseur, par valeur, telles qu'il les écrit : ce qu'un
+    réconciliant y lit (les faits d'une charte) sans passer par la projection."""
+    return _lignes_brutes(menu or {})
+
+
 def _porte(ligne: Any, cle: str, exige: Any) -> bool:
     """Une ligne PORTE ce qu'on exige : la valeur elle-même, ou — dans une liste
     — un élément égal ou un objet dont le « nom » l'est (les temps d'une

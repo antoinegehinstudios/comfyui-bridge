@@ -1,5 +1,6 @@
 {
   "gabarit": "creation",
+  "etend": "socle",
   "resume": "Le patron d'un CAS DE CRÉATION (une image créée par un modèle, 2026-09-24) — ce qu'une chaîne qui le manifeste doit porter, vérifié à la lecture du catalogue. Le cas de référence : image-creation ; sa variante : image-visuel-social. Antoine : « standardise par un template un cas de création, en manifestant le template à suivre ».",
   "_lire_moi": {
     "etapes": "Dans cet ordre, avec ce genre. « sous » : l'étape n'a lieu que sous le champ nommé (un « quand » sur ce champ). « role » : le rendu tient un RÔLE par une technique interchangeable, jamais un graphe nommé — ce que la peinture lit vit dans _data/techniques/<nom>.json.",

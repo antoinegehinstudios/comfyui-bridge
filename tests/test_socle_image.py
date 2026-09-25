@@ -23,6 +23,7 @@ import pathlib
 import pytest
 
 from comfyui_bridge.core import chaine as noyau
+from comfyui_bridge.core import reconciliant
 
 RACINE = pathlib.Path(__file__).resolve().parents[1]
 EXEMPLES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "chaines-exemples"
@@ -43,9 +44,9 @@ IMPOSE_PAR_LA_CHARTE = {"champ": "charte", "sauf": ["aucune"]}
 ZONE_CALME_SI_LOGO_POSE = {"si": "$contrainte.recit.logo_fichier_pendant", "alors": "$contrainte.recit.logo_ancrage",
                            "sinon": ""}
 # Le nom que le wordmark écrit ne s'ôte du message que si le logo est posé (vu le 2026-09-24 à 22:23 : « sans »
-# logo, « Grabuge Fest » ôté du sous-message — la marque disparaissait de l'image).
-NOM_OTE_SI_LOGO_POSE = {"si": "$contrainte.recit.logo_fichier_pendant", "alors": "$contrainte.recit.logo_texte",
-                        "sinon": ""}
+# logo, « Grabuge Fest » ôté du sous-message — la marque disparaissait de l'image). Depuis le réconciliant
+# (2026-09-25), c'est ce que le nœud laisse au logo — la même règle, câblée une fois pour l'image et la vidéo.
+NOM_OTE_SI_LOGO_POSE = "$contrainte.recit.texte_laisse_au_logo"
 CE_QUE_LA_CHARTE_IMPOSE_A_LA_DIRECTION = {"1.charte": "$charte", "1.style_impose": "$contrainte.recit.positif",
                                           "1.palette_imposee": "$contrainte.recit.colorway_en",
                                           "1.negatif_impose": "$contrainte.recit.negatif",
@@ -64,14 +65,16 @@ ENTREES_DE_LA_DIRECTION = {"1.style": "$style", "1.sujet": "$prompt", "1.cadrage
                            "1.largeur": "$width", "1.hauteur": "$height"}
 
 
+# Les deux modes branchent le réconciliant « charte » : ce qui s'exécute est la chaîne DÉPLIÉE, et c'est elle
+# que ces témoins épinglent (la source ne lit que des emplacements, `$charte.<rôle>`).
 @pytest.fixture(scope="module")
 def standard():
-    return json.loads((EXEMPLES / "image-creation.json").read_text(encoding="utf-8"))
+    return reconciliant.deplier(json.loads((EXEMPLES / "image-creation.json").read_text(encoding="utf-8")))
 
 
 @pytest.fixture(scope="module")
 def social():
-    return json.loads((EXEMPLES / "image-visuel-social.json").read_text(encoding="utf-8"))
+    return reconciliant.deplier(json.loads((EXEMPLES / "image-visuel-social.json").read_text(encoding="utf-8")))
 
 
 @pytest.fixture(scope="module")
@@ -213,13 +216,17 @@ def test_le_message_est_pose_pas_peint_et_la_zone_demandee(social):
                and t["boite"] == "$bandeau" and t["laisser_au_logo"] == NOM_OTE_SI_LOGO_POSE for t in textes)
     # Sans logo posé, le nom de la marque reste dans le message ; le constat du texte du logo est alors sans objet.
     controle = next(x for x in etapes["constat_de_la_charte"]["constater"] if x["id"] == "ce_que_le_logo_ecrit_n_est_pas_reecrit")
-    assert controle["valeur"] == {"si": "$contrainte.recit.logo_fichier_pendant",
+    assert controle["valeur"] == {"si": "$contrainte.recit.logo_pose",
                                   "alors": "$conformite.recit.logo_texte_non_reecrit", "sinon": True}
-    sans_logo = {"contrainte": {"recit": {"logo_fichier_pendant": None, "logo_texte": "Grabuge Fest"}},
+    # Le récit tel que le nœud l'écrit (une image fixe : un logo posé l'est pendant l'image) : sans logo, rien
+    # n'est laissé au logo ; posé, son nom l'est.
+    sans_logo = {"contrainte": {"recit": {"logo_pose": False, "logo_fichier_pendant": None, "logo_texte": "Grabuge Fest",
+                                          "texte_laisse_au_logo": None}},
                  "conformite": {"recit": {"logo_texte_non_reecrit": False}}}
-    avec_logo = {"contrainte": {"recit": {"logo_fichier_pendant": "E:/logo.png", "logo_texte": "Grabuge Fest"}},
+    avec_logo = {"contrainte": {"recit": {"logo_pose": True, "logo_fichier_pendant": "E:/logo.png",
+                                          "logo_texte": "Grabuge Fest", "texte_laisse_au_logo": "Grabuge Fest"}},
                  "conformite": {"recit": {"logo_texte_non_reecrit": False}}}
-    assert noyau.resoudre(textes[1]["laisser_au_logo"], {}, sans_logo) == ""
+    assert not noyau.resoudre(textes[1]["laisser_au_logo"], {}, sans_logo)
     assert noyau.resoudre(textes[1]["laisser_au_logo"], {}, avec_logo) == "Grabuge Fest"
     assert noyau.resoudre(controle["valeur"], {}, sans_logo) is True
     assert noyau.resoudre(controle["valeur"], {}, avec_logo) is False
@@ -345,7 +352,7 @@ def test_le_visuel_social_dit_au_noeud_qu_un_message_est_pose(social):
     n'en a pas, ne lui envoie rien de tel."""
     entrees = next(e for e in social["etapes"] if e["id"] == "contrainte")["rendre"]["inputs"]
     assert entrees["1.accroche"] == "$message" and entrees["1.appel"] == "$sous_message"
-    standard = json.loads((EXEMPLES / "image-creation.json").read_text(encoding="utf-8"))
+    standard = reconciliant.deplier(json.loads((EXEMPLES / "image-creation.json").read_text(encoding="utf-8")))
     entrees = next(e for e in standard["etapes"] if e["id"] == "contrainte")["rendre"]["inputs"]
     assert "1.accroche" not in entrees and "1.appel" not in entrees
 
@@ -363,12 +370,12 @@ def test_la_zone_calme_ne_se_demande_que_si_le_logo_est_pose_pendant_l_image(sta
 def test_les_choix_du_logo_disent_le_principe():
     """2026-09-25 : « “selon le message” et “sans” n'est pas assez parlant, choisis les bons factuels qui donnent le
     principe ». Les valeurs restent celles du nœud de la charte ; leurs libellés et leurs résumés vivent dans un menu
-    nommé de la réconciliation, que seuls les modes image lisent — le champ « logo » d'une autre chaîne n'en est pas
-    touché."""
+    nommé de la réconciliation, que lit le champ « logo » du réconciliant « charte » — de toute création qui le
+    branche, image ou vidéo (2026-09-25) : les libellés parlent donc de « la création »."""
     r = json.loads((DONNEES / "reconciliation.local.json").read_text(encoding="utf-8"))
     menu = r["menus"]["logo_charte"]
     assert list(menu["libelles"]) == ["selon le message", "avec", "sans"]
-    assert menu["libelles"]["selon le message"]["libelle"] == "Quand l'image porte un message ou une promotion"
+    assert menu["libelles"]["selon le message"]["libelle"] == "Quand la création porte un message ou une promotion"
     assert menu["libelles"]["avec"]["libelle"].startswith("Toujours") and menu["libelles"]["sans"]["libelle"].startswith("Jamais")
     assert all(v["resume"] for v in menu["libelles"].values())
     assert "logo" not in r["menus"], "un menu au nom du champ retitrerait aussi le « logo » d'une autre chaîne"

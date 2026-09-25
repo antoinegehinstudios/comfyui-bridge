@@ -1,29 +1,7 @@
 {
-  "gabarit": "socle",
   "version": 1,
   "chaine": "video-depuis-un-texte",
   "resume": "UNE VIDÉO ÉCRITE DE RIEN, DIRIGÉE : une consigne, un style graphique et une structure de récit (catalogues du paquet de direction de style — la base est neutre, le style se réconcilie par les menus), une durée, un format, et si on veut une accroche et un appel incrustés dans la police choisie. Le rendu part de la seule consigne puis se prolonge de bloc en bloc — chaque bloc joue le temps du récit qui lui revient, repris sur la dernière image du précédent, écrit avant que le suivant ne commence (jalon) ; chaque bloc est porté à la cadence (FILM), agrandi (RealESRGAN ×2) et mis à la taille demandée avant d'être écrit ; la passerelle recolle sans ré-encoder, puis la livraison ré-encode une fois en incrustant les textes. Durée arrondie au bloc supérieur (au plus ~5 s de plus, jamais moins) ; cadence exacte sur la grille 24/30/40/60. Le constat final écrit ce qui a été livré face à la demande — il ne refuse rien.",
-  "reconciliants": {
-    "charte": {
-      "media": "video",
-      "prompt": "$prompt",
-      "negatif": "$negatif",
-      "police": "$police",
-      "image_1": "$image",
-      "role_1": "$role_image",
-      "image_2": "$image_2",
-      "role_2": "$role_image_2",
-      "image_3": "$image_3",
-      "role_3": "$role_image_3",
-      "accroche": "$accroche",
-      "appel": "$appel",
-      "texte_position": "$texte_position",
-      "duree_s": "$duration_s",
-      "livrable": "$livraison.livrable",
-      "aide_charte": "La charte graphique (Héraldiste) que la création doit respecter : sa palette et ses mots de style complètent la consigne, ses interdits le négatif, sa police et sa couleur de texte habillent l'accroche et l'appel, et la vidéo livrée reçoit un constat de conformité (part de l'image dans la palette). « Aucune charte » : rien ne change.",
-      "aide_logo": "L'usage reconnu (règles d'usage d'Héraldiste) : le logo signe une création qui porte un message — une accroche, un appel, un support promotionnel dans la consigne — et une image d'ambiance s'en passe : la marque y tient par ses couleurs, sa police, sa texture. « Pas de logo » dans la consigne est honoré. « Avec » et « sans » forcent. La décision et sa raison sont dites dans le récit de l'étape « contrainte »."
-    }
-  },
   "expose": {
     "prompt": {
       "type": "STRING",
@@ -105,6 +83,40 @@
       "libelle": "Ce que cette image est (3)",
       "categorie": "references",
       "aide": "Dites ce que cette image est, pour que la vidéo la respecte : « le personnage principal », « l'objet exact à montrer », « le lieu où ça se passe »… Sans image jointe, ce champ ne sert pas."
+    },
+    "charte": {
+      "type": "COMBO",
+      "defaut": "aucune",
+      "options_depuis": {
+        "menu": "charte"
+      },
+      "libelle": "Charte de marque",
+      "categorie": "references",
+      "aide": "La charte graphique (Héraldiste) que la création doit respecter : sa palette et ses mots de style complètent la consigne, ses interdits le négatif, sa police et sa couleur de texte habillent l'accroche et l'appel, et la vidéo livrée reçoit un constat de conformité (part de l'image dans la palette). « Aucune charte » : rien ne change."
+    },
+    "logo": {
+      "type": "COMBO",
+      "defaut": "selon le message",
+      "options": [
+        "selon le message",
+        "avec",
+        "sans"
+      ],
+      "libelle": "Logo de la marque",
+      "categorie": "charte",
+      "aide": "L'usage reconnu (règles d'usage d'Héraldiste) : le logo signe une création qui porte un message — une accroche, un appel, un support promotionnel dans la consigne — et une image d'ambiance s'en passe : la marque y tient par ses couleurs, sa police, sa texture. « Pas de logo » dans la consigne est honoré. « Avec » et « sans » forcent. La décision et sa raison sont dites dans le récit de l'étape « contrainte »."
+    },
+    "logo_ou": {
+      "type": "COMBO",
+      "defaut": "carton final",
+      "options": [
+        "carton final",
+        "zone émetteur",
+        "les deux"
+      ],
+      "libelle": "Où le logo vit",
+      "categorie": "charte",
+      "aide": "Carton final (l'usage vidéo) : aucun logo pendant la scène ; sur les 1,5 dernières secondes, le fond de la marque couvre le cadre, le logo centré à 60 % de la largeur, l'appel en bas. Zone émetteur (l'usage affiche) : le logo en haut pendant toute la vidéo, à la place mesurée sur les affiches de la marque. Les deux : zone émetteur et carton."
     },
     "accroche": {
       "type": "STRING",
@@ -190,10 +202,82 @@
   },
   "etapes": [
     {
+      "id": "contrainte",
+      "quand": { "valeur": "$charte", "op": "ne", "attendu": "aucune" },
+      "rendre": {
+        "workflow": "image-heraldiste",
+        "inputs": {
+          "1.charte": "$charte",
+          "1.prompt": "$prompt",
+          "1.negatif": "$negatif",
+          "1.police": "$police",
+          "1.image_1": "$image",
+          "1.role_1": "$role_image",
+          "1.image_2": "$image_2",
+          "1.role_2": "$role_image_2",
+          "1.image_3": "$image_3",
+          "1.role_3": "$role_image_3",
+          "1.logo": "$logo",
+          "1.logo_ou": "$logo_ou",
+          "1.accroche": "$accroche",
+          "1.appel": "$appel",
+          "1.texte_position": "$texte_position",
+          "1.duree_s": "$duration_s"
+        }
+      },
+      "sinon": {
+        "livrable": null,
+        "recit": {
+          "charte": "aucune",
+          "appliquee": false,
+          "tenue": true,
+          "raison": "aucune charte demandée : l'étape n'a pas eu lieu",
+          "prompt": "$prompt",
+          "negatif": "$negatif",
+          "police": "$police",
+          "couleur": "white",
+          "fond": null,
+          "part_min_dans_palette": 0.0,
+          "image_1": "$image",
+          "role_1": "$role_image",
+          "image_2": "$image_2",
+          "role_2": "$role_image_2",
+          "image_3": "$image_3",
+          "role_3": "$role_image_3",
+          "logo_fichier": null,
+          "logo_ancrage": null,
+          "logo_largeur": null,
+          "logo_marge": null,
+          "logo_hauteur_min_px": null,
+          "logo_zone": null,
+          "logo_texte": null,
+          "texte_laisse_au_logo": null,
+          "logo_pose": false,
+          "logo_attendu": "aucun",
+          "logo_fichier_pendant": null,
+          "carton_fond_fichier": null,
+          "carton_logo_fichier": null,
+          "carton_debut_s": null,
+          "carton_s": 0,
+          "carton_logo_largeur": null,
+          "accroche_position": "$texte_position",
+          "accroche_debut_s": 0.5,
+          "accroche_fin_s": 4.5,
+          "appel_position": "$texte_position",
+          "appel_debut_s": -4.0,
+          "appel_fin_s": -0.2,
+          "texture_fichier": null,
+          "texture_fusion": null,
+          "texture_opacite": null,
+          "texture_taille_relative": null
+        }
+      }
+    },
+    {
       "id": "rendu",
       "rendre": {
         "workflow": "video-h3-texte",
-        "prompt": "$charte.consigne.positif",
+        "prompt": "$contrainte.recit.prompt",
         "style_graphique": "$style_graphique",
         "style_narratif": "$style_narratif",
         "duration_s": "$duration_s",
@@ -201,16 +285,16 @@
         "width": "$width",
         "height": "$height",
         "seed": "$seed",
-        "negative_prompt": "$charte.consigne.negatif",
+        "negative_prompt": "$contrainte.recit.negatif",
         "media": {
-          "image": "$charte.references.1.image",
-          "image_2": "$charte.references.2.image",
-          "image_3": "$charte.references.3.image"
+          "image": "$contrainte.recit.image_1",
+          "image_2": "$contrainte.recit.image_2",
+          "image_3": "$contrainte.recit.image_3"
         },
         "parametres": {
-          "role_image": "$charte.references.1.role",
-          "role_image_2": "$charte.references.2.role",
-          "role_image_3": "$charte.references.3.role"
+          "role_image": "$contrainte.recit.role_1",
+          "role_image_2": "$contrainte.recit.role_2",
+          "role_image_3": "$contrainte.recit.role_3"
         }
       }
     },
@@ -226,31 +310,92 @@
         "textes": [
           {
             "texte": "$accroche",
-            "police": "$charte.texte.police",
-            "position": "$charte.textes.accroche.position",
-            "debut_s": "$charte.textes.accroche.debut_s",
-            "fin_s": "$charte.textes.accroche.fin_s",
+            "police": "$contrainte.recit.police",
+            "position": "$contrainte.recit.accroche_position",
+            "debut_s": "$contrainte.recit.accroche_debut_s",
+            "fin_s": "$contrainte.recit.accroche_fin_s",
             "taille": 0.055,
             "fondu_s": 0.4,
-            "couleur": "$charte.texte.couleur",
-            "fond": "$charte.texte.fond",
-            "laisser_au_logo": "$charte.texte.laisse_au_logo"
+            "couleur": "$contrainte.recit.couleur",
+            "fond": "$contrainte.recit.fond",
+            "laisser_au_logo": "$contrainte.recit.texte_laisse_au_logo"
           },
           {
             "texte": "$appel",
-            "police": "$charte.texte.police",
-            "position": "$charte.textes.appel.position",
-            "debut_s": "$charte.textes.appel.debut_s",
-            "fin_s": "$charte.textes.appel.fin_s",
+            "police": "$contrainte.recit.police",
+            "position": "$contrainte.recit.appel_position",
+            "debut_s": "$contrainte.recit.appel_debut_s",
+            "fin_s": "$contrainte.recit.appel_fin_s",
             "taille": 0.055,
             "fondu_s": 0.4,
-            "couleur": "$charte.texte.couleur",
-            "fond": "$charte.texte.fond",
-            "laisser_au_logo": "$charte.texte.laisse_au_logo"
+            "couleur": "$contrainte.recit.couleur",
+            "fond": "$contrainte.recit.fond",
+            "laisser_au_logo": "$contrainte.recit.texte_laisse_au_logo"
           }
         ],
-        "texture": "$charte.texture",
-        "images": "$charte.a_poser"
+        "texture": {
+          "fichier": "$contrainte.recit.texture_fichier",
+          "fusion": "$contrainte.recit.texture_fusion",
+          "opacite": "$contrainte.recit.texture_opacite",
+          "taille_relative": "$contrainte.recit.texture_taille_relative"
+        },
+        "images": [
+          {
+            "fichier": "$contrainte.recit.carton_fond_fichier",
+            "couvrir": true,
+            "sous_les_textes": true,
+            "debut_s": "$contrainte.recit.carton_debut_s"
+          },
+          {
+            "fichier": "$contrainte.recit.logo_fichier_pendant",
+            "ancrage": "$contrainte.recit.logo_ancrage",
+            "largeur": "$contrainte.recit.logo_largeur",
+            "marge": "$contrainte.recit.logo_marge",
+            "hauteur_min_px": "$contrainte.recit.logo_hauteur_min_px",
+            "espace_min": "$contrainte.recit.logo_zone"
+          },
+          {
+            "fichier": "$contrainte.recit.carton_logo_fichier",
+            "ancrage": "centre",
+            "largeur": "$contrainte.recit.carton_logo_largeur",
+            "hauteur_min_px": "$contrainte.recit.logo_hauteur_min_px",
+            "espace_min": "$contrainte.recit.logo_zone",
+            "debut_s": "$contrainte.recit.carton_debut_s"
+          }
+        ]
+      }
+    },
+    {
+      "id": "conformite",
+      "quand": { "valeur": "$charte", "op": "ne", "attendu": "aucune" },
+      "rendre": {
+        "workflow": "video-heraldiste-conformite",
+        "media": {
+          "video": "$livraison.livrable"
+        },
+        "inputs": {
+          "1.charte": "$charte",
+          "1.logo_attendu": "$contrainte.recit.logo_attendu",
+          "1.carton_s": "$contrainte.recit.carton_s"
+        }
+      },
+      "sinon": {
+        "livrable": null,
+        "recit": {
+          "charte": "aucune",
+          "mesuree": false,
+          "tenue": true,
+          "part_dans_palette": 1.0,
+          "part_attendue": 0.0,
+          "logo_present_partout": true,
+          "logo_intact_partout": true,
+          "logo_taille_tenue": true,
+          "logo_espace_libre_tenu": true,
+          "logo_position_tenue": true,
+          "regles_non_tenues": [],
+          "logo_texte_non_reecrit": true,
+          "raison": "aucune charte demandée : l'étape n'a pas eu lieu"
+        }
       }
     },
     {
@@ -281,23 +426,80 @@
           "attendu": "$height"
         },
         {
+          "id": "la_video_pese",
+          "valeur": "$livraison.mesure.bytes",
+          "op": "gte",
+          "attendu": 100000
+        },
+        {
           "id": "les_blocs_se_raccordent",
           "valeur": "$rendu.jonctions.pire",
           "op": "gte",
           "attendu": 0.6,
           "aide": "Les blocs doivent se suivre sans saut dans la vidéo LIVRÉE : la ressemblance (SSIM) entre la dernière image gardée d'un bloc et la première gardée du suivant, mesurée par la passerelle après avoir jeté ce que le bloc suivant rejouait (mesuré le 2026-09-20 : 0,42 sans coupe, 0,67 après ; deux images générées ne sont jamais les mêmes au pixel). Un seul bloc : aucune jonction, 1,0. Non tenu : la vidéo est livrée, le regard tranche ; le journal dit combien d'images ont été jetées à chaque raccord."
-        }
-      ]
-    },
-    {
-      "id": "controle",
-      "verifier": [
+        },
         {
-          "id": "livrable_pese",
-          "valeur": "$livraison.mesure.bytes",
+          "id": "la_charte_demandee_est_appliquee",
+          "valeur": "$contrainte.recit.tenue",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Une charte demandée doit avoir été lue chez Héraldiste et appliquée (consigne, négatif, police, couleur). Non tenue : le service était injoignable ou la charte inconnue, la vidéo a été faite SANS contrainte — le récit de l'étape « charte » dit pourquoi. Sans charte demandée, tenu."
+        },
+        {
+          "id": "la_palette_de_la_charte_est_tenue",
+          "valeur": "$conformite.recit.part_dans_palette",
           "op": "gte",
-          "attendu": 100000,
-          "aide": "Le fichier livré doit peser au moins 100 ko : une vidéo de quelques secondes qui pèse moins est vide ou noire. Relancer ; si cela se répète, dire le job. (Le socle des créations : chaque mode contrôle le poids de son livrable en dernier.)"
+          "attendu": "$conformite.recit.part_attendue",
+          "aide": "La part moyenne des pixels de la vidéo livrée (quelques images échantillonnées) à moins de ΔE2000 10 d'une couleur de la charte, mesurée par Héraldiste, contre la part que la charte attend (part_min_dans_palette). Sans charte demandée : 1 contre 0, tenu. C'est un constat : la vidéo est livrée quoi qu'il en soit."
+        },
+        {
+          "id": "le_logo_impose_est_pose",
+          "valeur": "$conformite.recit.logo_present_partout",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Un élément imposé par la charte se mesure sur la vidéo LIVRÉE, quelques images échantillonnées, par Héraldiste (repérage de la forme par corrélation des contours, fidélité par ΔE2000 sur ses pixels opaques). Le logo, quand la création le pose (champ « logo » : dès qu'il y a un message, sauf « sans » ou « pas de logo » dans la consigne), est incrusté TEL QUEL à la livraison — là où « logo_ou » le met : sur le carton final (les dernières images seulement) ou pendant toute la vidéo (zone émetteur) — et doit être retrouvé sur chaque image où il est attendu. Non tenu : le recollage ne l'a pas posé, ou un texte le couvre — le récit de « conformite » dit sur quelle part des images. Sans charte, sans logo imposé, ou sans logo voulu sur cette création : tenu, et c'est dit."
+        },
+        {
+          "id": "le_logo_impose_est_intact",
+          "valeur": "$conformite.recit.logo_intact_partout",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Un élément imposé par la charte se mesure sur la vidéo LIVRÉE, quelques images échantillonnées, par Héraldiste (repérage de la forme par corrélation des contours, fidélité par ΔE2000 sur ses pixels opaques). Intact : l'écart de couleur médian du logo retrouvé reste sous 8 et aucune grande plage de ses couleurs ne dépasse 15 (ni recoloré, ni délavé, ni retouché). Non tenu : le logo a été altéré après sa pose — le récit donne l'écart."
+        },
+        {
+          "id": "le_logo_impose_tient_sa_taille",
+          "valeur": "$conformite.recit.logo_taille_tenue",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Un élément imposé par la charte se mesure sur la vidéo LIVRÉE, quelques images échantillonnées, par Héraldiste (repérage de la forme par corrélation des contours, fidélité par ΔE2000 sur ses pixels opaques). La hauteur du logo retrouvé, en pixels de la vidéo livrée, contre la taille minimale de la charte. Sans taille minimale déclarée : tenu, et le récit le dit."
+        },
+        {
+          "id": "l_espace_libre_du_logo_est_tenu",
+          "valeur": "$conformite.recit.logo_espace_libre_tenu",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Un élément imposé par la charte se mesure sur la vidéo LIVRÉE, quelques images échantillonnées, par Héraldiste (repérage de la forme par corrélation des contours, fidélité par ΔE2000 sur ses pixels opaques). L'espace libre autour du logo (jusqu'au plus proche élément franc — un texte, un trait — ou au bord), en hauteurs de logo, contre la zone de protection de la charte. Non tenu : typiquement l'accroche ou l'appel posés du même côté que le logo — changer « texte_position »."
+        },
+        {
+          "id": "le_logo_est_a_sa_place",
+          "valeur": "$conformite.recit.logo_position_tenue",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Un élément imposé par la charte se mesure sur la vidéo LIVRÉE, quelques images échantillonnées, par Héraldiste (repérage de la forme par corrélation des contours, fidélité par ΔE2000 sur ses pixels opaques). L'ancrage du logo retrouvé (haut-centre, bas-droite…) contre le placement de la charte. Sans placement déclaré ni montré par un exemple : tenu, et le récit le dit."
+        },
+        {
+          "id": "le_texte_du_wordmark_n_est_pas_reecrit",
+          "valeur": "$conformite.recit.logo_texte_non_reecrit",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Ce que le logo de la charte ÉCRIT (son « texte » : « GRABUGE FEST » pour un wordmark), déclaré ou lu par l'analyse, ne se réécrit pas ailleurs : il est ôté de la consigne du rendu et des textes incrustés, et Héraldiste le cherche hors du logo sur quelques images de la vidéo livrée (le logo masqué, un modèle local relève tout le texte visible). Non tenu : le rendu a écrit le nom quand même — le récit de « conformite » dit ce qui a été lu (texte_hors_logo). Non lu (moteur local absent) : non tenu, jamais « rien de réécrit » sans lecture. Un logo qui ne dit pas ce qu'il écrit : tenu, et c'est dit."
+        },
+        {
+          "id": "les_regles_mesurables_de_la_charte_sont_tenues",
+          "valeur": "$conformite.recit.regles_non_tenues",
+          "op": "eq",
+          "attendu": [],
+          "aide": "Les règles de la charte qui portent une mesure — part minimale dans la palette, écart ΔE2000 maximal, taille minimale et zone de protection du logo, présence et fidélité du logo, part visible minimale du fond — évaluées par Héraldiste sur la vidéo livrée : la liste de celles qui ne tiennent pas doit être vide. C'est par une règle que la charte donne un seuil à ce qui n'en a pas d'office : « fond_visible_min » pour un fond imposé, par exemple — la charte le porte, ce constat le juge. Non tenu : le récit de « conformite » nomme les règles (regles_non_tenues) ; une liste inconnue (constat non fait) n'est pas tenue. Sans charte : tenu."
         }
       ]
     }

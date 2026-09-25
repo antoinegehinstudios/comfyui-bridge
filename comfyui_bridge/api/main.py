@@ -457,6 +457,26 @@ def _habiller(c, entree: dict, menu: dict | None = None,
     return entree
 
 
+def _dire_les_faits_non_servis(c, menu_nom: str, entree: dict) -> None:
+    """Chaque choix d'un menu que tient une SOURCE porte les faits qu'elle sert et
+    que son réconciliant ne lit pas (« non_servis »). Antoine, 2026-09-25 : ce que
+    la source sert doit être exhaustif, et une nouveauté ne doit pas attendre que
+    chaque mode la découvre — elle se voit ici, dite, avant d'être câblée une fois
+    dans le réconciliant (`core/reconciliant.py`)."""
+    from ..adapter import menus as _menus
+    from ..core import reconciliant as _reconciliant
+    for rec in _reconciliant.tous().values():
+        faits = (rec.get("source") or {}).get("faits") or {}
+        if faits.get("menu") != menu_nom:
+            continue
+        lignes = _menus.lignes(_menu_declare(c, menu_nom))
+        for choix in entree.get("choix") or []:
+            ligne = lignes.get(str(choix.get("valeur"))) or {}
+            dits = _reconciliant.faits_non_servis(rec, ligne.get(str(faits.get("colonne"))))
+            if dits:
+                choix["non_servis"] = dits
+
+
 def _habiller_medias(c, pieces: list[dict], aides: dict | None = None) -> list[dict]:
     """Une pièce jointe, telle qu'un formulaire l'affiche : libellé et aide.
 
@@ -568,6 +588,8 @@ def _entree_de_champ(c, nom: str, champ, aides: dict | None = None, chaine=None)
     if options is not None:
         entree["options"] = list(options)
     entree = _habiller(c, entree, menu, aides)
+    if isinstance(champ.options_depuis, dict) and champ.options_depuis.get("menu"):
+        _dire_les_faits_non_servis(c, str(champ.options_depuis["menu"]), entree)
     # LA RÉCONCILIATION QUE LE CHAMP PORTE LUI-MÊME l'emporte sur tout habillage
     # extérieur : sa catégorie, et son aide — écrite par son propriétaire (la
     # chaîne, la technique), la seule qui sache ce que ce champ fait ICI.

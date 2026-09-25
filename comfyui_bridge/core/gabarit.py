@@ -9,7 +9,16 @@ intercaler, son premier champ, un champ de technique, les champs qu'un autre
 impose, les constats et contrôles requis, son livrable. Une chaîne le MANIFESTE
 (`"gabarit": "creation"`) ; à la lecture du catalogue, elle est vérifiée
 contre lui et refusée si elle s'en écarte — le gabarit est une garde, pas une
-recommandation. Une chaîne qui n'en déclare aucun n'est pas jugée.
+recommandation. Une chaîne qui n'en déclare aucun n'est pas jugée ici — mais le
+catalogue ne publie aucune chaîne sans gabarit au SOCLE (voir `adapter/catalog.py`).
+
+Un gabarit peut en ÉTENDRE un autre (« etend ») : il en hérite tout ce qu'il ne
+redit pas. Le SOCLE (`socle.json`) est la base de toute création cataloguée —
+Antoine, 2026-09-25 : « chaque nouveau flux de création sur maestro suit la même
+structure à la base » — : un contrôle final du fichier livré, des champs qui
+disent leur catégorie et leur aide, un livrable déclaré ; les sources, elles, ne
+se lisent que par leur réconciliant (`core/reconciliant.py`). « creation »
+l'étend pour le cas d'une image créée par un modèle.
 
 Ce module ne connaît aucun flux : il lit ce que le gabarit déclare et ce que la
 chaîne porte, et compare.
@@ -25,10 +34,15 @@ from .chaine import Chaine, Etape
 from .errors import WorkflowMappingError
 
 DOSSIER = Path(__file__).resolve().parent.parent / "adapter" / "resources" / "gabarits"
+# Le gabarit de base de toute création cataloguée : tout autre l'étend.
+SOCLE = "socle"
 
 
-def lire(nom: str, dossier: Path | None = None) -> dict[str, Any]:
-    """Le gabarit `nom`, tel que son fichier le déclare — refusé s'il manque ou ne tient pas."""
+def lire(nom: str, dossier: Path | None = None, _vus: tuple[str, ...] = ()) -> dict[str, Any]:
+    """Le gabarit `nom`, tel que son fichier le déclare et ce qu'il hérite de celui qu'il étend —
+    refusé s'il manque ou ne tient pas. `lignee` dit la suite des gabarits, du plus général au sien."""
+    if nom in _vus:
+        raise WorkflowMappingError(f"gabarit {nom!r} : il s'étend lui-même ({' → '.join(_vus + (nom,))})")
     chemin = (Path(dossier) if dossier else DOSSIER) / f"{nom}.json"
     if not chemin.is_file():
         raise WorkflowMappingError(
@@ -40,13 +54,20 @@ def lire(nom: str, dossier: Path | None = None) -> dict[str, Any]:
         raise WorkflowMappingError(f"gabarit {nom!r} : impossible de lire {chemin} : {exc}") from exc
     if not isinstance(brut, dict) or str(brut.get("gabarit") or "") != nom:
         raise WorkflowMappingError(f"gabarit {nom!r} : le fichier doit se nommer lui-même (clé « gabarit »)")
-    etapes = brut.get("etapes")
-    if not isinstance(etapes, list) or not etapes:
-        raise WorkflowMappingError(f"gabarit {nom!r} : « etapes » doit être une liste non vide")
+    parent: dict[str, Any] = {}
+    if brut.get("etend"):
+        parent = lire(str(brut["etend"]), dossier, _vus + (nom,))
+    lu = {**{k: v for k, v in parent.items() if k not in ("gabarit", "resume", "_lire_moi")}, **brut}
+    lu["lignee"] = list(parent.get("lignee") or []) + [nom]
+    etapes = lu.get("etapes")
+    libres = lu.get("etapes_libres")
+    if not isinstance(etapes, list) or (not etapes and libres != "toutes"):
+        raise WorkflowMappingError(f"gabarit {nom!r} : « etapes » doit être une liste non vide (vide : seulement "
+                                   f"quand toutes les étapes sont libres, « etapes_libres »: « toutes »)")
     for e in etapes:
         if not isinstance(e, dict) or not e.get("id") or not e.get("genre"):
             raise WorkflowMappingError(f"gabarit {nom!r} : chaque étape porte un « id » et un « genre » ({e!r})")
-    return brut
+    return lu
 
 
 def _quand_sous(etape: Etape) -> str | None:
@@ -89,11 +110,12 @@ def ecarts(chaine: Chaine, gabarit: dict[str, Any]) -> list[str]:
             if _quand_sous(etape) != attendue["sous"]:
                 fautes.append(f"l'étape {ident!r} n'a lieu que sous le champ {attendue['sous']!r} : "
                               f"il lui faut « quand » sur « ${attendue['sous']} »")
-    # 2. Les étapes en plus : seulement des genres que le gabarit laisse libres.
-    libres = set(str(g) for g in gabarit.get("etapes_libres") or [])
+    # 2. Les étapes en plus : seulement des genres que le gabarit laisse libres (« toutes » : le socle).
+    toutes = gabarit.get("etapes_libres") == "toutes"
+    libres = set() if toutes else set(str(g) for g in gabarit.get("etapes_libres") or [])
     attendus = {str(e["id"]) for e in requises}
     for etape in chaine.etapes:
-        if etape.id not in attendus and etape.genre not in libres:
+        if not toutes and etape.id not in attendus and etape.genre not in libres:
             fautes.append(f"l'étape {etape.id!r} ({etape.genre}) n'est pas au gabarit, qui ne laisse libres que "
                           f"{', '.join(sorted(libres)) or 'aucun genre'}")
     # 3. Le premier champ, le champ de technique.
@@ -130,7 +152,32 @@ def ecarts(chaine: Chaine, gabarit: dict[str, Any]) -> list[str]:
     # 6. Le livrable.
     if gabarit.get("livrable") and chaine.livrable != gabarit["livrable"]:
         fautes.append(f"le livrable doit être {gabarit['livrable']!r} (trouvé : {chaine.livrable!r})")
+    if gabarit.get("livrable_declare") and not chaine.livrable:
+        fautes.append("la chaîne ne déclare pas son livrable (« livrable »: « $<étape>.livrable »)")
+    # 7. Le contrôle final : la dernière étape vérifie le fichier livré, avec ces contrôles au moins.
+    final = gabarit.get("controle_final") or {}
+    if final:
+        derniere = chaine.etapes[-1] if chaine.etapes else None
+        if derniere is None or derniere.id != final.get("id") or derniere.genre != final.get("genre"):
+            fautes.append(f"la dernière étape doit être {final.get('id')!r} (« {final.get('genre')} ») — trouvé : "
+                          f"{derniere.id if derniere else 'aucune'!r}")
+        else:
+            presents = {str(c.get("id")) for c in derniere.controles_propres if isinstance(c, dict)}
+            manquants = [c for c in final.get("controles") or [] if str(c) not in presents]
+            if manquants:
+                fautes.append(f"le contrôle final {derniere.id!r} doit porter {', '.join(manquants)}")
+    # 8. Chaque champ dit sa catégorie et son aide : un lanceur range et explique sans rien connaître.
+    if gabarit.get("champs_documentes"):
+        muets = [f"{c.nom} ({', '.join(q for q, v in (('categorie', c.categorie), ('aide', c.aide)) if not str(v or '').strip())})"
+                 for c in chaine.champs.values() if not str(c.categorie or "").strip() or not str(c.aide or "").strip()]
+        if muets:
+            fautes.append(f"des champs ne disent pas leur catégorie ou leur aide : {', '.join(muets)}")
     return [f"gabarit {nom!r} : {f}" for f in fautes]
+
+
+def suit_le_socle(gabarit: dict[str, Any]) -> bool:
+    """Le gabarit est-il le socle, ou l'étend-il ?"""
+    return SOCLE in (gabarit.get("lignee") or [gabarit.get("gabarit")])
 
 
 def verifier(chaine: Chaine, gabarit: dict[str, Any]) -> None:

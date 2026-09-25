@@ -1,17 +1,12 @@
 {
   "version": 1,
   "chaine": "video-prolongement",
-  "gabarit": "socle",
   "resume": "Prolonger une vidéo existante : ses 17 dernières images sont remises au modèle, qui invente la suite ; le chevauchement re-rendu est jeté au recollage, et le raccord est mesuré.",
   "expose": {
-    "video": { "media": "video", "requis": true, "libelle": "La vidéo à prolonger", "categorie": "plan",
-               "aide": "La vidéo à continuer : ses 17 dernières images sont remises au modèle, qui invente la suite ; le prolongement est recollé derrière elle, le chevauchement re-rendu jeté." },
-    "suite": { "type": "STRING", "defaut": "the scene continues seamlessly", "libelle": "Ce qui doit se passer ensuite", "categorie": "plan",
-               "aide": "Ce qui doit se passer ensuite : la consigne du modèle (LTX-2.3), transmise telle quelle. Par défaut, la scène continue sans rupture." },
-    "duration_s": { "type": "FLOAT", "defaut": 5, "min": 2, "max": 10, "step": 1, "libelle": "Durée du prolongement", "unite": "s",
-                    "categorie": "plan", "aide": "La durée ajoutée, en secondes : le modèle rend la suite à 25 images par seconde, en 1280 × 704." },
-    "seed": { "type": "INT", "defaut": 71, "libelle": "Graine", "categorie": "avance",
-              "aide": "La graine du modèle : la même graine et la même demande redonnent la même suite." }
+    "video": { "media": "video", "requis": true, "libelle": "La vidéo à prolonger" },
+    "suite": { "type": "STRING", "defaut": "the scene continues seamlessly", "libelle": "Ce qui doit se passer ensuite" },
+    "duration_s": { "type": "FLOAT", "defaut": 5, "min": 2, "max": 10, "step": 1, "libelle": "Durée du prolongement", "unite": "s" },
+    "seed": { "type": "INT", "defaut": 71, "libelle": "Graine" }
   },
   "etapes": [
     {
@@ -58,9 +53,7 @@
       "id": "controle",
       "verifier": [
         { "id": "duree_tenue", "valeur": "$final.mesure.duration_s", "op": "gte", "attendu": 4,
-          "aide": "La durée du fichier livré. En dessous de quatre secondes, le recollage n'a pas produit un prolongement mais un débris : c'est le FICHIER FINAL qui est en cause, et là le refus est juste — il n'y a rien à regarder." },
-        { "id": "livrable_pese", "valeur": "$final.mesure.bytes", "op": "gte", "attendu": 100000,
-          "aide": "Le fichier livré doit peser au moins 100 ko : un prolongement recollé qui pèse moins est vide ou noir. Relancer ; si cela se répète, dire le job. (Le socle des créations : chaque mode contrôle le poids de son livrable en dernier.)" }
+          "aide": "La durée du fichier livré. En dessous de quatre secondes, le recollage n'a pas produit un prolongement mais un débris : c'est le FICHIER FINAL qui est en cause, et là le refus est juste — il n'y a rien à regarder." }
       ]
     }
   ],

@@ -44,6 +44,7 @@ from comfyui_bridge.adapter.media import artifact_url, media_kind  # noqa: E402
 from comfyui_bridge.api.main import create_app  # noqa: E402
 from comfyui_bridge.config import Settings  # noqa: E402
 from comfyui_bridge.core import chaine as noyau  # noqa: E402
+from comfyui_bridge.core import reconciliant  # noqa: E402
 from comfyui_bridge.core.plan import Artifact, BackendResult  # noqa: E402
 from test_chaines_api import SANS_FFMPEG, BackendQuiLivre, _job  # noqa: E402
 from test_socle_ink import (CONTROLES_PLAN_DANS_LA_DUREE, CONTROLES_PLAN_TENU_DU_PLAN,  # noqa: E402
@@ -438,8 +439,8 @@ def atelier():
     client = pile.enter_context(TestClient(app))
     client.faux = faux
     client.techniques = techniques
-    client.chaine = noyau.lire(json.loads((EXEMPLES / "video-revelation.json")
-                                          .read_text(encoding="utf-8")), "video-revelation")
+    client.chaine = noyau.lire(reconciliant.deplier(json.loads((EXEMPLES / "video-revelation.json")
+                                                               .read_text(encoding="utf-8"))), "video-revelation")
     yield client
     pile.close()
 

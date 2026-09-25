@@ -18,6 +18,7 @@ import pytest
 
 from comfyui_bridge.core import chaine as noyau
 from comfyui_bridge.core import gabarit
+from comfyui_bridge.core import reconciliant
 from comfyui_bridge.core.errors import WorkflowMappingError
 
 RACINE = pathlib.Path(__file__).resolve().parents[1]
@@ -31,7 +32,8 @@ def creation():
 
 @pytest.fixture(scope="module")
 def standard():
-    return json.loads((EXEMPLES / "image-creation.json").read_text(encoding="utf-8"))
+    # la chaîne telle qu'elle s'exécute : son réconciliant « charte » déplié
+    return reconciliant.deplier(json.loads((EXEMPLES / "image-creation.json").read_text(encoding="utf-8")))
 
 
 def test_le_gabarit_creation_se_lit_et_dit_son_plan(creation):
@@ -45,7 +47,7 @@ def test_le_gabarit_creation_se_lit_et_dit_son_plan(creation):
 
 def test_les_deux_chaines_de_reference_le_manifestent_et_le_suivent(creation):
     for nom in ("image-creation", "image-visuel-social"):
-        brut = json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8"))
+        brut = reconciliant.deplier(json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8")))
         chaine = noyau.lire(brut, nom)
         assert chaine.gabarit == "creation", nom
         assert gabarit.ecarts(chaine, creation) == [], nom
@@ -114,14 +116,53 @@ def test_sans_gabarit_rien_n_est_juge_et_un_gabarit_inconnu_refuse(standard):
         gabarit.lire("gabarit-qui-n-existe-pas")
 
 
-def test_le_catalogue_refuse_au_chargement_une_chaine_qui_manifeste_un_gabarit_sans_le_suivre(tmp_path, standard):
-    from comfyui_bridge.adapter import catalog as cat
-    faux = copy.deepcopy(standard)
-    faux["etapes"] = faux["etapes"][:-2] + [faux["etapes"][-1], faux["etapes"][-2]]
-    (tmp_path / "chaine.json").write_text(json.dumps(faux, ensure_ascii=False), encoding="utf-8")
+def _catalogue(tmp_path, chaine, socle=None):
+    (tmp_path / "chaine.json").write_text(json.dumps(chaine, ensure_ascii=False), encoding="utf-8")
     (tmp_path / "reconciliation.local.json").write_text(json.dumps({
+        **({"socle": socle} if socle else {}),
         "categories": {"essais": {"titre": "Essais", "ordre": 1}},
         "workflows": {"essai": {"kind": "image", "chaine": str(tmp_path / "chaine.json"), "titre": "Essai",
                                 "categorie": "essais", "ordre": 1}}}, ensure_ascii=False), encoding="utf-8")
+    return tmp_path / "reconciliation.local.json"
+
+
+def test_le_catalogue_refuse_au_chargement_une_chaine_qui_manifeste_un_gabarit_sans_le_suivre(tmp_path):
+    from comfyui_bridge.adapter import catalog as cat
+    # la SOURCE (le réconciliant « charte » s'y déplie) : le contrôle posé avant le dernier constat
+    faux = json.loads((EXEMPLES / "image-creation.json").read_text(encoding="utf-8"))
+    faux["etapes"] = faux["etapes"][:-2] + [faux["etapes"][-1], faux["etapes"][-2]]
     with pytest.raises(WorkflowMappingError, match="gabarit 'creation'"):
-        cat.load_catalog(tmp_path / "reconciliation.local.json", data_dir=tmp_path)
+        cat.load_catalog(_catalogue(tmp_path, faux), data_dir=tmp_path)
+
+
+def test_un_catalogue_qui_declare_son_socle_ne_publie_aucune_chaine_qui_ne_le_suit_pas(tmp_path):
+    """Antoine, 2026-09-25 : « chaque nouveau flux de création sur maestro suit la même structure à la base ». Le
+    catalogue déclare son socle ; une chaîne publiée sans gabarit — ou d'un gabarit qui ne l'étend pas — est
+    refusée, en le disant ; sans catégorie (une étape interne), elle n'est pas publiée et n'est pas jugée."""
+    from comfyui_bridge.adapter import catalog as cat
+    sans = {"version": 1, "chaine": "essai", "resume": "r",
+            "expose": {"prompt": {"type": "STRING", "defaut": "", "libelle": "Consigne", "categorie": "sujet", "aide": "a"}},
+            "etapes": [{"id": "rendu", "rendre": {"workflow": "sd15-txt2img", "prompt": "$prompt"}},
+                       {"id": "controle", "verifier": [{"id": "livrable_pese", "valeur": "$rendu.mesure.bytes",
+                                                        "op": "gte", "attendu": 1, "aide": "a"}]}],
+            "livrable": "$rendu.livrable"}
+    with pytest.raises(WorkflowMappingError, match="sans suivre le socle 'socle'"):
+        cat.load_catalog(_catalogue(tmp_path, sans, socle="socle"), data_dir=tmp_path)
+    avec = {**sans, "gabarit": "socle"}
+    c = cat.load_catalog(_catalogue(tmp_path, avec, socle="socle"), data_dir=tmp_path)
+    assert c.socle == "socle" and c.get_spec("essai").gabarit == "socle"
+    # le socle juge : un contrôle final qui ne pèse pas le livrable, un champ muet
+    faux = copy.deepcopy(avec)
+    faux["etapes"][-1]["verifier"][0]["id"] = "autre_chose"
+    faux["expose"]["prompt"].pop("aide")
+    ecarts = gabarit.ecarts(noyau.lire(faux, "essai"), gabarit.lire("socle"))
+    assert any("livrable_pese" in e for e in ecarts) and any("prompt (aide)" in e for e in ecarts), ecarts
+
+
+def test_une_chaine_qui_lit_une_source_sans_son_reconciliant_est_refusee(tmp_path, standard):
+    """Une chaîne DÉJÀ dépliée, écrite telle quelle, lit Héraldiste en direct (son graphe, son menu, le récit de
+    son étape) : refusée au chargement — une source ne se lit que par son réconciliant, sinon une nouveauté se
+    recâble chaîne par chaîne."""
+    from comfyui_bridge.adapter import catalog as cat
+    with pytest.raises(WorkflowMappingError, match="lit Héraldiste en direct"):
+        cat.load_catalog(_catalogue(tmp_path, standard), data_dir=tmp_path)

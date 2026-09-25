@@ -27,6 +27,7 @@ import pathlib
 import pytest
 
 from comfyui_bridge.core import chaine as noyau
+from comfyui_bridge.core import reconciliant
 
 RACINE = pathlib.Path(__file__).resolve().parents[1]
 EXEMPLES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "chaines-exemples"
@@ -194,7 +195,8 @@ CONTROLES_PLAN_TENU = [
 
 
 def _brut(nom):
-    return json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8"))
+    # la chaîne telle qu'elle s'exécute : ses réconciliants (Iconographe, Iconologue) dépliés à leur place
+    return reconciliant.deplier(json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8")))
 
 
 def _juge(controle):

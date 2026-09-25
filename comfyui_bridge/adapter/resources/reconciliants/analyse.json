@@ -1,0 +1,41 @@
+{
+  "reconciliant": "analyse",
+  "version": "1.0.0",
+  "resume": "Le SEUL élément qui lit Iconographe : l'image documentée (éléments repérés et situés, ancres, empreinte qui évite toute analyse en double). Une création qui lit une image par Iconographe le branche et lit ses emplacements.",
+  "source": {
+    "techno": "Iconographe",
+    "adresse": "http://127.0.0.1:7940",
+    "schemas": {
+      "documentation": "/v1/schema/documentation"
+    },
+    "graphes": [
+      "image-iconographe"
+    ],
+    "menus": []
+  },
+  "branchements": {
+    "image": {
+      "requis": true,
+      "aide": "l'image à documenter ($image)"
+    }
+  },
+  "etapes": [
+    {
+      "place": "debut",
+      "etape": {
+        "id": "analyse",
+        "rendre": {
+          "workflow": "image-iconographe",
+          "media": {
+            "image": "@image"
+          }
+        }
+      }
+    }
+  ],
+  "emplacements": {
+    "reperes": "$analyse.recit.markers_json",
+    "ancres": "$analyse.recit.anchors_json",
+    "empreinte": "$analyse.recit.empreinte"
+  }
+}

@@ -23,6 +23,7 @@ import pathlib
 import pytest
 
 from comfyui_bridge.core import chaine as noyau
+from comfyui_bridge.core import reconciliant
 
 RACINE = pathlib.Path(__file__).resolve().parents[1]
 EXEMPLES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "chaines-exemples"
@@ -46,7 +47,7 @@ CLE_DE_LA_LECTURE = ["$image", "$image_2", "$image_3", "$image_4", "$commentaire
 
 @pytest.fixture(scope="module")
 def affiche():
-    return json.loads((EXEMPLES / "video-affiche.json").read_text(encoding="utf-8"))
+    return reconciliant.deplier(json.loads((EXEMPLES / "video-affiche.json").read_text(encoding="utf-8")))
 
 
 def test_quatre_etapes_et_un_seul_livrable(affiche):

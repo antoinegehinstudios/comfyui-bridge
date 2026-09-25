@@ -1,5 +1,16 @@
 # Le gabarit « création » — comment on ajoute un cas de création
 
+> **Depuis le 2026-09-25**, `creation` ÉTEND le socle de toute création publiée
+> (`resources/gabarits/socle.json`), et la couche charte n'est plus écrite dans la
+> chaîne : elle vient du RÉCONCILIANT `charte` (`resources/reconciliants/charte.json`,
+> mode d'emploi `resources/reconciliants/LIRE-MOI.md`). La chaîne le branche —
+> `"reconciliants": {"charte": {"media": "image", "prompt": "$prompt",
+> "livrable": "$livraison.livrable", …}}` — et ne lit que ses emplacements
+> (`$charte.consigne.style_en`, `$charte.a_poser`, `$charte.texture`…). Les étapes
+> `contrainte`, `conformite` et `constat_de_la_charte`, et les champs `charte` et
+> `logo`, sont posés par lui au chargement : le tableau ci-dessous décrit la chaîne
+> DÉPLIÉE, celle qui s'exécute.
+
 Antoine, 2026-09-24 : « standardise par un template un cas de création, en
 manifestant le template à suivre ». Ce fichier est le mode d'emploi ; le patron
 lui-même est `resources/gabarits/creation.json`, et il est **vérifié** : une

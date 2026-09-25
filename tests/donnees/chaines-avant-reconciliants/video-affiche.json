@@ -1,7 +1,6 @@
 {
   "version": 1,
   "chaine": "video-affiche",
-  "gabarit": "socle",
   "resume": "RÉVÉLER UNE AFFICHE — un type de flux d'ESSAI (2026-09-20). Une affiche ou un logo est posé tel quel dans le cadre, ses tons sont lus, et un effet de lumière et de caméra le dévoile en quelques secondes ; puis il se tient, immobile et intact, jusqu'à la fin. Rien n'est repeint, rien n'est rogné, aucun modèle ni aucune analyse externe : un seul nœud procédural, et la chaîne CONSTATE que la dernière image est l'affiche à l'octet près.",
   "expose": {
     "image": {

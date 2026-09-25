@@ -1,0 +1,49 @@
+{
+  "reconciliant": "culture",
+  "version": "1.0.0",
+  "resume": "Le SEUL élément qui lit Iconologue : le dossier culturel sourcé d'une œuvre, parti de ce qu'Iconographe en a documenté. Une création qui lit la culture d'une œuvre le branche, après « analyse ».",
+  "requiert": [
+    "analyse"
+  ],
+  "source": {
+    "techno": "Iconologue",
+    "adresse": "http://127.0.0.1:7950",
+    "schemas": {
+      "dossier": "/v1/schema/dossier"
+    },
+    "graphes": [
+      "image-iconologue"
+    ],
+    "menus": []
+  },
+  "branchements": {
+    "image": {
+      "requis": true,
+      "aide": "l'œuvre ($image)"
+    }
+  },
+  "etapes": [
+    {
+      "place": "debut",
+      "etape": {
+        "id": "culture",
+        "rendre": {
+          "workflow": "image-iconologue",
+          "media": {
+            "image": "@image"
+          },
+          "inputs": {
+            "1.markers_json": "$analyse.reperes",
+            "1.anchors_json": "$analyse.ancres",
+            "1.empreinte_iconographe": "$analyse.empreinte"
+          }
+        }
+      }
+    }
+  ],
+  "emplacements": {
+    "culture": "$culture.recit.culture_json",
+    "ancres": "$culture.recit.anchors_json",
+    "cle": "$culture.recit.cle"
+  }
+}

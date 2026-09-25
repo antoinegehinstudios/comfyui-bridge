@@ -3,22 +3,33 @@
   "chaine": "image-visuel-social",
   "gabarit": "creation",
   "resume": "CRÉER UN VISUEL POUR LES RÉSEAUX — le même socle que « Créer une image » (contrainte → direction → rendu par une technique → livraison → conformité → constats), pour une affiche, une image de carrousel, un visuel qui porte un MESSAGE. La charte se choisit en premier et pèse sur tout : sa palette, ses mots, ses interdits, sa police et ses couleurs de titre (à la place de celles qu'on choisirait, qui ne sont plus proposées), son logo posé, sa texture, son constat. Le message et son sous-titre sont posés PAR-DESSUS l'image à la livraison, tels quels, dans une police du poste ou de la charte (jamais confiés au modèle, qui les réécrirait à sa façon) ; la direction demande au modèle une zone calme là où le texte ira. Format par défaut 1080 × 1350 (4:5).",
-  "reconciliants": {
-    "charte": {
-      "media": "image",
-      "prompt": "$prompt",
-      "livrable": "$livraison.livrable",
-      "preuve_palette": "$direction.recit.mots_par_parametre.charte_palette",
-      "interdits_appliques": "$technique.negatif.applique",
-      "police": "$police",
-      "couleur": "$couleur_texte",
-      "accroche": "$message",
-      "appel": "$sous_message",
-      "aide_charte": "La charte graphique (Héraldiste) que le visuel doit respecter — à choisir EN PREMIER, le reste en découle. Elle impose : sa palette (à la place de celle qu'on choisirait, qui n'est alors plus proposée), ses mots de style et ses interdits dans la consigne, la police et les couleurs de ses titres pour le message (police, couleur et bandeau se grisent et montrent ce qu'elle impose ; le texte se pose sur le fond de titre de la charte), son logo posé tel quel à la livraison (une zone calme est demandée au modèle là où il ira ; ce que le logo écrit déjà est ôté du message), sa texture fondue ; l'image livrée reçoit un constat de conformité. Ce modèle ne prend aucune image de référence : un fond ou un exemple d'affiche de la charte ne pèse pas ici, et le constat le dit. Sous la technique rapide (sans guidage), les interdits ne pèsent que par la consigne positive : le constat le dit aussi. « Aucune charte » : rien ne change. Sous la technique soignée, ses interdits remplissent le champ « À éviter », grisé.",
-      "aide_logo": "Le logo de la charte sur ce visuel — n'existe que sous une charte. Par défaut, il signe le visuel quand il porte un message ou une promotion : ici, dès que « Message » est rempli, ou quand la consigne parle d'une affiche, d'un flyer, d'une campagne ; sans message ni promotion, pas de logo. « Toujours » et « Jamais » tranchent (sans logo, le nom de la marque reste écrit dans le texte). Posé tel quel à la place que la charte déclare, jamais dessiné par le modèle ; quand il est posé, une zone calme est demandée au modèle à cet endroit et le constat le cherche. La décision et sa raison sont dites au journal de la livraison."
-    }
-  },
   "expose": {
+    "charte": {
+      "type": "COMBO",
+      "defaut": "aucune",
+      "options_depuis": {
+        "menu": "charte"
+      },
+      "libelle": "Charte de marque",
+      "categorie": "charte",
+      "aide": "La charte graphique (Héraldiste) que le visuel doit respecter — à choisir EN PREMIER, le reste en découle. Elle impose : sa palette (à la place de celle qu'on choisirait, qui n'est alors plus proposée), ses mots de style et ses interdits dans la consigne, la police et les couleurs de ses titres pour le message (police, couleur et bandeau se grisent et montrent ce qu'elle impose ; le texte se pose sur le fond de titre de la charte), son logo posé tel quel à la livraison (une zone calme est demandée au modèle là où il ira ; ce que le logo écrit déjà est ôté du message), sa texture fondue ; l'image livrée reçoit un constat de conformité. Ce modèle ne prend aucune image de référence : un fond ou un exemple d'affiche de la charte ne pèse pas ici, et le constat le dit. Sous la technique rapide (sans guidage), les interdits ne pèsent que par la consigne positive : le constat le dit aussi. « Aucune charte » : rien ne change. Sous la technique soignée, ses interdits remplissent le champ « À éviter », grisé."
+    },
+    "logo": {
+      "type": "COMBO",
+      "defaut": "selon le message",
+      "options_depuis": {
+        "menu": "logo_charte"
+      },
+      "selon": {
+        "champ": "charte",
+        "sauf": [
+          "aucune"
+        ]
+      },
+      "libelle": "Logo de la charte",
+      "categorie": "charte",
+      "aide": "Le logo de la charte sur ce visuel — n'existe que sous une charte. Par défaut, il signe le visuel quand il porte un message ou une promotion : ici, dès que « Message » est rempli, ou quand la consigne parle d'une affiche, d'un flyer, d'une campagne ; sans message ni promotion, pas de logo. « Toujours » et « Jamais » tranchent (sans logo, le nom de la marque reste écrit dans le texte). Posé tel quel à la place que la charte déclare, jamais dessiné par le modèle ; quand il est posé, une zone calme est demandée au modèle à cet endroit et le constat le cherche. La décision et sa raison sont dites au journal de la livraison."
+    },
     "prompt": {
       "type": "STRING",
       "defaut": "",
@@ -204,6 +215,60 @@
   },
   "etapes": [
     {
+      "id": "contrainte",
+      "quand": {
+        "valeur": "$charte",
+        "op": "ne",
+        "attendu": "aucune"
+      },
+      "rendre": {
+        "workflow": "image-heraldiste",
+        "inputs": {
+          "1.charte": "$charte",
+          "1.prompt": "$prompt",
+          "1.police": "$police",
+          "1.couleur": "$couleur_texte",
+          "1.logo": "$logo",
+          "1.accroche": "$message",
+          "1.appel": "$sous_message"
+        }
+      },
+      "sinon": {
+        "livrable": null,
+        "recit": {
+          "charte": "aucune",
+          "appliquee": false,
+          "tenue": true,
+          "repli": false,
+          "raison": "aucune charte demandée",
+          "positif": "",
+          "couleurs_en": "",
+          "negatif": "",
+          "police": "$police",
+          "couleur": "$couleur_texte",
+          "fond": null,
+          "logo_fichier": null,
+          "logo_ancrage": null,
+          "logo_largeur": null,
+          "logo_marge": null,
+          "logo_hauteur_min_px": null,
+          "logo_zone": null,
+          "logo_texte": null,
+          "texture_fichier": null,
+          "texture_fusion": null,
+          "texture_opacite": null,
+          "texture_taille_relative": null,
+          "references_transmises": [],
+          "imposes": [],
+          "logo_pose": false,
+          "logo_raison": "aucune charte demandée",
+          "logo_attendu": "aucun",
+          "logo_fichier_pendant": null,
+          "colorway_en": ""
+        }
+      }
+    },
+    {
       "id": "direction",
       "rendre": {
         "workflow": "image-direction",
@@ -219,10 +284,14 @@
           "1.zone_de_texte": "$texte_position",
           "1.texte_prevu": "$message",
           "1.charte": "$charte",
-          "1.style_impose": "$charte.consigne.style_en",
-          "1.palette_imposee": "$charte.consigne.couleurs_en",
-          "1.negatif_impose": "$charte.consigne.negatif",
-          "1.zone_du_logo": "$charte.logo.zone_calme"
+          "1.style_impose": "$contrainte.recit.positif",
+          "1.palette_imposee": "$contrainte.recit.colorway_en",
+          "1.negatif_impose": "$contrainte.recit.negatif",
+          "1.zone_du_logo": {
+            "si": "$contrainte.recit.logo_fichier_pendant",
+            "alors": "$contrainte.recit.logo_ancrage",
+            "sinon": ""
+          }
         }
       }
     },
@@ -240,31 +309,87 @@
         "image": "$rendu.livrable",
         "largeur": "$width",
         "hauteur": "$height",
-        "texture": "$charte.texture",
+        "texture": {
+          "fichier": "$contrainte.recit.texture_fichier",
+          "fusion": "$contrainte.recit.texture_fusion",
+          "opacite": "$contrainte.recit.texture_opacite",
+          "taille_relative": "$contrainte.recit.texture_taille_relative"
+        },
         "textes": [
           {
             "texte": "$message",
-            "police": "$charte.texte.police",
+            "police": "$contrainte.recit.police",
             "position": "$texte_position",
             "taille": "$taille_message",
-            "couleur": "$charte.texte.couleur",
-            "fond": "$charte.texte.fond",
+            "couleur": "$contrainte.recit.couleur",
+            "fond": "$contrainte.recit.fond",
             "boite": "$bandeau",
-            "laisser_au_logo": "$charte.texte.laisse_au_logo"
+            "laisser_au_logo": {
+              "si": "$contrainte.recit.logo_fichier_pendant",
+              "alors": "$contrainte.recit.logo_texte",
+              "sinon": ""
+            }
           },
           {
             "texte": "$sous_message",
-            "police": "$charte.texte.police",
+            "police": "$contrainte.recit.police",
             "position": "$texte_position",
             "sous_le_precedent": true,
             "taille": 0.042,
-            "couleur": "$charte.texte.couleur",
-            "fond": "$charte.texte.fond",
+            "couleur": "$contrainte.recit.couleur",
+            "fond": "$contrainte.recit.fond",
             "boite": "$bandeau",
-            "laisser_au_logo": "$charte.texte.laisse_au_logo"
+            "laisser_au_logo": {
+              "si": "$contrainte.recit.logo_fichier_pendant",
+              "alors": "$contrainte.recit.logo_texte",
+              "sinon": ""
+            }
           }
         ],
-        "images": "$charte.a_poser"
+        "images": [
+          {
+            "fichier": "$contrainte.recit.logo_fichier_pendant",
+            "ancrage": "$contrainte.recit.logo_ancrage",
+            "largeur": "$contrainte.recit.logo_largeur",
+            "marge": "$contrainte.recit.logo_marge",
+            "hauteur_min_px": "$contrainte.recit.logo_hauteur_min_px",
+            "espace_min": "$contrainte.recit.logo_zone",
+            "raison": "$contrainte.recit.logo_raison"
+          }
+        ]
+      }
+    },
+    {
+      "id": "conformite",
+      "quand": {
+        "valeur": "$charte",
+        "op": "ne",
+        "attendu": "aucune"
+      },
+      "rendre": {
+        "workflow": "video-heraldiste-conformite",
+        "inputs": {
+          "1.video": "$livraison.livrable",
+          "1.charte": "$charte",
+          "1.images": 1,
+          "1.logo_attendu": "$contrainte.recit.logo_attendu"
+        }
+      },
+      "sinon": {
+        "livrable": null,
+        "recit": {
+          "charte": "aucune",
+          "mesuree": false,
+          "tenue": true,
+          "part_dans_palette": 1.0,
+          "part_attendue": 0.0,
+          "logo_present_partout": true,
+          "logo_intact_partout": true,
+          "logo_taille_tenue": true,
+          "logo_texte_non_reecrit": true,
+          "regles_non_tenues": [],
+          "raison": "aucune charte demandée"
+        }
       }
     },
     {
@@ -310,6 +435,89 @@
           "op": "eq",
           "attendu": "$texte_position",
           "aide": "Quand un message est prévu, la direction demande au modèle une zone calme à la position du texte (et lui interdit d'y peindre du texte). Non tenu : le récit de la direction ne porte pas la zone — dire le job."
+        }
+      ]
+    },
+    {
+      "id": "constat_de_la_charte",
+      "quand": {
+        "valeur": "$charte",
+        "op": "ne",
+        "attendu": "aucune"
+      },
+      "constater": [
+        {
+          "id": "la_charte_demandee_est_appliquee",
+          "valeur": "$contrainte.recit.tenue",
+          "op": "eq",
+          "attendu": true,
+          "aide": "La charte demandée doit avoir été lue chez Héraldiste (127.0.0.1:7980) et appliquée : palette, mots de style, interdits, police et couleurs de titre, logo, texture. Non tenu : le service était injoignable ou la charte inconnue, le visuel a été fait SANS contrainte — le récit de l'étape « contrainte » dit pourquoi. C'est un constat : l'image est livrée."
+        },
+        {
+          "id": "la_palette_de_la_charte_est_dans_la_consigne",
+          "valeur": "$direction.recit.mots_par_parametre.charte_palette",
+          "op": "exists",
+          "aide": "La direction a mis la palette de la charte (ses couleurs, en anglais) dans la consigne, à la place de la palette qu'on aurait choisie — le récit de la direction le dit (palette_dite). Non tenu : la direction n'a pas rendu de récit — dire le job. Depuis le 2026-09-24 au soir, la consigne reçoit les couleurs DOMINANTES de la charte (dominante, secondaire, accent — `colorway_en` du nœud), pas la palette entière : la palette gouverne ce qui est posé et ce que le constat mesure, le style dit comment l'image s'en sert."
+        },
+        {
+          "id": "la_palette_de_la_charte_est_tenue",
+          "valeur": "$conformite.recit.part_dans_palette",
+          "op": "gte",
+          "attendu": "$conformite.recit.part_attendue",
+          "aide": "La part des pixels de l'image livrée à moins de ΔE2000 10 d'une couleur de la charte, mesurée par Héraldiste, contre la part que la charte attend (part_min_dans_palette). Non tenu : le visuel s'écarte de la palette — un style plus proche, une lumière plus neutre, la technique soignée (guidage) aident ; c'est un constat, l'image est livrée."
+        },
+        {
+          "id": "le_logo_impose_est_pose",
+          "valeur": "$conformite.recit.logo_present_partout",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Le logo que la charte impose est posé TEL QUEL à la livraison (fichier de la charte, placement déclaré ou mesuré sur ses exemples) et doit être retrouvé sur l'image livrée par Héraldiste (repérage des contours). Non tenu : la livraison ne l'a pas posé, ou un texte le couvre — le journal de « livraison » et le récit de « conformite » disent. Sans logo imposé : tenu. Quand la création n'attend AUCUN logo (décision de l'étape de contrainte : « sans », image d'ambiance sans message), il n'y a rien à retrouver : tenu, et la conformité le dit (« aucun logo attendu »)."
+        },
+        {
+          "id": "le_logo_impose_est_intact",
+          "valeur": "$conformite.recit.logo_intact_partout",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Intact : l'écart de couleur médian du logo retrouvé reste sous 8 et aucune grande plage de ses couleurs ne dépasse 15 (ni recoloré, ni délavé). Non tenu : le logo a été altéré après sa pose — le récit donne l'écart. Sans logo imposé : tenu. Quand la création n'attend AUCUN logo (décision de l'étape de contrainte : « sans », image d'ambiance sans message), il n'y a rien à retrouver : tenu, et la conformité le dit (« aucun logo attendu »)."
+        },
+        {
+          "id": "le_logo_impose_tient_sa_taille",
+          "valeur": "$conformite.recit.logo_taille_tenue",
+          "op": "eq",
+          "attendu": true,
+          "aide": "La hauteur du logo retrouvé, en pixels de l'image livrée, contre la taille minimale que la charte déclare. Non tenu : demander une image plus grande, ou une largeur de logo plus grande dans la charte. Sans taille minimale déclarée : tenu. Quand la création n'attend AUCUN logo (décision de l'étape de contrainte : « sans », image d'ambiance sans message), il n'y a rien à retrouver : tenu, et la conformité le dit (« aucun logo attendu »)."
+        },
+        {
+          "id": "ce_que_le_logo_ecrit_n_est_pas_reecrit",
+          "valeur": {
+            "si": "$contrainte.recit.logo_fichier_pendant",
+            "alors": "$conformite.recit.logo_texte_non_reecrit",
+            "sinon": true
+          },
+          "op": "eq",
+          "attendu": true,
+          "aide": "Le nom qu'un wordmark écrit déjà est ôté du message posé (laisser_au_logo) QUAND le logo est posé : il ne doit pas être réécrit dans une autre police. Non tenu : le nom se lit hors du logo — le récit de « conformite » le dit. Sans logo posé (« sans », image sans message) : le nom de la marque reste dans le message, c'est la seule place où il se lit — rien à ne pas réécrire, tenu (le récit de la conformité dit ce qu'il a lu). Sans logo à texte : tenu."
+        },
+        {
+          "id": "les_regles_mesurables_de_la_charte_sont_tenues",
+          "valeur": "$conformite.recit.regles_non_tenues",
+          "op": "eq",
+          "attendu": [],
+          "aide": "Chaque règle mesurable de la charte (taille minimale, zone de protection, position…) est tenue sur l'image livrée. Non tenu : la liste des règles rompues est au récit de « conformite ». C'est un constat."
+        },
+        {
+          "id": "les_interdits_de_la_charte_pesent",
+          "valeur": "$technique.negatif.applique",
+          "op": "eq",
+          "attendu": true,
+          "aide": "Les interdits de la charte vont au prompt NÉGATIF : seule une technique qui lit le négatif (guidage, cfg > 1) les fait peser. Non tenu : la technique rapide (cfg 1) ne lit pas le négatif — les interdits ne pèsent que par la consigne positive ; choisir la technique soignée pour qu'ils pèsent. C'est un constat."
+        },
+        {
+          "id": "aucune_image_de_reference_de_la_charte_n_est_attendue",
+          "valeur": "$contrainte.recit.references_transmises",
+          "op": "eq",
+          "attendu": [],
+          "aide": "Ce modèle ne prend aucune image de référence : un fond, une texture en image ou un exemple d'affiche déclarés dans la charte ne peuvent peser ici que par les mots et la palette. Non tenu : la charte en déclare (le récit de « contrainte » les liste sous references_transmises) et ils ne sont PAS lus par le rendu — dit, jamais tu. C'est un constat."
         }
       ]
     },

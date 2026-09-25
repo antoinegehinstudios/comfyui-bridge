@@ -1,16 +1,7 @@
 {
-  "gabarit": "socle",
   "version": 1,
   "chaine": "video-revelation",
   "resume": "LE SOCLE D'UNE VIDÉO DE RÉVÉLATION : il attend une œuvre et des paramètres, et ne change pas. L'image est d'abord DOCUMENTÉE par Iconographe — une fois pour toutes, dans sa bibliothèque — puis sa CULTURE est documentée par Iconologue : ce que l'œuvre EST, sourcé. Une INTENTION est ensuite écrite dans la structure d'un média qu'on regarde en défilant, et c'est ELLE qui commande : le DÉROULEMENT révèle l'accroche (2,5 s), la mise en place, puis le corps qui croît vers le climax et le tient sans arrêter l'animation ; l'image révélée se CONTEMPLE ensuite (3 à 5 s, la caméra glisse encore). Une CONCLUSION pose la scène (on peut s'en passer), un APPEL FINAL s'écrit par-dessus ses dernières images, et le MONTAGE réunit le tout. Deux contrôles jugent : le plan avant de le révéler, la révélation avant de la clore. COMMENT l'image se révèle est un paramètre — la technique — et chaque technique expose ses propres réglages.",
-  "reconciliants": {
-    "analyse": {
-      "image": "$image"
-    },
-    "culture": {
-      "image": "$image"
-    }
-  },
   "expose": {
     "image": {
       "media": "image",
@@ -132,6 +123,29 @@
   },
   "etapes": [
     {
+      "id": "analyse",
+      "rendre": {
+        "workflow": "image-iconographe",
+        "media": {
+          "image": "$image"
+        }
+      }
+    },
+    {
+      "id": "culture",
+      "rendre": {
+        "workflow": "image-iconologue",
+        "media": {
+          "image": "$image"
+        },
+        "inputs": {
+          "1.markers_json": "$analyse.recit.markers_json",
+          "1.anchors_json": "$analyse.recit.anchors_json",
+          "1.empreinte_iconographe": "$analyse.recit.empreinte"
+        }
+      }
+    },
+    {
       "id": "intention",
       "rendre": {
         "workflow": "image-intention",
@@ -141,9 +155,9 @@
         "style_narratif": "$style_narratif",
         "inputs": {
           "70.style_approche": "$style_approche",
-          "62.markers_json": "$analyse.reperes",
-          "62.culture_json": "$culture.culture",
-          "62.anchors_json": "$culture.ancres",
+          "62.markers_json": "$analyse.recit.markers_json",
+          "62.culture_json": "$culture.recit.culture_json",
+          "62.anchors_json": "$culture.recit.anchors_json",
           "62.duree_s": "$duration_s",
           "62.contemplation_s": "$contemplation_s",
           "62.queue_s": "$technique.budget.queue_s",
@@ -151,8 +165,8 @@
         },
         "memoire": {
           "cle": [
-            "$analyse.empreinte",
-            "$culture.cle",
+            "$analyse.recit.empreinte",
+            "$culture.recit.cle",
             "$style_narratif",
             "$style_approche",
             "$seed",

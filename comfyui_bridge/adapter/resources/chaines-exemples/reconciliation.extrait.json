@@ -1,4 +1,6 @@
 {
+  "socle": "socle",
+  "_lire_moi_socle": "Le catalogue DÉCLARE le socle de toute création qu'il publie (2026-09-25) : une chaîne publiée qui ne suit pas « resources/gabarits/socle.json » (ou un gabarit qui l'étend) est refusée au chargement ; un graphe seul publié est dit « hors_socle ». Les sources extérieures ne se lisent que par leur réconciliant (resources/reconciliants/).",
   "_lire_moi": "Extrait du fichier de réconciliation : ce qu'il faut y ajouter pour que ces chaînes et cette vitrine existent. Les valeurs entre chevrons sont à remplacer par les chemins de LA machine (le dépôt n'en publie aucun). Un chemin de chaîne peut aussi être relatif au fichier de réconciliation.",
   "_lire_moi_resume": "« description » est ce qu'un utilisateur lit AVANT de choisir : ce que la vidéo va être, en une phrase. Aucun terme de moteur (nom de nœud, nom de modèle, mécanique interne) — le nom du modèle a sa place dans le TITRE, qui est un choix que l'utilisateur fait.",
   "_lire_moi_menus_medias": "Le libellé d'une PIÈCE JOINTE se lit dans « menus » au nom du champ (image, video, audio) quand l'auteur du graphe n'a pas titré son nœud de chargement : sans lui, le formulaire montrait la clé nue « image ».",

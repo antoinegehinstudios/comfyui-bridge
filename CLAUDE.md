@@ -210,6 +210,29 @@ vérifiée contre `resources/gabarits/creation.json` au chargement
 (`core.gabarit`), chaque écart nommé ; `presentation.gabarit` le publie ; la
 lecture humaine est `resources/chaines-exemples/GABARIT-creation.md`.
 
+**Un réconciliant par techno, un socle pour toute création (2026-09-25)** — Antoine :
+« seul cet élément réconciliant se met à jour, une fois, pour que tout workflow obtienne
+la nouveauté » ; « chaque nouveau flux de création sur maestro suit la même structure à
+la base ». Une source extérieure (Héraldiste, Iconographe, Iconologue) ne se lit que par
+SON réconciliant, `resources/reconciliants/<rôle>.json` (`charte`, `analyse`,
+`culture`) : ses graphes, ses menus, ses champs, ses étapes, ses valeurs « sans » et
+des EMPLACEMENTS PAR RÔLE. Une chaîne le branche (`"reconciliants": {"charte":
+{"media": …, "prompt": …, "livrable": …}}`) et ne lit que `$charte.<emplacement>` ;
+`core.reconciliant.deplier` l'étend au chargement (le catalogue, `catalog.chaine`), et
+refuse toute lecture directe d'une source (graphe, menu, `$contrainte.recit.*`), tout
+emplacement inconnu, tout branchement absent ou inconnu, deux réconciliants pour une
+techno. `presentation.reconciliants` publie la provenance (version, emplacements lus,
+`non_pris`) ; chaque choix d'un menu de source porte `non_servis`, les faits que la
+source sert et que son réconciliant ne lit pas (maestro les écrit sous le champ). Le
+catalogue DÉCLARE son socle (`"socle": "socle"`) : toute chaîne publiée suit
+`gabarits/socle.json` (contrôle final `livrable_pese`, champs documentés, livrable
+déclaré) ou un gabarit qui l'étend (`"etend"`, `creation`), sinon elle est refusée ;
+un graphe seul publié est dit `hors_socle`. La preuve de non-régression :
+`tests/test_reconciliants_sans_casse.py` compare chaque mode déplié à sa chaîne d'avant
+(figée, `tests/donnees/chaines-avant-reconciliants/`), écart par écart ; modifier un
+réconciliant, c'est y déclarer ce que chaque mode y gagne. Mode d'emploi :
+`resources/reconciliants/LIRE-MOI.md`.
+
 **Le logo et les couleurs d'une charte sur une image (2026-09-24 au soir)** : le nœud
 `HeraldisteCharte` DÉCIDE du logo (règles d'usage d'Antoine : « selon le message »,
 « avec », « sans » ; une image fixe n'a pas de carton final, le logo y vit en zone

@@ -175,6 +175,14 @@ class WorkflowSpec:
     # Le gabarit qu'une chaîne manifeste (vérifié à la lecture) — publié, pour
     # qu'un lanceur ou un lecteur sache quel patron ce mode suit.
     gabarit: str | None = None
+    # Ce que chaque RÉCONCILIANT a apporté à la chaîne (`core/reconciliant.py`) :
+    # sa version, sa techno, ses champs, ses étapes, les emplacements lus et ceux
+    # que ce mode ne prend pas — publié : une nouveauté de la source se voit là.
+    reconciliants: dict[str, Any] = field(default_factory=dict)
+    # Un GRAPHE SEUL publié quand le catalogue déclare un socle : il n'a ni
+    # réconciliant, ni contrôle du livrable, ni champs documentés — dit, jamais
+    # tu (Antoine, 2026-09-25 : « identifie les divergents »).
+    hors_socle: str | None = None
     # Ce qu'il faut SAVOIR pour remplir un champ, quand le nom du champ ne
     # suffit pas (« le sujet s'écrit décor | temps un | temps deux »). Déclaré à
     # l'entrée, rendu par /io sur le champ concerné : écrit dans un client, ce
@@ -190,7 +198,9 @@ class WorkflowSpec:
         return {"titre": self.titre or self.name, "resume": self.description,
                 "categorie": self.categorie, "ordre": self.ordre,
                 "publie": self.categorie is not None,
-                **({"gabarit": self.gabarit} if self.gabarit else {})}
+                **({"gabarit": self.gabarit} if self.gabarit else {}),
+                **({"reconciliants": self.reconciliants} if self.reconciliants else {}),
+                **({"hors_socle": self.hors_socle} if self.hors_socle else {})}
 
     @property
     def profile(self) -> WorkflowProfile:
@@ -231,6 +241,8 @@ class WorkflowCatalog:
         # Noms servis par une entrée déclarée alors qu'un graphe enregistré
         # porte le même : ce qui est masqué doit pouvoir être dit.
         self.shadowed: tuple[str, ...] = ()
+        # Le gabarit que suit toute création publiée, quand le catalogue en déclare un.
+        self.socle: str | None = None
         # Des titres déclarés pour un workflow qui n'existe plus : renommé ou
         # retiré. Un habillage qui n'habille rien doit se voir.
         self.vitrines_orphelines: tuple[str, ...] = ()
@@ -387,7 +399,8 @@ class WorkflowCatalog:
                 raise WorkflowMappingError(
                     f"chaîne {spec.name!r} : impossible de lire {spec.chaine_path} : {exc}"
                 ) from exc
-            self._chaines[spec.name] = noyau.lire(brut, spec.name)
+            from ..core import reconciliant as _reconciliant
+            self._chaines[spec.name] = noyau.lire(_reconciliant.deplier(brut), spec.name)
         return self._chaines[spec.name]
 
     def techniques(self) -> dict[str, Any]:
@@ -691,7 +704,8 @@ def _graph_of(path: Path) -> dict[str, Any]:
 
 def _spec_de_chaine(name: str, entry: dict[str, Any], catalogue: Path,
                     vitrine: dict[str, Any],
-                    techniques: dict[str, Any] | None = None) -> WorkflowSpec:
+                    techniques: dict[str, Any] | None = None,
+                    socle: str | None = None) -> WorkflowSpec:
     """Une entrée qui déclare une CHAÎNE au lieu d'un graphe.
 
     Ce qu'elle reçoit vient de la rubrique « expose » de la chaîne, lue ici même
@@ -707,16 +721,29 @@ def _spec_de_chaine(name: str, entry: dict[str, Any], catalogue: Path,
     expose: tuple[str, ...] = ()
     defauts: dict[str, Any] = {}
     try:
-        lue = noyau.lire(json.loads(chemin.read_text(encoding="utf-8")), name)
+        # Les RÉCONCILIANTS d'abord : la chaîne se lit telle qu'elle s'exécute,
+        # leurs champs en tête, leurs étapes à leur place (`core/reconciliant.py`).
+        from ..core import reconciliant as _reconciliant
+        deplie, provenance = _reconciliant.deplier_avec_provenance(json.loads(chemin.read_text(encoding="utf-8")))
+        lue = noyau.lire(deplie, name)
         # Les techniques de CETTE chaîne : celles qui tiennent ses rôles. Les
         # autres sont d'un autre plan, et n'ont rien à lui dire (2026-09-24).
         techniques = noyau.techniques_pour(lue, techniques)
         noyau.verifier_techniques(lue, techniques)
-        if lue.gabarit:
+        from ..core import gabarit as _gabarit
+        suivi = _gabarit.lire(lue.gabarit) if lue.gabarit else None
+        if suivi is not None:
             # La chaîne MANIFESTE un gabarit : elle est jugée contre lui ici,
             # au chargement — s'en écarter refuse le mode, en nommant l'écart.
-            from ..core import gabarit as _gabarit
-            _gabarit.verifier(lue, _gabarit.lire(lue.gabarit))
+            _gabarit.verifier(lue, suivi)
+        if socle and vitrine.get("categorie") and (suivi is None or socle not in (suivi.get("lignee") or [])):
+            # Le catalogue déclare le SOCLE de toute création qu'il publie (Antoine,
+            # 2026-09-25 : « chaque nouveau flux de création sur maestro suit la même
+            # structure à la base ») : une chaîne publiée qui ne le suit pas est refusée.
+            raise WorkflowMappingError(
+                f"chaîne {name!r} : elle est publiée (catégorie {vitrine['categorie']!r}) sans suivre le socle "
+                f"{socle!r} — déclarer « gabarit »: « {socle} » (ou un gabarit qui l'étend) et s'y tenir "
+                f"(trouvé : {lue.gabarit or 'aucun gabarit'})")
         expose = tuple(noyau.champs_admis(lue, techniques))
         # Les défauts publiés sont ceux du plan ET de la technique par DÉFAUT :
         # c'est ce qu'un formulaire ouvre, et ce contre quoi un écart se juge.
@@ -736,6 +763,7 @@ def _spec_de_chaine(name: str, entry: dict[str, Any], catalogue: Path,
         defaults={**defauts, **dict(entry.get("defaults", {}))},
         limits=dict(entry.get("limits", {})),
         gabarit=lue.gabarit,
+        reconciliants=provenance,
         **vitrine,
     )
 
@@ -822,6 +850,9 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
     from .techniques import lire_toutes as _lire_techniques
     techniques = _lire_techniques(data_dir)
 
+    # Le SOCLE que suit toute création publiée : déclaré par le catalogue lui-même
+    # (des données, comme le reste), jugé à la lecture de chaque chaîne publiée.
+    socle = str(data["socle"]) if data.get("socle") else None
     specs: dict[str, WorkflowSpec] = {}
     vitrines: dict[str, dict[str, Any]] = {}
     for name, entry in workflows.items():
@@ -839,7 +870,7 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
             "aides": {str(k): str(v) for k, v in (entry.get("aides") or {}).items()},
         }
         if "chaine" in entry:
-            specs[name] = _spec_de_chaine(name, entry, path, vitrine, techniques)
+            specs[name] = _spec_de_chaine(name, entry, path, vitrine, techniques, socle)
             continue
         if "workflow" not in entry and "bindings" not in entry:
             # Une entrée qui ne porte QUE la vitrine habille un graphe DÉPOSÉ
@@ -923,6 +954,12 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
             orphelines.append(nom)
             continue
         specs[nom] = _replace(specs[nom], **vitrine)
+    if socle:
+        for nom, spec in list(specs.items()):
+            if spec.categorie is not None and not spec.est_chaine:
+                specs[nom] = _replace(spec, hors_socle=(
+                    f"un graphe seul, publié hors du socle {socle!r} : ni réconciliant, ni contrôle du fichier "
+                    "livré, ni champs documentés — à envelopper dans une chaîne qui suit le socle"))
 
     catalogue = WorkflowCatalog(default=default, specs=specs,
                                 workflows_dir=Path(workflows_dir) if workflows_dir else None,
@@ -932,6 +969,7 @@ def load_catalog(path: str | Path, workflows_dir: str | Path | None = None,
                                 techniques=techniques)
     catalogue.shadowed = tuple(masques)
     catalogue.vitrines_orphelines = tuple(sorted(orphelines))
+    catalogue.socle = socle
     catalogue.categories_de_champs = _categories_de_champs(data.get("categories_de_champs"), path)
     return catalogue
 
