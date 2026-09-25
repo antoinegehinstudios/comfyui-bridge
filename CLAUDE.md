@@ -231,7 +231,16 @@ un graphe seul publié est dit `hors_socle`. La preuve de non-régression :
 `tests/test_reconciliants_sans_casse.py` compare chaque mode déplié à sa chaîne d'avant
 (figée, `tests/donnees/chaines-avant-reconciliants/`), écart par écart ; modifier un
 réconciliant, c'est y déclarer ce que chaque mode y gagne. Mode d'emploi :
-`resources/reconciliants/LIRE-MOI.md`.
+`resources/reconciliants/LIRE-MOI.md`. Second temps, même jour (Antoine : « la prise de charte doit
+être présente dans le template, et à son poids exactement comme c'est défini par le template ; sans
+mentir, sans faux paramètre que le workflow ne sait pas tenir ») : le socle EXIGE le réconciliant
+`charte` ; ses sept PROMESSES sont chacune tenues (un emplacement lu, par la chaîne ou sa technique) ou
+déclinées avec leur raison (`"sans"`), dites sous le champ « Charte » (`manques_par_valeur`, « Ne tient
+pas ») — ni l'un ni l'autre, ou les deux, est refusé au chargement ; les TECHNIQUES lisent les
+emplacements (`$analyse.reperes`, `$charte.texte.police`), réécrites pour la chaîne qui les emploie
+(`techniques_pour`, jusqu'à l'exécution) ; Révéler une image prend la charte (logo et texture au montage,
+police de l'appel) ; l'affiche et le prolongement, jamais lancés par Antoine et qui ne savent pas la tenir,
+ont quitté la vitrine (`_hors_vitrine` dans leur entrée).
 
 **Le logo et les couleurs d'une charte sur une image (2026-09-24 au soir)** : le nœud
 `HeraldisteCharte` DÉCIDE du logo (règles d'usage d'Antoine : « selon le message »,

@@ -36,7 +36,7 @@
     "deroulement": {
       "workflow": "video-reveal-brume-dirige",
       "inputs": {
-        "61.markers_json": "$analyse.recit.markers_json",
+        "61.markers_json": "$analyse.reperes",
         "61.direction_json": "$intention.recit.direction_json",
         "61.fond": "$brume",
         "61.contemplation_s": "$contemplation_s"
@@ -56,7 +56,7 @@
       "workflow": "video-appel-final",
       "inputs": {
         "7.texte": "$cta",
-        "7.police": "$cta_police"
+        "7.police": "$charte.texte.police"
       }
     }
   },

@@ -118,15 +118,18 @@ def test_la_copie_versionnee_est_celle_du_poste():
     assert donnee.read_text(encoding="utf-8") == (EXEMPLES / "video-affiche.json").read_text(encoding="utf-8")
 
 
-def test_sur_ce_poste_le_mode_est_publie_et_ses_graphes_tiennent():
+def test_sur_ce_poste_le_mode_est_hors_vitrine_et_ses_graphes_tiennent():
+    """2026-09-25 : jamais lancé par Antoine en deux mois, et hors du template de création (il ne sait pas tenir la
+    prise de charte : la révélation de l'affiche EST son livrable, rien ne s'y pose) — il quitte la vitrine de maestro,
+    avec sa raison écrite dans son entrée ; il reste une chaîne qui se lit et tourne, et ses graphes tiennent."""
     reconciliation = DONNEES / "reconciliation.local.json"
     if not reconciliation.is_file():
         pytest.skip("pas de _data sur ce poste")
     r = json.loads(reconciliation.read_text(encoding="utf-8"))
-    assert r["categories"]["reveler-une-affiche"]["ordre"] == 2
     assert any(c["valeur"] == "elements" for c in r["categories_de_champs"])
     mode = r["workflows"]["video-affiche"]
-    assert mode["categorie"] == "reveler-une-affiche" and pathlib.Path(mode["chaine"]).is_file()
+    assert "categorie" not in mode and pathlib.Path(mode["chaine"]).is_file()
+    assert "reveler-une-affiche" in mode["_hors_vitrine"] and "prise de charte" in mode["_hors_vitrine"]
     from comfyui_bridge.adapter.chaines import noeud_de_tranches
     for nom, noeud_id, classe, tranches in (("video-affiche-cinematique", "7", "AfficheCinematique", True),
                                              ("affiche-lecture", "5", "AfficheLecture", False)):

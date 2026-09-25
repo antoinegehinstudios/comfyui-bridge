@@ -1,12 +1,13 @@
 {
   "reconciliant": "charte",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "resume": "Le SEUL élément qui lit Héraldiste. Toute création qui prend une charte le branche : son champ « charte » (en premier), le logo, l'étape « contrainte » (le nœud lit le brief, décide du logo, pose les fichiers), la « conformite » mesurée sur le fichier livré, les constats de la charte — et, pour le reste de la chaîne, des EMPLACEMENTS PAR RÔLE : la consigne, les fichiers à poser, la texture, la typographie des textes, les images de référence. Une nouveauté d'Héraldiste se câble ici, une fois.",
   "_lire_moi": {
     "pourquoi": "Antoine, 2026-09-25 : « seul cet élément réconciliant se met à jour, une fois, pour que tout workflow obtienne la nouveauté ». Avant lui, trois chaînes recopiaient la couche charte et lisaient chacune vingt à trente-cinq clés du récit du nœud : le nom laissé au logo avait été câblé deux fois, par deux mécanismes, et les mascottes servies par Héraldiste n'atteignaient aucun mode.",
     "emplacements": "Par RÔLE, jamais par nom de clé du nœud : « consigne.* » ce que le modèle lit (positif et négatif composés par le nœud, ou les morceaux de la charte pour une direction qui compose elle-même) ; « a_poser » les fichiers posés tels quels à la livraison (une vidéo y ajoute le carton final) ; « texture » ; « texte.* » la typographie des textes incrustés ; « textes.* » leur place et leur temps ; « references.N.* » les places d'images de référence d'un rendu qui en lit ; « logo.zone_calme » l'endroit où le modèle doit laisser de l'espace.",
     "faits": "Les faits que le menu de la charte porte (colonne « faits ») et que ce réconciliant ne lit pas sont DITS par option de charte (« non_servis »), jamais perdus : une nouveauté d'Héraldiste s'y voit avant d'être câblée.",
-    "sans_charte": "Les valeurs « sinon » des étapes sont ce que les emplacements rendent sans charte : la consigne de l'utilisateur telle quelle, aucun fichier à poser, les textes à leur place."
+    "sans_charte": "Les valeurs « sinon » des étapes sont ce que les emplacements rendent sans charte : la consigne de l'utilisateur telle quelle, aucun fichier à poser, les textes à leur place.",
+    "promesses": "Ce qu'une charte impose à TOUTE création qui la prend (Antoine, 2026-09-25 : « la prise de charte doit être présente dans le template, et à son poids exactement comme c'est défini par le template ; le template délivre les choses qu'il porte, sans mentir, sans faux paramètre que le workflow ne sait pas tenir »). Chaque mode TIENT une promesse — il lit l'un de ses emplacements, lui-même ou par sa technique — ou la DÉCLINE avec sa raison (« sans ») ; la raison est dite sous le champ « Charte » dans maestro, avant qu'on la choisisse. Ni l'un ni l'autre, ou les deux : refusé au chargement."
   },
   "source": {
     "techno": "Héraldiste",
@@ -43,6 +44,59 @@
       }
     }
   },
+  "prise": {
+    "champ": "charte",
+    "sauf": [
+      "aucune"
+    ]
+  },
+  "promesses": {
+    "consigne": {
+      "libelle": "les mots de style et les couleurs de la charte dans la consigne du modèle",
+      "emplacements": [
+        "consigne.positif",
+        "consigne.style_en",
+        "consigne.couleurs_en"
+      ]
+    },
+    "interdits": {
+      "libelle": "les interdits de la charte au négatif du modèle",
+      "emplacements": [
+        "consigne.negatif"
+      ]
+    },
+    "logo": {
+      "libelle": "le logo de la charte, posé tel quel",
+      "emplacements": [
+        "a_poser"
+      ]
+    },
+    "texture": {
+      "libelle": "la texture de la charte, fondue sur la création",
+      "emplacements": [
+        "texture"
+      ]
+    },
+    "police": {
+      "libelle": "la police des titres de la charte sur les textes posés",
+      "emplacements": [
+        "texte.police"
+      ]
+    },
+    "couleurs_du_texte": {
+      "libelle": "la couleur et le fond des titres de la charte sur les textes posés",
+      "emplacements": [
+        "texte.couleur",
+        "texte.fond"
+      ]
+    },
+    "references": {
+      "libelle": "le fond et les images de référence de la charte, montrés au modèle",
+      "emplacements": [
+        "references"
+      ]
+    }
+  },
   "branchements": {
     "media": {
       "requis": true,
@@ -53,8 +107,7 @@
       "aide": "ce que la chaîne livre : une image fixe (composée) ou une vidéo (recollée) — une vidéo a un carton final, une image non"
     },
     "prompt": {
-      "requis": true,
-      "aide": "la consigne de l'utilisateur ($prompt) : le nœud y lit « avec / sans logo », une affiche, une promotion"
+      "aide": "la consigne de l'utilisateur ($prompt), quand le mode en a une : le nœud y lit « avec / sans logo », une affiche, une promotion"
     },
     "livrable": {
       "requis": true,
@@ -436,7 +489,7 @@
             "aide": "Un élément imposé par la charte se mesure sur la vidéo LIVRÉE, quelques images échantillonnées, par Héraldiste (repérage de la forme par corrélation des contours, fidélité par ΔE2000 sur ses pixels opaques). L'ancrage du logo retrouvé (haut-centre, bas-droite…) contre le placement de la charte. Sans placement déclaré ni montré par un exemple : tenu, et le récit le dit."
           },
           {
-            "@si": "accroche",
+            "@si": "appel",
             "id": "ce_que_le_logo_ecrit_n_est_pas_reecrit",
             "valeur": {
               "si": "$contrainte.recit.logo_pose",
@@ -476,7 +529,11 @@
             "valeur": "$contrainte.recit.references_transmises",
             "op": "eq",
             "attendu": [],
-            "aide": "Ce modèle ne prend aucune image de référence : un fond, une texture en image ou un exemple d'affiche déclarés dans la charte ne peuvent peser ici que par les mots et la palette. Non tenu : la charte en déclare (le récit de « contrainte » les liste sous references_transmises) et ils ne sont PAS lus par le rendu — dit, jamais tu. C'est un constat."
+            "aide": {
+              "@selon": "media",
+              "image": "Ce modèle ne prend aucune image de référence : un fond, une texture en image ou un exemple d'affiche déclarés dans la charte ne peuvent peser ici que par les mots et la palette. Non tenu : la charte en déclare (le récit de « contrainte » les liste sous references_transmises) et ils ne sont PAS lus par le rendu — dit, jamais tu. C'est un constat.",
+              "video": "Cette vidéo ne montre au modèle aucune image de la charte : un fond, une texture en image ou un exemple d'affiche déclarés dans la charte ne pèsent pas ici (voir sous le champ « Charte » ce que ce mode ne tient pas). Non tenu : la charte en déclare (le récit de « contrainte » les liste sous references_transmises) — dit, jamais tu. C'est un constat."
+            }
           }
         ]
       }

@@ -166,7 +166,14 @@ def ecarts(chaine: Chaine, gabarit: dict[str, Any]) -> list[str]:
             manquants = [c for c in final.get("controles") or [] if str(c) not in presents]
             if manquants:
                 fautes.append(f"le contrôle final {derniere.id!r} doit porter {', '.join(manquants)}")
-    # 8. Chaque champ dit sa catégorie et son aide : un lanceur range et explique sans rien connaître.
+    # 8. Les réconciliants que le gabarit exige — la PRISE DE CHARTE pour toute création (Antoine, 2026-09-25 :
+    #    « j'ai demandé un template, la prise de charte doit y être présente, et à son poids exactement comme
+    #    c'est défini par le template ») ; ce que la chaîne n'en tient pas, elle le décline avec sa raison.
+    for requis in gabarit.get("reconciliants_requis") or []:
+        if str(requis) not in chaine.emplacements:
+            fautes.append(f"le réconciliant « {requis} » manque : « reconciliants »: {{« {requis} »: …}}, puis tenir ou "
+                          f"décliner (« sans ») chacune de ses promesses")
+    # 9. Chaque champ dit sa catégorie et son aide : un lanceur range et explique sans rien connaître.
     if gabarit.get("champs_documentes"):
         muets = [f"{c.nom} ({', '.join(q for q, v in (('categorie', c.categorie), ('aide', c.aide)) if not str(v or '').strip())})"
                  for c in chaine.champs.values() if not str(c.categorie or "").strip() or not str(c.aide or "").strip()]

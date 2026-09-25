@@ -9,7 +9,9 @@
 > (`$charte.consigne.style_en`, `$charte.a_poser`, `$charte.texture`…). Les étapes
 > `contrainte`, `conformite` et `constat_de_la_charte`, et les champs `charte` et
 > `logo`, sont posés par lui au chargement : le tableau ci-dessous décrit la chaîne
-> DÉPLIÉE, celle qui s'exécute.
+> DÉPLIÉE, celle qui s'exécute. La charte y promet sept choses : un nouveau cas de création tient
+> chacune (en lisant l'un de ses emplacements) ou la décline avec sa raison, dans `"sans"` — voir
+> `resources/reconciliants/LIRE-MOI.md`.
 
 Antoine, 2026-09-24 : « standardise par un template un cas de création, en
 manifestant le template à suivre ». Ce fichier est le mode d'emploi ; le patron

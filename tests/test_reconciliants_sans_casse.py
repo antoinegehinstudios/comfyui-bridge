@@ -25,6 +25,9 @@ EXEMPLES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "chaines-exempl
 DONNEES = RACINE / "_data"
 MODES = ("image-creation", "image-visuel-social", "video-depuis-un-texte", "video-revelation", "video-affiche",
          "video-prolongement")
+# Les modes au TEMPLATE de création — ceux qu'Antoine emploie ; l'affiche et le prolongement, jamais lancés par lui et
+# qui ne savent pas tenir la prise de charte, ont quitté la vitrine (2026-09-25).
+AU_TEMPLATE = ("image-creation", "image-visuel-social", "video-depuis-un-texte", "video-revelation")
 
 
 def ecarts(a, b, chemin=""):
@@ -62,6 +65,11 @@ def avant(nom):
 
 def apres(nom):
     return reconciliant.deplier(json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8")))
+
+
+def executable(nom):
+    """La chaîne telle que le catalogue la lit : dépliée, avec les emplacements que ses techniques lisent."""
+    return reconciliant.chaine_executable(json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8")))
 
 
 # Les valeurs « sans charte » sont celles d'UN réconciliant pour tous les modes : chacun reçoit les clés que les
@@ -113,12 +121,22 @@ ECARTS_DECLARES = {
         ".etapes[controle]": "ajouté",
         ".gabarit": "ajouté",
     },
-    "video-revelation": {".gabarit": "ajouté"},
-    "video-affiche": {".gabarit": "ajouté"},
+    # Révéler une image PREND la charte (2026-09-25, « la prise de charte doit être présente dans le template ») : ses
+    # champs en tête, sa contrainte avant l'analyse, sa conformité après le montage, ses constats avant le contrôle ; le
+    # montage pose ce qu'elle impose (logo, texture) ; la police de l'appel se grise sous une charte qui a la sienne.
+    # SANS charte, rien de tout cela ne pèse : prouvé plus bas, et par le rejeu d'un rendu d'Antoine (octet pour octet).
+    "video-revelation": {
+        ".gabarit": "ajouté",
+        ".expose.charte": "ajouté", ".expose.logo": "ajouté", ".expose.logo_ou": "ajouté",
+        ".expose.cta_police.impose_par": "ajouté", ".expose.cta_police.aide": "changé",
+        ".etapes[contrainte]": "ajouté", ".etapes[conformite]": "ajouté", ".etapes[constat_de_la_charte]": "ajouté",
+        ".etapes[montage].recoller.images": "ajouté", ".etapes[montage].recoller.texture": "ajouté",
+    },
+    # hors du template : l'affiche revient à sa chaîne d'avant ; le prolongement garde ses aides et le poids de son livrable
+    "video-affiche": {},
     "video-prolongement": {
         **{f".expose.{c}.{q}": "ajouté" for c in ("video", "suite", "duration_s", "seed") for q in ("categorie", "aide")},
         ".etapes[controle].verifier[livrable_pese]": "ajouté",
-        ".gabarit": "ajouté",
     },
 }
 
@@ -131,19 +149,84 @@ def test_chaque_mode_deplie_est_celui_d_avant_aux_ecarts_declares_pres(nom):
         + " ; déclarés mais absents : " + json.dumps(sorted(set(ECARTS_DECLARES[nom].items()) - set(trouves.items())), ensure_ascii=False))
     # l'ordre des champs : inchangé, sauf la vidéo, dont la charte vient désormais EN PREMIER
     ordre_avant, ordre_apres = list(avant(nom)["expose"]), list(apres(nom)["expose"])
-    if nom == "video-depuis-un-texte":
+    if nom in ("video-depuis-un-texte", "video-revelation"):
         assert ordre_apres[:3] == ["charte", "logo", "logo_ou"]
         assert [c for c in ordre_apres[3:]] == [c for c in ordre_avant if c not in ("charte", "logo", "logo_ou")]
     else:
         assert ordre_apres == ordre_avant
 
 
-@pytest.mark.parametrize("nom", MODES)
+@pytest.mark.parametrize("nom", AU_TEMPLATE)
 def test_la_chaine_depliee_se_lit_et_suit_son_gabarit_au_socle(nom):
+    """Chaque mode au template suit le socle — qui EXIGE la prise de charte — et tient ou décline chacune de ses
+    promesses, sa technique comprise."""
     from comfyui_bridge.core import gabarit
-    chaine = noyau.lire(apres(nom), nom)
+    deplie, provenance = executable(nom)
+    chaine = noyau.lire(deplie, nom)
     suivi = gabarit.lire(chaine.gabarit)
     assert gabarit.suit_le_socle(suivi) and gabarit.ecarts(chaine, suivi) == [], nom
+    assert "charte" in chaine.emplacements, nom
+    reconciliant.juger_les_promesses(nom, provenance, _lus_par_les_techniques(chaine))
+
+
+def _lus_par_les_techniques(chaine):
+    from comfyui_bridge.adapter.techniques import lire_toutes
+    toutes = lire_toutes(RACINE / "_data") if (RACINE / "_data" / "techniques").is_dir() else {}
+    lus = {}
+    for nom in noyau.techniques_pour(chaine, toutes):
+        for role, places in reconciliant.emplacements_lus(toutes[nom].donnees, chaine.emplacements).items():
+            lus.setdefault(role, set()).update(places)
+    return lus
+
+
+# Ce que chaque mode DÉCLINE de la charte — dit sous le champ « Charte » dans maestro, avant qu'on la choisisse.
+DECLINES = {"image-creation": {"police", "couleurs_du_texte", "references"},
+            "image-visuel-social": {"references"},
+            "video-depuis-un-texte": set(),
+            "video-revelation": {"consigne", "interdits", "couleurs_du_texte", "references"}}
+
+
+@pytest.mark.parametrize("nom", AU_TEMPLATE)
+def test_chaque_mode_tient_ou_decline_chaque_promesse_de_la_charte(nom):
+    """Antoine, 2026-09-25 : « le template délivre les choses qu'il porte, sans mentir, sans faux paramètre que le
+    workflow ne sait pas tenir ». Les promesses TENUES le sont par un emplacement lu ; les autres sont déclinées, chacune
+    avec sa raison écrite ; la révélation tient la police de son appel par sa TECHNIQUE."""
+    deplie, provenance = executable(nom)
+    charte = provenance["charte"]
+    assert set(charte["declines"]) == DECLINES[nom], nom
+    assert all(len(raison) > 30 for raison in charte["declines"].values()), nom
+    lus = set(charte["emplacements_lus"]) | _lus_par_les_techniques(noyau.lire(deplie, nom)).get("charte", set())
+    for ident, promesse in charte["promesses"].items():
+        tenue = any(l == e or l.startswith(e + ".") for l in lus for e in promesse["emplacements"])
+        assert tenue != (ident in charte["declines"]), (nom, ident)
+    if nom == "video-revelation":
+        assert "texte.police" not in charte["emplacements_lus"]          # c'est l'appel, la technique, qui la tient
+        assert "texte.police" in _lus_par_les_techniques(noyau.lire(deplie, nom))["charte"]
+
+
+def test_sans_charte_la_revelation_ne_pose_rien_de_plus():
+    """Sans charte, l'étape « contrainte » est sautée et son « sinon » répond : le montage reçoit trois images SANS
+    fichier et une texture SANS fichier — qui n'ajoutent aucun filtre au recollage (même commande, même vidéo : le rejeu
+    de « Sepia-au-trait-sec-a-la-chandelle » l'a montré octet pour octet) ; l'appel garde la police qu'on lui a donnée."""
+    import tempfile
+    from comfyui_bridge.adapter import incrustations
+    chaine = noyau.lire(executable("video-revelation")[0], "video-revelation")
+    etapes = {e.id: e for e in chaine.etapes}
+    sinon = etapes["contrainte"].sinon["recit"]
+    resultats = {"contrainte": {"recit": noyau.resoudre(sinon, {"cta_police": "Segoe UI", "texte_position": "bas",
+                                                                "prompt": ""}, {}, strict=False)}}
+    montage = noyau.resoudre(etapes["montage"].params, {"fps": 30, "width": 480, "height": 854}, {
+        **resultats, "deroulement": {"livrable": "d.mp4"}, "conclusion": {"livrable": "c.mp4"},
+        "appel": {"livrable": None, "recit": {"images_reprises": 0}}}, strict=False)
+    assert [i["fichier"] for i in montage["images"]] == [None, None, None]
+    assert montage["texture"]["fichier"] is None
+    assert resultats["contrainte"]["recit"]["police"] == "Segoe UI"            # l'appel : la police choisie, telle quelle
+    with tempfile.TemporaryDirectory() as dossier:
+        entrees, chaines, sortie, _dits = incrustations.filtre_texture(montage["texture"], 480, 854, 30, 3, dossier, "[vout]")
+        assert (entrees, chaines, sortie) == ([], [], "[vout]")
+        entrees, chaines, sortie, _dits, poses = incrustations.filtres_images(montage["images"], 480, 854, 30, 3, dossier,
+                                                                              "[vout]", 20.0)
+        assert (entrees, chaines, sortie, poses) == ([], [], "[vout]", [])
 
 
 def test_les_valeurs_sans_charte_ajoutees_ne_sont_lues_par_aucune_etape_qui_tourne_sans_charte():
@@ -273,7 +356,13 @@ def test_aucun_mode_ne_lit_plus_une_source_qu_a_travers_son_reconciliant():
     lus = {nom: sorted(json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8")).get("reconciliants") or {})
            for nom in MODES}
     assert lus == {"image-creation": ["charte"], "image-visuel-social": ["charte"], "video-depuis-un-texte": ["charte"],
-                   "video-revelation": ["analyse", "culture"], "video-affiche": [], "video-prolongement": []}
+                   "video-revelation": ["analyse", "charte", "culture"], "video-affiche": [], "video-prolongement": []}
+    # …et les TECHNIQUES non plus : elles lisent les emplacements, jamais le récit d'une étape de réconciliant.
+    techniques = RACINE / "comfyui_bridge" / "adapter" / "resources" / "techniques-exemples"
+    for fichier in sorted(techniques.glob("*.json")):
+        texte = fichier.read_text(encoding="utf-8")
+        for recit in ("$analyse.recit.", "$culture.recit.", "$contrainte.recit.", "$conformite.recit."):
+            assert recit not in texte, (fichier.name, recit)
 
 
 def test_sur_ce_poste_le_catalogue_declare_son_socle_et_dit_ses_divergents():
@@ -299,4 +388,9 @@ def test_sur_ce_poste_le_catalogue_declare_son_socle_et_dit_ses_divergents():
             assert publies[nom].reconciliants["charte"]["techno"] == "Héraldiste", nom
             assert publies[nom].presentation["reconciliants"] == publies[nom].reconciliants, nom
     if "video-revelation" in publies:
-        assert set(publies["video-revelation"].reconciliants) == {"analyse", "culture"}
+        assert set(publies["video-revelation"].reconciliants) == {"analyse", "charte", "culture"}
+        assert set(publies["video-revelation"].reconciliants["charte"]["declines"]) == DECLINES["video-revelation"]
+    # hors vitrine : jamais lancés par Antoine, hors du template — plus publiés, leur raison écrite dans leur entrée
+    for nom in ("video-affiche", "video-prolongement"):
+        spec = c.get_spec(nom)
+        assert spec.categorie is None and nom not in publies, nom

@@ -1,7 +1,6 @@
 {
   "version": 1,
   "chaine": "video-prolongement",
-  "gabarit": "socle",
   "resume": "Prolonger une vidéo existante : ses 17 dernières images sont remises au modèle, qui invente la suite ; le chevauchement re-rendu est jeté au recollage, et le raccord est mesuré.",
   "expose": {
     "video": { "media": "video", "requis": true, "libelle": "La vidéo à prolonger", "categorie": "plan",

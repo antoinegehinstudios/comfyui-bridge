@@ -15,9 +15,49 @@ sémantique).
 
 | Réconciliant | Techno | Ce qu'il apporte | Ses emplacements |
 |---|---|---|---|
-| `charte` | Héraldiste | les champs `charte`, `logo` (et `logo_ou` pour une vidéo) ; les étapes `contrainte` (au début), `conformite` (après la livraison), `constat_de_la_charte` (avant le contrôle) | `consigne.*`, `a_poser`, `texture`, `texte.*`, `textes.*`, `references.N.*`, `logo.zone_calme` |
+| `charte` | Héraldiste | les champs `charte`, `logo` (et `logo_ou` pour une vidéo) ; les étapes `contrainte` (au début), `conformite` (après la livraison), `constat_de_la_charte` (avant le contrôle) ; sept PROMESSES | `consigne.*`, `a_poser`, `texture`, `texte.*`, `textes.*`, `references.N.*`, `logo.zone_calme` |
 | `analyse` | Iconographe | l'étape `analyse` | `reperes`, `ancres`, `empreinte` |
 | `culture` | Iconologue (après `analyse`) | l'étape `culture` | `culture`, `ancres`, `cle` |
+
+## La prise de charte est de toute création
+
+Antoine, 2026-09-25 : « j'ai demandé un template : la prise de charte doit y être présente, et à son poids
+exactement comme c'est défini par le template ; les spécificités propres au workflow sont portées ailleurs,
+mais le template délivre les choses qu'il porte, sans mentir, sans faux paramètre que le workflow ne sait
+pas tenir ».
+
+Le socle (`gabarits/socle.json`) EXIGE le réconciliant `charte` (`reconciliants_requis`). La charte promet
+sept choses à toute création qui la prend, et c'est le réconciliant qui dit lesquelles, une fois :
+
+| Promesse | Tenue par l'un de ces emplacements |
+|---|---|
+| `consigne` : les mots de style et les couleurs de la charte dans la consigne du modèle | `consigne.positif`, `consigne.style_en`, `consigne.couleurs_en` |
+| `interdits` : les interdits de la charte au négatif du modèle | `consigne.negatif` |
+| `logo` : le logo de la charte, posé tel quel | `a_poser` |
+| `texture` : la texture de la charte, fondue sur la création | `texture` |
+| `police` : la police des titres de la charte sur les textes posés | `texte.police` |
+| `couleurs_du_texte` : la couleur et le fond des titres sur les textes posés | `texte.couleur`, `texte.fond` |
+| `references` : le fond et les images de référence de la charte, montrés au modèle | `references.*` |
+
+Chaque mode TIENT une promesse (il lit l'un de ses emplacements, lui-même ou par sa technique) ou la
+DÉCLINE avec sa raison : `"reconciliants": {"charte": {…, "sans": {"references": "Z-Image ne prend aucune
+image de référence…"}}}`. Ni l'un ni l'autre, ou les deux, est refusé au chargement
+(`reconciliant.juger_les_promesses`). Une promesse déclinée est DITE : la passerelle la publie sous le champ
+« Charte » (`manques_par_valeur`, verbe « Ne tient pas »), maestro l'écrit avant qu'on choisisse une charte.
+Aucun faux champ : un réglage que le mode ne sait pas tenir n'est pas exposé (`logo_ou` n'existe que pour une
+vidéo, qui a un carton final).
+
+Au 2026-09-25 : Créer une image décline la police, les couleurs du texte et les références ; le visuel pour
+les réseaux décline les références ; Écrire une vidéo tient tout ; Révéler une image décline la consigne, les
+interdits, les couleurs du texte et les références. Révéler une image tient le logo et la texture par son
+montage, et la police par son appel final, c'est-à-dire par sa technique.
+
+## Les techniques lisent les emplacements
+
+Une technique (`_data/techniques/*.json`) lit la source comme la chaîne : `"61.markers_json":
+"$analyse.reperes"`, `"7.police": "$charte.texte.police"`. Elle est réécrite POUR la chaîne qui l'emploie
+(`core.chaine.techniques_pour`, à la lecture comme à l'exécution). Une technique qui lirait le récit d'une
+étape de réconciliant (`$analyse.recit.x`, `$contrainte.recit.x`) est refusée, comme une chaîne.
 
 ## Comment une chaîne s'en sert
 

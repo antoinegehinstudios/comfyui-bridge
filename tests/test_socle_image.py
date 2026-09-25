@@ -305,7 +305,9 @@ def test_sur_ce_poste_les_modes_sont_publies_et_leurs_graphes_tiennent():
     # sous quelle condition, en quels mots — est déclaré ICI, chez le réalisateur (2026-09-24).
     impose = r["menus"]["charte"]["source_fichier"]["impose"]
     assert impose["colonne"] == "faits"
-    assert set(impose["champs"]) == {"palette", "negatif", "police", "couleur_texte", "bandeau"}
+    # la police des titres impose aussi celle de l'appel final de « Révéler une image » (même fait, même condition)
+    assert set(impose["champs"]) == {"palette", "negatif", "police", "couleur_texte", "bandeau", "cta_police"}
+    assert impose["champs"]["cta_police"] == impose["champs"]["police"]
     assert impose["champs"]["police"] == {"fait": "titres.famille", "si": "titres.fichier"}
     assert impose["champs"]["bandeau"]["fait"] == "titres.fond" and "{valeur}" in impose["champs"]["bandeau"]["dit"]
     assert all("fait" in u for u in impose["champs"].values())

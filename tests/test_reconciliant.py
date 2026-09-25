@@ -255,3 +255,108 @@ def test_les_faits_que_la_source_sert_sans_qu_aucun_emplacement_les_prenne_sont_
     assert set(charte["source"]["faits"]["lus"]) == {"positif_en", "palette_en", "interdits_en", "titres"}
     assert [d["fait"] for d in reconciliant.faits_non_servis(charte, {"palette_en": "brown", "mascottes": [{"nom": "M"}],
                                                                      "elements_graphiques": []})] == ["mascottes"]
+
+
+# -- les promesses (second temps, 2026-09-25) ---------------------------------------------------
+#
+# Antoine : « la prise de charte doit y être présente, et à son poids exactement comme c'est défini par le
+# template ; le template délivre les choses qu'il porte, sans mentir, sans faux paramètre que le workflow ne sait
+# pas tenir ». Un réconciliant PROMET ; une chaîne tient chaque promesse ou la décline, avec sa raison.
+
+PROMETTEUR = {
+    **copy.deepcopy(SOURCE),
+    "prise": {"champ": "marque", "sauf": ["aucune"]},
+    "promesses": {"consigne": {"libelle": "les mots de la marque", "emplacements": ["consigne.positif"]},
+                  "pose": {"libelle": "ce que la marque pose", "emplacements": ["a_poser"]},
+                  "typo": {"libelle": "la police de la marque", "emplacements": ["texte"]}},
+}
+
+
+@pytest.fixture
+def prometteur(tmp_path):
+    (tmp_path / "marque.json").write_text(json.dumps(PROMETTEUR, ensure_ascii=False), encoding="utf-8")
+    return tmp_path
+
+
+def _chaine_qui_decline(sans):
+    chaine = copy.deepcopy(CHAINE)
+    chaine["reconciliants"]["marque"]["sans"] = sans
+    return chaine
+
+
+def test_chaque_promesse_est_tenue_ou_declinee_jamais_les_deux_jamais_aucune(prometteur):
+    # CHAINE lit consigne.positif, a_poser et texte.police : tout est tenu
+    _deplie, provenance = reconciliant.deplier_avec_provenance(CHAINE, prometteur)
+    assert provenance["marque"]["declines"] == {} and set(provenance["marque"]["promesses"]) == {"consigne", "pose", "typo"}
+    reconciliant.juger_les_promesses("essai", provenance)
+    # une promesse tenue ET déclinée : l'un des deux ment
+    _deplie, provenance = reconciliant.deplier_avec_provenance(_chaine_qui_decline({"pose": "rien à poser ici"}), prometteur)
+    with pytest.raises(WorkflowMappingError, match="ce que la marque pose.*déclinée.*et pourtant tenue.*l'un des deux ment"):
+        reconciliant.juger_les_promesses("essai", provenance)
+    # une promesse ni tenue ni déclinée : refusée
+    muette = copy.deepcopy(CHAINE)
+    muette["etapes"][1]["composer"].pop("images")
+    _deplie, provenance = reconciliant.deplier_avec_provenance(muette, prometteur)
+    with pytest.raises(WorkflowMappingError, match="ce que la marque pose.*ni tenue.*ni déclinée"):
+        reconciliant.juger_les_promesses("essai", provenance)
+    # déclinée avec sa raison : tenue pour dite
+    muette["reconciliants"]["marque"]["sans"] = {"pose": "ce mode ne pose aucun fichier"}
+    _deplie, provenance = reconciliant.deplier_avec_provenance(muette, prometteur)
+    reconciliant.juger_les_promesses("essai", provenance)
+    assert provenance["marque"]["declines"] == {"pose": "ce mode ne pose aucun fichier"}
+    assert provenance["marque"]["prise"] == {"champ": "marque", "sauf": ["aucune"]}
+    # une promesse tenue par la TECHNIQUE de la chaîne compte comme tenue
+    sans_typo = copy.deepcopy(CHAINE)
+    sans_typo["etapes"][1]["composer"]["textes"][0].pop("police")
+    _deplie, provenance = reconciliant.deplier_avec_provenance(sans_typo, prometteur)
+    with pytest.raises(WorkflowMappingError, match="la police de la marque"):
+        reconciliant.juger_les_promesses("essai", provenance)
+    reconciliant.juger_les_promesses("essai", provenance, {"marque": {"texte"}})
+
+
+@pytest.mark.parametrize("sans,motif", [
+    ({"inconnue": "r"}, "ne promet pas inconnue"),
+    ({"pose": "   "}, "chaque raison écrite"),
+    (["pose"], "chaque raison écrite"),
+])
+def test_un_sans_qui_ne_tient_pas_est_refuse(prometteur, sans, motif):
+    with pytest.raises(WorkflowMappingError, match=motif):
+        reconciliant.deplier_avec_provenance(_chaine_qui_decline(sans), prometteur)
+
+
+def test_des_promesses_mal_ecrites_sont_refusees_a_la_lecture(tmp_path):
+    for faute, motif in (
+            (lambda r: r.pop("prise"), "des promesses sans « prise »"),
+            (lambda r: r["prise"].update({"champ": "pas_un_champ"}), "« prise » nomme l'un de ses champs"),
+            (lambda r: r["promesses"]["pose"].update({"emplacements": ["nulle.part"]}), "qu'il ne déclare pas"),
+            (lambda r: r["promesses"]["pose"].pop("libelle"), "dit son « libelle »")):
+        faux = copy.deepcopy(PROMETTEUR)
+        faute(faux)
+        (tmp_path / "marque.json").write_text(json.dumps(faux, ensure_ascii=False), encoding="utf-8")
+        with pytest.raises(WorkflowMappingError, match=motif):
+            reconciliant.lire("marque", tmp_path)
+
+
+def test_une_technique_lit_les_emplacements_comme_la_chaine(dossier):
+    """La technique d'une chaîne lit « $marque.texte.police » : réécrite pour CETTE chaîne, elle lit le récit de
+    l'étape du réconciliant ; qu'elle lise ce récit en direct, ou un emplacement inconnu, est refusé."""
+    deplie, _prov = reconciliant.chaine_executable(CHAINE, dossier)
+    assert set(deplie["_emplacements"]) == {"marque"} and deplie["_etapes_reconciliees"] == {
+        "lecture": "marque", "mesure": "marque", "constat_de_la_marque": "marque"}
+    technique = {"technique": "t", "roles": {"peindre": {"workflow": "g", "inputs": {
+        "1.police": "$marque.texte.police", "1.a_poser": "$marque.a_poser", "1.x": "$rendu.recit.x"}}}}
+    reecrite = reconciliant.reecrire_technique(technique, deplie["_emplacements"], deplie["_etapes_reconciliees"], "t")
+    assert reecrite["roles"]["peindre"]["inputs"] == {
+        "1.police": "$lecture.recit.police", "1.a_poser": [{"fichier": "$lecture.recit.fichier"}], "1.x": "$rendu.recit.x"}
+    assert technique["roles"]["peindre"]["inputs"]["1.police"] == "$marque.texte.police"          # l'original intact
+    # un sous-chemin d'emplacement (« texte.police » dans l'emplacement-objet « texte ») compte pour l'emplacement
+    assert reconciliant.emplacements_lus(technique, deplie["_emplacements"]) == {"marque": {"texte", "a_poser"}}
+    directe = {"technique": "t", "roles": {"peindre": {"workflow": "g", "inputs": {"1.p": "$lecture.recit.police"}}}}
+    with pytest.raises(WorkflowMappingError, match="lit le récit de l'étape du réconciliant « marque »"):
+        reconciliant.reecrire_technique(directe, deplie["_emplacements"], deplie["_etapes_reconciliees"], "t")
+    inconnue = {"technique": "t", "roles": {"peindre": {"workflow": "g", "inputs": {"1.p": "$marque.nulle_part"}}}}
+    with pytest.raises(WorkflowMappingError, match="n'a pas d'emplacement « nulle_part »"):
+        reconciliant.reecrire_technique(inconnue, deplie["_emplacements"], deplie["_etapes_reconciliees"], "t")
+    # et la chaîne lue garde ce qu'il faut à ses techniques
+    lue = noyau.lire(deplie, "essai")
+    assert set(lue.emplacements) == {"marque"} and lue.etapes_reconciliees["lecture"] == "marque"

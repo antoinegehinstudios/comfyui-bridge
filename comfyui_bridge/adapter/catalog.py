@@ -400,7 +400,7 @@ class WorkflowCatalog:
                     f"chaîne {spec.name!r} : impossible de lire {spec.chaine_path} : {exc}"
                 ) from exc
             from ..core import reconciliant as _reconciliant
-            self._chaines[spec.name] = noyau.lire(_reconciliant.deplier(brut), spec.name)
+            self._chaines[spec.name] = noyau.lire(_reconciliant.chaine_executable(brut)[0], spec.name)
         return self._chaines[spec.name]
 
     def techniques(self) -> dict[str, Any]:
@@ -724,12 +724,21 @@ def _spec_de_chaine(name: str, entry: dict[str, Any], catalogue: Path,
         # Les RÉCONCILIANTS d'abord : la chaîne se lit telle qu'elle s'exécute,
         # leurs champs en tête, leurs étapes à leur place (`core/reconciliant.py`).
         from ..core import reconciliant as _reconciliant
-        deplie, provenance = _reconciliant.deplier_avec_provenance(json.loads(chemin.read_text(encoding="utf-8")))
+        deplie, provenance = _reconciliant.chaine_executable(json.loads(chemin.read_text(encoding="utf-8")))
         lue = noyau.lire(deplie, name)
         # Les techniques de CETTE chaîne : celles qui tiennent ses rôles. Les
         # autres sont d'un autre plan, et n'ont rien à lui dire (2026-09-24).
+        # Elles lisent les emplacements comme la chaîne : réécrites pour elle.
+        toutes = techniques or {}
         techniques = noyau.techniques_pour(lue, techniques)
         noyau.verifier_techniques(lue, techniques)
+        # Chaque PROMESSE d'un réconciliant est tenue (par la chaîne ou par sa technique) ou déclinée
+        # avec sa raison — sans mentir, sans faux paramètre (Antoine, 2026-09-25).
+        lus_par_les_techniques: dict[str, set] = {}
+        for nom_technique in techniques:
+            for role, places in _reconciliant.emplacements_lus(toutes[nom_technique].donnees, lue.emplacements).items():
+                lus_par_les_techniques.setdefault(role, set()).update(places)
+        _reconciliant.juger_les_promesses(f"chaîne {name!r}", provenance, lus_par_les_techniques)
         from ..core import gabarit as _gabarit
         suivi = _gabarit.lire(lue.gabarit) if lue.gabarit else None
         if suivi is not None:

@@ -47,6 +47,7 @@ from comfyui_bridge.core import chaine as noyau  # noqa: E402
 from comfyui_bridge.core import reconciliant  # noqa: E402
 from comfyui_bridge.core.plan import Artifact, BackendResult  # noqa: E402
 from test_chaines_api import SANS_FFMPEG, BackendQuiLivre, _job  # noqa: E402
+from test_socle_ink import ETAPES_DE_LA_CHARTE  # noqa: E402
 from test_socle_ink import (CONTROLES_PLAN_DANS_LA_DUREE, CONTROLES_PLAN_TENU_DU_PLAN,  # noqa: E402
                             CONTROLES_PLAN_VALIDE,
                             EXEMPLES, PLAN, TECHNIQUES)
@@ -439,8 +440,8 @@ def atelier():
     client = pile.enter_context(TestClient(app))
     client.faux = faux
     client.techniques = techniques
-    client.chaine = noyau.lire(reconciliant.deplier(json.loads((EXEMPLES / "video-revelation.json")
-                                                               .read_text(encoding="utf-8"))), "video-revelation")
+    client.chaine = noyau.lire(reconciliant.chaine_executable(json.loads((EXEMPLES / "video-revelation.json")
+                                                                         .read_text(encoding="utf-8")))[0], "video-revelation")
     yield client
     pile.close()
 
@@ -489,7 +490,9 @@ def test_les_douze_etapes_sont_les_memes_et_toutes_tenues(atelier, productions):
     ordre, avec leurs genres — et sous chaque technique, toutes sont tenues."""
     for nom, (job, _) in productions.items():
         assert [(e["id"], e["genre"]) for e in job["etapes"]] == PLAN, nom
-        assert [e["statut"] for e in job["etapes"]] == ["done"] * len(PLAN), nom
+        # sans charte, les trois étapes du réconciliant « charte » sont sautées, et elles seules
+        assert [e["statut"] for e in job["etapes"]] == [
+            "skipped" if i in ETAPES_DE_LA_CHARTE else "done" for i, _g in PLAN], nom
         assert job["workflow"] == "video-revelation" and job["params"]["technique"] == nom
     # Les réglages du PLAN sont les mêmes valeurs chez toutes ; seuls ceux de la
     # technique s'ajoutent.
@@ -734,7 +737,7 @@ def test_un_plan_qui_ne_tient_pas_dans_la_duree_se_constate_et_la_chaine_livre(a
     # LA CHAÎNE LIVRE.
     assert job["status"] == "succeeded", (job.get("problem"), job["logs"][-8:])
     assert job["problem"] is None and len(job["artifacts"]) == 1
-    assert [e["statut"] for e in job["etapes"]] == ["done"] * len(PLAN)
+    assert [e["statut"] for e in job["etapes"]] == ["skipped" if i in ETAPES_DE_LA_CHARTE else "done" for i, _g in PLAN]
     # …et l'écart est ÉMIS : le plan se juge tenu (plan_valide, tous verts),
     # puis la durée se constate non tenue, chiffrée, avec son aide.
     assert all(c["ok"] for c in _etape(job, "plan_valide")["resultat"]["controles"])

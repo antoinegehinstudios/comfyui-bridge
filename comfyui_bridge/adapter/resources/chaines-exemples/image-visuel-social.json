@@ -14,6 +14,9 @@
       "couleur": "$couleur_texte",
       "accroche": "$message",
       "appel": "$sous_message",
+      "sans": {
+        "references": "Z-Image ne prend aucune image de référence : le fond et les exemples de la charte ne pèsent ici que par ses mots et sa palette."
+      },
       "aide_charte": "La charte graphique (Héraldiste) que le visuel doit respecter — à choisir EN PREMIER, le reste en découle. Elle impose : sa palette (à la place de celle qu'on choisirait, qui n'est alors plus proposée), ses mots de style et ses interdits dans la consigne, la police et les couleurs de ses titres pour le message (police, couleur et bandeau se grisent et montrent ce qu'elle impose ; le texte se pose sur le fond de titre de la charte), son logo posé tel quel à la livraison (une zone calme est demandée au modèle là où il ira ; ce que le logo écrit déjà est ôté du message), sa texture fondue ; l'image livrée reçoit un constat de conformité. Ce modèle ne prend aucune image de référence : un fond ou un exemple d'affiche de la charte ne pèse pas ici, et le constat le dit. Sous la technique rapide (sans guidage), les interdits ne pèsent que par la consigne positive : le constat le dit aussi. « Aucune charte » : rien ne change. Sous la technique soignée, ses interdits remplissent le champ « À éviter », grisé.",
       "aide_logo": "Le logo de la charte sur ce visuel — n'existe que sous une charte. Par défaut, il signe le visuel quand il porte un message ou une promotion : ici, dès que « Message » est rempli, ou quand la consigne parle d'une affiche, d'un flyer, d'une campagne ; sans message ni promotion, pas de logo. « Toujours » et « Jamais » tranchent (sans logo, le nom de la marque reste écrit dans le texte). Posé tel quel à la place que la charte déclare, jamais dessiné par le modèle ; quand il est posé, une zone calme est demandée au modèle à cet endroit et le constat le cherche. La décision et sa raison sont dites au journal de la livraison."
     }

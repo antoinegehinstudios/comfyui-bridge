@@ -34,7 +34,12 @@ EXEMPLES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "chaines-exempl
 TECHNIQUES = RACINE / "comfyui_bridge" / "adapter" / "resources" / "techniques-exemples"
 
 # LE PLAN AGNOSTIQUE : les étapes et leurs genres, dans cet ordre.
-PLAN = [("analyse", "rendre"), ("culture", "rendre"), ("intention", "rendre"),
+# DÉCISION ÉCRITE, 2026-09-25 (Antoine : « j'ai demandé un template, la prise de charte doit y être présente,
+# et à son poids exactement comme c'est défini par le template ») : la révélation branche le réconciliant
+# « charte » — sa contrainte en tête, sa conformité après le montage, ses constats avant le contrôle —, et ne lit
+# Iconographe et Iconologue que par leurs réconciliants. Sans charte, ses trois étapes sont sautées.
+ETAPES_DE_LA_CHARTE = ("contrainte", "conformite", "constat_de_la_charte")
+PLAN = [("contrainte", "rendre"), ("analyse", "rendre"), ("culture", "rendre"), ("intention", "rendre"),
         ("plan_valide", "verifier"),
         # DÉCISION ÉCRITE, 2026-09-20 au matin (Antoine : « mentionner une erreur
         # ne doit pas suicider la livraison ! — les erreurs mentionnées ne tuent
@@ -50,7 +55,8 @@ PLAN = [("analyse", "rendre"), ("culture", "rendre"), ("intention", "rendre"),
         # plus ; le plan, lui, se juge toujours avant de peindre.
         ("plan_tenu", "constater"),
         ("raccord", "extraire_queue"), ("conclusion", "rendre"), ("appel", "rendre"),
-        ("montage", "recoller"), ("controle", "verifier")]
+        ("montage", "recoller"), ("conformite", "rendre"), ("constat_de_la_charte", "constater"),
+        ("controle", "verifier")]
 
 # Les trois étapes que le plan confie à une TECHNIQUE, par leur rôle.
 # DÉCISION ÉCRITE, 2026-09-16 au soir (Antoine : « les paramètres — le style de
@@ -62,6 +68,7 @@ ROLES_DU_PLAN = {"deroulement": "deroulement", "conclusion": "conclusion", "appe
 
 # LES DÉFAUTS COMMUNS — ceux du plan, que toute technique partage.
 DEFAUTS_DU_PLAN = {
+    "charte": "aucune", "logo": "selon le message", "logo_ou": "carton final",
     "duration_s": 45, "contemplation_s": 4, "conclusion_s": 8, "cta": "", "cta_police": "",
     "style_narratif": "reseau-social", "style_approche": "peinture-calme",
     # « conduite » et « bords » ne sont plus ici : ce sont des réglages de la
@@ -120,6 +127,7 @@ BUDGET_INK = {"queue_s": 7.0}
 # dans cet ordre ; chaque champ exposé en nomme une et porte son aide.
 CATEGORIES_DE_CHAMPS = ["oeuvre", "recit", "format", "technique", "matiere", "lumiere", "avance"]
 CATEGORIES_DU_PLAN = {
+    "charte": "charte", "logo": "charte", "logo_ou": "charte",
     "image": "oeuvre",
     "duration_s": "recit", "contemplation_s": "recit", "conclusion_s": "recit",
     "cta": "recit", "cta_police": "recit", "style_narratif": "recit", "style_approche": "recit",
@@ -157,8 +165,10 @@ CLE_DE_MEMOIRE_DE_L_INTENTION = [
 
 # CE QUE L'ENCRE MET DERRIÈRE CHAQUE RÔLE : le graphe, et ses entrées de nœud.
 CONTRAT_DE_L_ENCRE = {
+    # Les repères d'Iconographe par l'emplacement de son réconciliant, la police de l'appel par celui de la charte
+    # (2026-09-25) : la technique lit la source comme le plan, jamais son récit.
     "deroulement": ("video-reveal-cinematic-dirige", {
-        "61.markers_json": "$analyse.recit.markers_json",
+        "61.markers_json": "$analyse.reperes",
         "61.direction_json": "$intention.recit.direction_json",
         "61.fond": "$fond", "61.ambiance": "$ambiance", "61.encre": "$encre",
         "61.contemplation_s": "$contemplation_s", "61.negatif": "$negatif",
@@ -167,7 +177,7 @@ CONTRAT_DE_L_ENCRE = {
         "6.fond": "$fond", "6.ambiance": "$ambiance",
         "6.depart_s": "$deroulement.recit.duree_retenue_s",
         "6.appel_texte": "$cta", "6.fermeture_json": "$deroulement.recit.fermeture_json"}),
-    "appel": ("video-appel-final", {"7.texte": "$cta", "7.police": "$cta_police"}),
+    "appel": ("video-appel-final", {"7.texte": "$cta", "7.police": "$charte.texte.police"}),
 }
 
 CONTROLES_PLAN_VALIDE = [
@@ -195,8 +205,9 @@ CONTROLES_PLAN_TENU = [
 
 
 def _brut(nom):
-    # la chaîne telle qu'elle s'exécute : ses réconciliants (Iconographe, Iconologue) dépliés à leur place
-    return reconciliant.deplier(json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8")))
+    # la chaîne telle qu'elle s'exécute : ses réconciliants (charte, Iconographe, Iconologue) dépliés à leur place,
+    # et leurs emplacements, que ses techniques lisent comme elle
+    return reconciliant.chaine_executable(json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8")))[0]
 
 
 def _juge(controle):
@@ -236,7 +247,7 @@ def test_le_plan_est_agnostique_et_ne_nomme_aucune_technique(ink):
     assert [c["id"] for c in plan_tenu.controles_propres] == CONTROLES_PLAN_TENU_DU_PLAN
     # Aucun nom de graphe de peinture ni d'écriture ne reste dans le plan, et
     # aucun nom de technique non plus — hors des notes, qui racontent l'histoire.
-    sans_notes = json.dumps({k: v for k, v in ink.items() if k != "notes"}, ensure_ascii=False)
+    sans_notes = json.dumps({k: v for k, v in ink.items() if k != "notes" and not k.startswith("_")}, ensure_ascii=False)
     for graphe in ("video-reveal-cinematic-dirige", "video-reveal-closing",
                    "video-reveal-brume-dirige", "video-reveal-brume-closing",
                    "video-appel-final"):

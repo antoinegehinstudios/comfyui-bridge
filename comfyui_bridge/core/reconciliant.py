@@ -39,6 +39,22 @@ LE LANGAGE D'UN RÉCONCILIANT — tout ce qu'il sait écrire :
 
 Rien d'autre : un réconciliant décrit ce qu'il apporte, ce n'est pas un script. Ce module ne
 connaît aucune source : il lit ce que les fichiers déclarent.
+
+LES PROMESSES (second temps, même jour). Antoine : « j'ai demandé un template : la prise de charte doit
+y être présente, et à son poids exactement comme c'est défini par le template ; les spécificités propres
+au workflow sont portées ailleurs, mais le template délivre les choses qu'il porte, sans mentir, sans
+faux paramètre que le workflow ne sait pas tenir ». Un réconciliant déclare ses PROMESSES — ce que la
+source impose à toute création qui la prend (« promesses » : un libellé et les emplacements qui la
+tiennent). Une chaîne tient chaque promesse, en lisant l'un de ses emplacements (elle-même, ou par sa
+technique), ou la DÉCLINE avec sa raison (« sans » : {promesse: raison}) ; ni l'un ni l'autre, ou les
+deux, est refusé au chargement (`juger_les_promesses`). Une promesse déclinée est DITE — le lanceur
+l'écrit sous le champ qui prend la source —, jamais tue. Le champ qui « prend » la source (« prise » :
+{champ, sauf}) est celui sous lequel ces promesses valent.
+
+LES TECHNIQUES lisent les emplacements comme la chaîne (« $analyse.reperes », « $charte.texte.police ») :
+elles sont réécrites POUR la chaîne qui les emploie (`reecrire_technique`, depuis `core.chaine.
+techniques_pour`), et une technique qui lirait le récit d'une étape de réconciliant est refusée comme une
+chaîne.
 """
 
 from __future__ import annotations
@@ -61,7 +77,9 @@ DOSSIER = Path(__file__).resolve().parent.parent / "adapter" / "resources" / "re
 PLACES: tuple[str, ...] = ("debut", "apres_livraison", "avant_controle")
 
 _CLES: frozenset[str] = frozenset({"reconciliant", "version", "resume", "source", "requiert", "branchements",
-                                   "champs", "etapes", "emplacements", "_lire_moi"})
+                                   "champs", "etapes", "emplacements", "prise", "promesses", "_lire_moi"})
+# Le branchement réservé d'une chaîne : les promesses qu'elle décline, chacune avec sa raison.
+SANS = "sans"
 _CLES_SOURCE: frozenset[str] = frozenset({"techno", "adresse", "schemas", "graphes", "menus", "faits"})
 _CLES_BRANCHEMENT: frozenset[str] = frozenset({"requis", "valeurs", "aide"})
 _DIRECTIVES: frozenset[str] = frozenset({"@si", "@sauf", "@selon", "@autre", "@", "sinon"})
@@ -155,6 +173,23 @@ def _tenir(nom: str, brut: Any) -> None:
         raise WorkflowMappingError(f"{ctx} : « emplacements » est un objet {{chemin.a.points: valeur}}")
     if not isinstance(brut.get("requiert", []), list):
         raise WorkflowMappingError(f"{ctx} : « requiert » est une liste de rôles")
+    prise = brut.get("prise")
+    if prise is not None and (not isinstance(prise, dict) or not prise.get("champ") or not isinstance(prise.get("sauf", []), list)
+                              or prise["champ"] not in (brut.get("champs") or {})):
+        raise WorkflowMappingError(f"{ctx} : « prise » nomme l'un de ses champs et les valeurs qui ne prennent pas la source "
+                                   "({champ, sauf: [...]})")
+    promesses = brut.get("promesses") or {}
+    if not isinstance(promesses, dict):
+        raise WorkflowMappingError(f"{ctx} : « promesses » est un objet {{promesse: {{libelle, emplacements: [...]}}}}")
+    if promesses and prise is None:
+        raise WorkflowMappingError(f"{ctx} : des promesses sans « prise » — sous quel champ vaudraient-elles ?")
+    for ident, promesse in promesses.items():
+        if (not _NOM.match(str(ident)) or not isinstance(promesse, dict) or not str(promesse.get("libelle") or "").strip()
+                or not isinstance(promesse.get("emplacements"), list) or not promesse["emplacements"]):
+            raise WorkflowMappingError(f"{ctx} : la promesse {ident!r} dit son « libelle » et les « emplacements » qui la tiennent")
+        for chemin in promesse["emplacements"]:
+            if not any(k == chemin or k.startswith(f"{chemin}.") for k in emplacements):
+                raise WorkflowMappingError(f"{ctx} : la promesse {ident!r} nomme l'emplacement {chemin!r}, qu'il ne déclare pas")
     # Chaque branchement employé est déclaré : une faute de frappe dans « @acroche » ferait
     # disparaître une entrée sans un mot. Pour la même raison, les branches d'un « @selon » et les
     # valeurs d'un « @si » sont parmi celles que le branchement déclare, quand il en déclare.
@@ -270,10 +305,26 @@ def _instancier(valeur: Any, branches: dict[str, Any], ctx: str) -> Any:
     return sorti
 
 
+def _sans(ctx: str, role: str, reconciliant: dict[str, Any], branches: dict[str, Any]) -> dict[str, str]:
+    """Les promesses que la chaîne décline, chacune avec sa raison — vérifiées contre celles du réconciliant."""
+    sans = branches.get(SANS, {})
+    promesses = reconciliant.get("promesses") or {}
+    if not isinstance(sans, dict) or not all(isinstance(r, str) and r.strip() for r in sans.values()):
+        raise WorkflowMappingError(f"{ctx} : « {SANS} » du réconciliant « {role} » est un objet {{promesse: raison}}, "
+                                   "chaque raison écrite")
+    inconnues = sorted(set(sans) - set(promesses))
+    if inconnues:
+        raise WorkflowMappingError(
+            f"{ctx} : le réconciliant « {role} » ne promet pas {', '.join(inconnues)} "
+            f"(ses promesses : {', '.join(sorted(promesses)) or 'aucune'})")
+    return {str(k): str(v).strip() for k, v in sans.items()}
+
+
 def _verifier_branchements(ctx: str, role: str, reconciliant: dict[str, Any], branches: Any) -> dict[str, Any]:
     declares = reconciliant.get("branchements") or {}
     if not isinstance(branches, dict):
         raise WorkflowMappingError(f"{ctx} : le réconciliant « {role} » se branche par un objet {{branchement: valeur}}")
+    branches = {k: v for k, v in branches.items() if k != SANS}
     inconnus = sorted(set(branches) - set(declares))
     if inconnus:
         raise WorkflowMappingError(
@@ -426,6 +477,22 @@ def _assembler(ctx: str, propres: list[Any], instances: dict[str, dict[str, Any]
 
 
 def deplier_avec_provenance(brut: Any, dossier: Path | None = None) -> tuple[Any, dict[str, Any]]:
+    """La chaîne telle qu'elle s'exécute, et ce que chaque réconciliant y a apporté (voir `_deplier`)."""
+    sortie, provenance, _emplacements, _etapes = _deplier(brut, dossier)
+    return sortie, provenance
+
+
+def chaine_executable(brut: Any, dossier: Path | None = None) -> tuple[Any, dict[str, Any]]:
+    """La chaîne dépliée, plus ce que ses TECHNIQUES doivent savoir pour lire les emplacements comme elle :
+    « _emplacements » (par rôle) et « _etapes_reconciliees » (l'étape → son réconciliant), que
+    `core.chaine.lire` garde sur la chaîne et que `techniques_pour` emploie."""
+    sortie, provenance, emplacements, etapes = _deplier(brut, dossier)
+    if isinstance(sortie, dict) and emplacements:
+        sortie = {**sortie, "_emplacements": emplacements, "_etapes_reconciliees": etapes}
+    return sortie, provenance
+
+
+def _deplier(brut: Any, dossier: Path | None = None) -> tuple[Any, dict[str, Any], dict[str, Any], dict[str, str]]:
     """La chaîne telle qu'elle s'exécute, et ce que chaque réconciliant y a apporté.
 
     Une chaîne sans « reconciliants » revient telle quelle — après avoir été vérifiée : elle ne lit
@@ -433,7 +500,7 @@ def deplier_avec_provenance(brut: Any, dossier: Path | None = None) -> tuple[Any
     champs et ses étapes, les emplacements que la chaîne lit et ceux qu'elle ne prend pas.
     """
     if not isinstance(brut, dict):
-        return brut, {}
+        return brut, {}, {}, {}
     ctx = f"chaîne {str(brut.get('chaine') or '?')!r}"
     declares = brut.get("reconciliants")
     if declares is None:
@@ -455,8 +522,10 @@ def deplier_avec_provenance(brut: Any, dossier: Path | None = None) -> tuple[Any
 
     branches: dict[str, dict[str, Any]] = {}
     instances: dict[str, dict[str, Any]] = {}
+    declines: dict[str, dict[str, str]] = {}
     for role, bruts in declares.items():
         rec = registre[role]
+        declines[role] = _sans(ctx, role, rec, bruts if isinstance(bruts, dict) else {})
         branches[role] = _verifier_branchements(ctx, role, rec, bruts)
         cadre = f"{ctx}, réconciliant « {role} »"
         champs = _instancier(rec.get("champs") or {}, branches[role], cadre)
@@ -498,23 +567,93 @@ def deplier_avec_provenance(brut: Any, dossier: Path | None = None) -> tuple[Any
 
     sortie: dict[str, Any] = {}
     for cle, valeur in brut.items():
-        if cle == "reconciliants":
-            continue
+        if cle in ("reconciliants", "_emplacements", "_etapes_reconciliees"):
+            continue                     # ce qui se calcule ici ne s'écrit jamais à la main
         sortie[cle] = (champs if cle == "expose" else etapes if cle == "etapes"
                        else _reecrire(valeur, connus, lus_par_la_chaine, ctx) if cle == "livrable" else valeur)
     if instances and "expose" not in sortie:
         sortie["expose"] = champs
-    provenance = {role: {"version": registre[role]["version"], "techno": registre[role]["source"]["techno"],
-                         "champs": list(inst["champs"]), "etapes": [e["id"] for _p, e in inst["etapes"]],
-                         "emplacements_lus": sorted(lus_par_la_chaine[role]),
-                         "non_pris": sorted(set(inst["emplacements"]) - lus_par_la_chaine[role] - lus[role])}
-                  for role, inst in instances.items()}
-    return sortie, provenance
+    provenance = {}
+    for role, inst in instances.items():
+        rec = registre[role]
+        promesses = rec.get("promesses") or {}
+        provenance[role] = {
+            "version": rec["version"], "techno": rec["source"]["techno"],
+            "champs": list(inst["champs"]), "etapes": [e["id"] for _p, e in inst["etapes"]],
+            "emplacements_lus": sorted(lus_par_la_chaine[role]),
+            "non_pris": sorted(set(inst["emplacements"]) - lus_par_la_chaine[role] - lus[role]),
+            **({"prise": dict(rec["prise"])} if rec.get("prise") else {}),
+            **({"promesses": {i: {"libelle": str(p["libelle"]), "emplacements": list(p["emplacements"])}
+                              for i, p in promesses.items()},
+                "declines": dict(declines[role])} if promesses else {}),
+        }
+    emplacements = {role: inst["emplacements"] for role, inst in instances.items()}
+    etapes_reconciliees = {e["id"]: role for role, inst in instances.items() for _p, e in inst["etapes"]}
+    return sortie, provenance, emplacements, etapes_reconciliees
 
 
 def deplier(brut: Any, dossier: Path | None = None) -> Any:
     """La chaîne telle qu'elle s'exécute : ses réconciliants dépliés (voir `deplier_avec_provenance`)."""
     return deplier_avec_provenance(brut, dossier)[0]
+
+
+# -- les techniques, et les promesses -----------------------------------------------------------
+
+def emplacements_lus(valeur: Any, emplacements: dict[str, dict[str, Any]]) -> dict[str, set[str]]:
+    """Les emplacements qu'une valeur (le fichier d'une technique) lit, par rôle."""
+    lus: dict[str, set[str]] = defaultdict(set)
+    for renvoi in _renvois(valeur):
+        tete, _, chemin = renvoi.partition(".")
+        places = emplacements.get(tete)
+        if places is None or not chemin:
+            continue
+        morceaux = chemin.split(".")
+        for i in range(len(morceaux), 0, -1):
+            if ".".join(morceaux[:i]) in places:
+                lus[tete].add(".".join(morceaux[:i]))
+                break
+    return lus
+
+
+def reecrire_technique(donnees: dict[str, Any], emplacements: dict[str, dict[str, Any]],
+                       etapes_reconciliees: dict[str, str], contexte: str) -> dict[str, Any]:
+    """Le fichier d'une technique, ses rôles et ses contrôles lisant les emplacements de CETTE chaîne comme
+    des renvois ordinaires. Une technique qui lit le récit d'une étape de réconciliant (« $contrainte.recit.x »)
+    est refusée : une source ne se lit que par ses emplacements, chez la technique comme dans la chaîne."""
+    for renvoi in _renvois({"roles": donnees.get("roles"), "controles": donnees.get("controles")}):
+        tete = renvoi.split(".", 1)[0]
+        if tete in etapes_reconciliees and tete not in emplacements:
+            role = etapes_reconciliees[tete]
+            raise WorkflowMappingError(
+                f"{contexte} : « ${renvoi} » lit le récit de l'étape du réconciliant « {role} » — passer par ses "
+                f"emplacements « ${role}.… »")
+    lus: dict[str, set[str]] = defaultdict(set)
+    sortie = dict(donnees)
+    for cle in ("roles", "controles"):
+        if cle in donnees:
+            sortie[cle] = _reecrire(copy.deepcopy(donnees[cle]), emplacements, lus, contexte)
+    return sortie
+
+
+def juger_les_promesses(ctx: str, provenance: dict[str, Any], lus_ailleurs: dict[str, set[str]] | None = None) -> None:
+    """Chaque promesse d'un réconciliant est TENUE (un de ses emplacements est lu, par la chaîne ou par sa
+    technique) ou DÉCLINÉE avec sa raison — jamais les deux, jamais aucun : c'est ce qui fait qu'une chaîne
+    ne ment pas sur ce qu'elle fait de la source, et ne propose rien qu'elle ne sache tenir."""
+    fautes: list[str] = []
+    for role, prov in provenance.items():
+        lus = set(prov.get("emplacements_lus") or []) | set((lus_ailleurs or {}).get(role) or ())
+        for ident, promesse in (prov.get("promesses") or {}).items():
+            tenue = sorted(l for l in lus if any(l == e or l.startswith(f"{e}.") for e in promesse["emplacements"]))
+            declinee = ident in (prov.get("declines") or {})
+            if tenue and declinee:
+                fautes.append(f"« {promesse['libelle']} » ({role}.{ident}) est déclinée (« {SANS} ») et pourtant tenue "
+                              f"(elle lit {', '.join(tenue)}) — l'un des deux ment")
+            elif not tenue and not declinee:
+                fautes.append(f"« {promesse['libelle']} » ({role}.{ident}) n'est ni tenue (lire "
+                              f"{' ou '.join(promesse['emplacements'])}) ni déclinée avec sa raison "
+                              f"(« reconciliants »: {{« {role} »: {{« {SANS} »: {{« {ident} »: « … » }}}}}})")
+    if fautes:
+        raise WorkflowMappingError(f"{ctx} : " + " ; ".join(fautes))
 
 
 # -- ce que la source sert et qu'aucun emplacement ne prend -------------------------------------

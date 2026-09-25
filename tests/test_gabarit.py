@@ -32,8 +32,8 @@ def creation():
 
 @pytest.fixture(scope="module")
 def standard():
-    # la chaîne telle qu'elle s'exécute : son réconciliant « charte » déplié
-    return reconciliant.deplier(json.loads((EXEMPLES / "image-creation.json").read_text(encoding="utf-8")))
+    # la chaîne telle qu'elle s'exécute : son réconciliant « charte » déplié, ses emplacements gardés
+    return reconciliant.chaine_executable(json.loads((EXEMPLES / "image-creation.json").read_text(encoding="utf-8")))[0]
 
 
 def test_le_gabarit_creation_se_lit_et_dit_son_plan(creation):
@@ -47,7 +47,7 @@ def test_le_gabarit_creation_se_lit_et_dit_son_plan(creation):
 
 def test_les_deux_chaines_de_reference_le_manifestent_et_le_suivent(creation):
     for nom in ("image-creation", "image-visuel-social"):
-        brut = reconciliant.deplier(json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8")))
+        brut = reconciliant.chaine_executable(json.loads((EXEMPLES / f"{nom}.json").read_text(encoding="utf-8")))[0]
         chaine = noyau.lire(brut, nom)
         assert chaine.gabarit == "creation", nom
         assert gabarit.ecarts(chaine, creation) == [], nom
@@ -148,14 +148,28 @@ def test_un_catalogue_qui_declare_son_socle_ne_publie_aucune_chaine_qui_ne_le_su
             "livrable": "$rendu.livrable"}
     with pytest.raises(WorkflowMappingError, match="sans suivre le socle 'socle'"):
         cat.load_catalog(_catalogue(tmp_path, sans, socle="socle"), data_dir=tmp_path)
-    avec = {**sans, "gabarit": "socle"}
+    # le socle EXIGE la prise de charte (2026-09-25) : sans elle, la chaîne s'en écarte, en le disant
+    sans_charte = {**sans, "gabarit": "socle"}
+    with pytest.raises(WorkflowMappingError, match="le réconciliant « charte » manque"):
+        cat.load_catalog(_catalogue(tmp_path, sans_charte, socle="socle"), data_dir=tmp_path)
+    # avec la charte : ce rendu ne lit aucun de ses emplacements, il DÉCLINE donc chaque promesse, avec sa raison
+    promesses = reconciliant.lire("charte")["promesses"]
+    avec = {**sans_charte, "reconciliants": {"charte": {
+        "media": "image", "prompt": "$prompt", "livrable": "$rendu.livrable",
+        "sans": {p: "ce rendu d'essai ne tient rien de la charte" for p in promesses}}}}
     c = cat.load_catalog(_catalogue(tmp_path, avec, socle="socle"), data_dir=tmp_path)
     assert c.socle == "socle" and c.get_spec("essai").gabarit == "socle"
+    assert set(c.get_spec("essai").reconciliants["charte"]["declines"]) == set(promesses)
+    # une promesse ni tenue ni déclinée : refusée au chargement, en la nommant
+    muette = copy.deepcopy(avec)
+    muette["reconciliants"]["charte"]["sans"].pop("logo")
+    with pytest.raises(WorkflowMappingError, match="le logo de la charte, posé tel quel.*ni tenue.*ni déclinée"):
+        cat.load_catalog(_catalogue(tmp_path, muette, socle="socle"), data_dir=tmp_path)
     # le socle juge : un contrôle final qui ne pèse pas le livrable, un champ muet
     faux = copy.deepcopy(avec)
     faux["etapes"][-1]["verifier"][0]["id"] = "autre_chose"
     faux["expose"]["prompt"].pop("aide")
-    ecarts = gabarit.ecarts(noyau.lire(faux, "essai"), gabarit.lire("socle"))
+    ecarts = gabarit.ecarts(noyau.lire(reconciliant.chaine_executable(faux)[0], "essai"), gabarit.lire("socle"))
     assert any("livrable_pese" in e for e in ecarts) and any("prompt (aide)" in e for e in ecarts), ecarts
 
 

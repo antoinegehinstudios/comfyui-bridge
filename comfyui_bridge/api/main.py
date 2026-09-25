@@ -457,6 +457,29 @@ def _habiller(c, entree: dict, menu: dict | None = None,
     return entree
 
 
+def _dire_les_promesses_declinees(c, chaine, entrees: list) -> None:
+    """Sous le champ qui PREND une source (« prise » d'un réconciliant : la charte), les promesses que la
+    chaîne décline, chacune avec sa raison, pour chaque valeur qui prend la source (« manques_par_valeur ») :
+    le formulaire dit ce que ce mode ne tiendra pas de la charte AVANT qu'on la choisisse."""
+    try:
+        provenance = c.catalog.get_spec(chaine.nom).reconciliants or {}
+    except Exception:
+        return
+    for prov in provenance.values():
+        prise, declines = prov.get("prise") or {}, prov.get("declines") or {}
+        if not prise or not declines:
+            continue
+        manques = [{"quoi": ident, "libelle": (prov.get("promesses") or {}).get(ident, {}).get("libelle") or ident,
+                    "detecte": "declare", "verbe": "Ne tient pas", "dit": raison} for ident, raison in declines.items()]
+        for entree in entrees:
+            if entree.get("param") != prise.get("champ"):
+                continue
+            sauf = {str(v) for v in prise.get("sauf") or []}
+            valeurs = [str(x.get("valeur")) for x in entree.get("choix") or []] or [str(v) for v in entree.get("options") or []]
+            entree["manques_par_valeur"] = {**(entree.get("manques_par_valeur") or {}),
+                                           **{v: list(manques) for v in valeurs if v not in sauf}}
+
+
 def _dire_les_faits_non_servis(c, menu_nom: str, entree: dict) -> None:
     """Chaque choix d'un menu que tient une SOURCE porte les faits qu'elle sert et
     que son réconciliant ne lit pas (« non_servis »). Antoine, 2026-09-25 : ce que
@@ -654,6 +677,9 @@ def _intent_inputs_chaine(c, chaine, aides: dict | None = None) -> list[dict]:
         for entree in entrees:
             if entree["param"] == chaine.champ_de_technique and entree.get("value") in (None, ""):
                 entree["value"] = defaut.nom
+    # Ce que la chaîne DÉCLINE des promesses d'un réconciliant (« sans ») : dit sous le champ qui prend
+    # la source, pour chaque valeur qui la prend — un lanceur l'écrit comme un manque, jamais un faux champ.
+    _dire_les_promesses_declinees(c, chaine, entrees)
     # Ce que chaque technique déclare ne pas lire, par valeur : un lanceur le
     # mentionne sous la technique choisie — jamais un faux champ à sa place.
     from ..adapter import techniques as _techniques_vues

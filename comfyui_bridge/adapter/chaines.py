@@ -501,7 +501,7 @@ class RunnerDeChaines:
                         resultats: dict[str, Any], travail: Path, label: str,
                         etapes: list[dict[str, Any]], rang: int,
                         chaine_nom: str = "") -> dict[str, Any]:
-        technique = self._technique_de(etape, valeurs, resultats)
+        technique = self._technique_de(etape, valeurs, resultats, chaine_nom)
         if etape.genre in noyau.CONTROLENT:
             return self._verifier(etape, valeurs, resultats, technique,
                                   exiger=(etape.genre == "verifier"), job_id=job_id)
@@ -574,13 +574,18 @@ class RunnerDeChaines:
         return noyau.technique_choisie(chaine, valeurs or {}, self._c.catalog.techniques_de(chaine))
 
     def _technique_de(self, etape: noyau.Etape, valeurs: dict[str, Any],
-                      resultats: dict[str, Any]):
-        """La technique qu'une étape emploie, résolue au moment de la jouer."""
+                      resultats: dict[str, Any], chaine_nom: str = ""):
+        """La technique qu'une étape emploie, résolue au moment de la jouer — telle que CETTE chaîne la
+        lit : ses renvois aux emplacements des réconciliants réécrits pour elle (`techniques_pour`)."""
         renvoi = etape.technique
         if renvoi is None:
             return None
         nom = noyau.resoudre(renvoi, valeurs, resultats)
-        technique = self._c.catalog.technique(nom)
+        technique = None
+        if chaine_nom:
+            chaine = self._c.catalog.chaine(self._c.catalog.get_spec(chaine_nom))
+            technique = self._c.catalog.techniques_de(chaine).get(str(nom))
+        technique = technique or self._c.catalog.technique(nom)
         if technique is None:
             connues = ", ".join(sorted(self._c.catalog.techniques())) or "aucune"
             raise MediaAssemblyError(

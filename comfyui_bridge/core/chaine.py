@@ -286,6 +286,11 @@ class Chaine:
     # lecture du catalogue contre `resources/gabarits/<nom>.json` — voir
     # `core/gabarit.py`. Rien sans déclaration.
     gabarit: str | None = None
+    # Les EMPLACEMENTS de ses réconciliants (rôle → emplacement → renvoi), et
+    # l'étape de chacun : ce que ses TECHNIQUES lisent comme elle — voir
+    # `core/reconciliant.py` et `techniques_pour`. Vides sans réconciliant.
+    emplacements: dict[str, Any] = field(default_factory=dict)
+    etapes_reconciliees: dict[str, str] = field(default_factory=dict)
 
     @property
     def rendus(self) -> tuple[Etape, ...]:
@@ -717,7 +722,9 @@ def lire(brut: Any, nom_declare: str | None = None) -> Chaine:
         etapes.append(etape)
     chaine = Chaine(nom=nom, version=int(brut.get("version", 1)), gabarit=(gabarit or None),
                     resume=str(brut.get("resume") or ""), champs=champs,
-                    etapes=tuple(etapes), livrable=str(brut.get("livrable") or ""))
+                    etapes=tuple(etapes), livrable=str(brut.get("livrable") or ""),
+                    emplacements=dict(brut.get("_emplacements") or {}),
+                    etapes_reconciliees=dict(brut.get("_etapes_reconciliees") or {}))
     _verifier_renvois(chaine)
     return chaine
 
@@ -845,7 +852,16 @@ def techniques_pour(chaine: Chaine, techniques: dict[str, Technique] | None
     roles = {e.role for e in chaine.etapes if e.role is not None}
     if not roles:
         return {}
-    return {nom: t for nom, t in (techniques or {}).items() if roles & set(t.roles)}
+    siennes = {nom: t for nom, t in (techniques or {}).items() if roles & set(t.roles)}
+    if not chaine.emplacements:
+        return siennes
+    # Une technique lit les EMPLACEMENTS des réconciliants comme la chaîne (« $analyse.reperes ») :
+    # réécrite pour CETTE chaîne, avec les emplacements que ses branchements ont instanciés.
+    from . import reconciliant as _reconciliant
+    return {nom: lire_technique(_reconciliant.reecrire_technique(
+                t.donnees, chaine.emplacements, chaine.etapes_reconciliees,
+                f"technique {nom!r} dans la chaîne {chaine.nom!r}"), nom)
+            for nom, t in siennes.items()}
 
 
 def verifier_techniques(chaine: Chaine, techniques: dict[str, Technique]) -> None:

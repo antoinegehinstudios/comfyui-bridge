@@ -4,6 +4,21 @@
   "chaine": "video-revelation",
   "resume": "LE SOCLE D'UNE VIDÉO DE RÉVÉLATION : il attend une œuvre et des paramètres, et ne change pas. L'image est d'abord DOCUMENTÉE par Iconographe — une fois pour toutes, dans sa bibliothèque — puis sa CULTURE est documentée par Iconologue : ce que l'œuvre EST, sourcé. Une INTENTION est ensuite écrite dans la structure d'un média qu'on regarde en défilant, et c'est ELLE qui commande : le DÉROULEMENT révèle l'accroche (2,5 s), la mise en place, puis le corps qui croît vers le climax et le tient sans arrêter l'animation ; l'image révélée se CONTEMPLE ensuite (3 à 5 s, la caméra glisse encore). Une CONCLUSION pose la scène (on peut s'en passer), un APPEL FINAL s'écrit par-dessus ses dernières images, et le MONTAGE réunit le tout. Deux contrôles jugent : le plan avant de le révéler, la révélation avant de la clore. COMMENT l'image se révèle est un paramètre — la technique — et chaque technique expose ses propres réglages.",
   "reconciliants": {
+    "charte": {
+      "media": "video",
+      "livrable": "$montage.livrable",
+      "appel": "$cta",
+      "police": "$cta_police",
+      "duree_s": "$duration_s",
+      "sans": {
+        "consigne": "Révéler une image révèle une œuvre existante, sans consigne écrite au modèle : les mots de style et les couleurs de la charte n'y ont pas de prise (la part de ses couleurs est mesurée au constat de conformité, et dite).",
+        "interdits": "Révéler une image n'écrit aucun négatif : l'œuvre est révélée telle qu'elle est, les interdits de la charte n'y ont pas de prise.",
+        "couleurs_du_texte": "L'appel final s'écrit à l'encre de la technique : sa couleur et son fond ne suivent pas les titres de la charte (sa police, si).",
+        "references": "La révélation ne montre au modèle que l'œuvre à révéler : le fond et les images de référence de la charte n'y entrent pas."
+      },
+      "aide_charte": "La charte graphique (Héraldiste) que la révélation doit respecter — à choisir EN PREMIER. Elle pose son logo tel quel à la livraison (en carton final par défaut, voir « Logo de la charte » et « Où le logo vit »), fond sa texture sur la vidéo et écrit l'appel final dans la police de ses titres ; la vidéo livrée reçoit un constat de conformité (part dans la palette, logo retrouvé, intact, à sa taille, règles mesurables). Ce qu'elle ne peut pas tenir ici — l'œuvre est révélée telle qu'elle est — est dit sous ce champ. « Aucune charte » : rien ne change.",
+      "aide_logo": "Le logo de la charte sur la révélation — n'existe que sous une charte. Par défaut, il signe une révélation qui porte un appel final ; sans appel, pas de logo. « Toujours » et « Jamais » tranchent. Posé tel quel à la livraison, jamais peint par le modèle. La décision et sa raison sont dites au récit de l'étape « contrainte »."
+    },
     "analyse": {
       "image": "$image"
     },
@@ -64,7 +79,13 @@
       "defaut": "",
       "libelle": "Police de l'appel (nom ou chemin ; vide = automatique)",
       "categorie": "recit",
-      "aide": "Le nom d'une police du poste, ou le chemin d'un fichier de police. Vide : celle de la technique. Sans effet si l'appel final est vide."
+      "aide": "Le nom d'une police du poste, ou le chemin d'un fichier de police. Vide : celle de la technique. Sans effet si l'appel final est vide. Sous une charte qui déclare le fichier de la police de ses titres, c'est elle qui écrit l'appel : ce champ se grise et la montre.",
+      "impose_par": {
+        "champ": "charte",
+        "sauf": [
+          "aucune"
+        ]
+      }
     },
     "style_narratif": {
       "type": "COMBO",
@@ -334,7 +355,9 @@
         ],
         "fps": "$fps",
         "largeur": "$width",
-        "hauteur": "$height"
+        "hauteur": "$height",
+        "images": "$charte.a_poser",
+        "texture": "$charte.texture"
       }
     },
     {
