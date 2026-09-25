@@ -50,7 +50,7 @@ CE_QUE_LA_CHARTE_IMPOSE_A_LA_DIRECTION = {"1.charte": "$charte", "1.style_impose
                                           "1.palette_imposee": "$contrainte.recit.colorway_en",
                                           "1.negatif_impose": "$contrainte.recit.negatif",
                                           "1.zone_du_logo": ZONE_CALME_SI_LOGO_POSE}
-LOGO_SOUS_UNE_CHARTE = {"type": "COMBO", "defaut": "selon le message", "options": ["selon le message", "avec", "sans"],
+LOGO_SOUS_UNE_CHARTE = {"type": "COMBO", "defaut": "selon le message", "options_depuis": {"menu": "logo_charte"},
                         "selon": {"champ": "charte", "sauf": ["aucune"]}, "libelle": "Logo de la charte",
                         "categorie": "charte"}
 CONSTATS_DE_LA_CHARTE = ["la_charte_demandee_est_appliquee", "la_palette_de_la_charte_est_dans_la_consigne",
@@ -358,4 +358,18 @@ def test_la_zone_calme_ne_se_demande_que_si_le_logo_est_pose_pendant_l_image(sta
     absent = {"contrainte": {"recit": {"logo_fichier_pendant": None, "logo_ancrage": "haut-centre"}}}
     assert noyau.resoudre(zone, {}, pose) == "haut-centre"
     assert noyau.resoudre(zone, {}, absent) == ""
+
+
+def test_les_choix_du_logo_disent_le_principe():
+    """2026-09-25 : « “selon le message” et “sans” n'est pas assez parlant, choisis les bons factuels qui donnent le
+    principe ». Les valeurs restent celles du nœud de la charte ; leurs libellés et leurs résumés vivent dans un menu
+    nommé de la réconciliation, que seuls les modes image lisent — le champ « logo » d'une autre chaîne n'en est pas
+    touché."""
+    r = json.loads((DONNEES / "reconciliation.local.json").read_text(encoding="utf-8"))
+    menu = r["menus"]["logo_charte"]
+    assert list(menu["libelles"]) == ["selon le message", "avec", "sans"]
+    assert menu["libelles"]["selon le message"]["libelle"] == "Quand l'image porte un message ou une promotion"
+    assert menu["libelles"]["avec"]["libelle"].startswith("Toujours") and menu["libelles"]["sans"]["libelle"].startswith("Jamais")
+    assert all(v["resume"] for v in menu["libelles"].values())
+    assert "logo" not in r["menus"], "un menu au nom du champ retitrerait aussi le « logo » d'une autre chaîne"
 

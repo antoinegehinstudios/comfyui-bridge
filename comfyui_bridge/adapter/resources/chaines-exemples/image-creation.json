@@ -17,11 +17,9 @@
     "logo": {
       "type": "COMBO",
       "defaut": "selon le message",
-      "options": [
-        "selon le message",
-        "avec",
-        "sans"
-      ],
+      "options_depuis": {
+        "menu": "logo_charte"
+      },
       "selon": {
         "champ": "charte",
         "sauf": [
@@ -30,7 +28,7 @@
       },
       "libelle": "Logo de la charte",
       "categorie": "charte",
-      "aide": "Le logo de la charte sur cette image — n'existe que sous une charte. « selon le message » (par défaut) : la marque signe quand la consigne parle d'un support promotionnel (affiche, flyer, bannière, campagne, couverture…) ou demande le logo ; une image d'ambiance n'en porte pas, elle tient par les couleurs, le style et la texture de la charte (une charte qui veut son logo partout l'emporte). « avec » : toujours ; « sans » : jamais. Posé tel quel à la place que la charte déclare, jamais dessiné par le modèle ; quand il est posé, une zone calme est demandée au modèle à cet endroit et le constat le cherche. La décision et sa raison sont dites au journal de la livraison."
+      "aide": "Le logo de la charte sur cette image — n'existe que sous une charte. Par défaut, il signe l'image quand elle porte un message ou une promotion : ici, quand la consigne parle d'une affiche, d'un flyer, d'une bannière, d'une campagne, d'une couverture, ou demande le logo ; une image d'ambiance n'en porte pas. « Toujours » et « Jamais » tranchent. Posé tel quel à la place que la charte déclare, jamais dessiné par le modèle ; quand il est posé, une zone calme est demandée au modèle à cet endroit et le constat le cherche. La décision et sa raison sont dites au journal de la livraison."
     },
     "prompt": {
       "type": "STRING",
