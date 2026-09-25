@@ -234,7 +234,7 @@ réconciliant, c'est y déclarer ce que chaque mode y gagne. Mode d'emploi :
 `resources/reconciliants/LIRE-MOI.md`. Second temps, même jour (Antoine : « la prise de charte doit
 être présente dans le template, et à son poids exactement comme c'est défini par le template ; sans
 mentir, sans faux paramètre que le workflow ne sait pas tenir ») : le socle EXIGE le réconciliant
-`charte` ; ses sept PROMESSES sont chacune tenues (un emplacement lu, par la chaîne ou sa technique) ou
+`charte` ; ses huit PROMESSES sont chacune tenues (un emplacement lu, par la chaîne ou sa technique) ou
 déclinées avec leur raison (`"sans"`), dites sous le champ « Charte » (`manques_par_valeur`, « Ne tient
 pas ») — ni l'un ni l'autre, ou les deux, est refusé au chargement ; les TECHNIQUES lisent les
 emplacements (`$analyse.reperes`, `$charte.texte.police`), réécrites pour la chaîne qui les emploie

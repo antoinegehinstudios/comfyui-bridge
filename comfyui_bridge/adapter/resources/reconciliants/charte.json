@@ -1,6 +1,6 @@
 {
   "reconciliant": "charte",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "resume": "Le SEUL élément qui lit Héraldiste. Toute création qui prend une charte le branche : son champ « charte » (en premier), le logo, l'étape « contrainte » (le nœud lit le brief, décide du logo, pose les fichiers), la « conformite » mesurée sur le fichier livré, les constats de la charte — et, pour le reste de la chaîne, des EMPLACEMENTS PAR RÔLE : la consigne, les fichiers à poser, la texture, la typographie des textes, les images de référence. Une nouveauté d'Héraldiste se câble ici, une fois.",
   "_lire_moi": {
     "pourquoi": "Antoine, 2026-09-25 : « seul cet élément réconciliant se met à jour, une fois, pour que tout workflow obtienne la nouveauté ». Avant lui, trois chaînes recopiaient la couche charte et lisaient chacune vingt à trente-cinq clés du récit du nœud : le nom laissé au logo avait été câblé deux fois, par deux mécanismes, et les mascottes servies par Héraldiste n'atteignaient aucun mode.",
@@ -94,6 +94,12 @@
       "libelle": "le fond et les images de référence de la charte, montrés au modèle",
       "emplacements": [
         "references"
+      ]
+    },
+    "nom_du_logo": {
+      "libelle": "le nom que le logo écrit, ôté des textes posés quand le logo est posé",
+      "emplacements": [
+        "texte.laisse_au_logo"
       ]
     }
   },
@@ -489,7 +495,7 @@
             "aide": "Un élément imposé par la charte se mesure sur la vidéo LIVRÉE, quelques images échantillonnées, par Héraldiste (repérage de la forme par corrélation des contours, fidélité par ΔE2000 sur ses pixels opaques). L'ancrage du logo retrouvé (haut-centre, bas-droite…) contre le placement de la charte. Sans placement déclaré ni montré par un exemple : tenu, et le récit le dit."
           },
           {
-            "@si": "appel",
+            "@si": "accroche",
             "id": "ce_que_le_logo_ecrit_n_est_pas_reecrit",
             "valeur": {
               "si": "$contrainte.recit.logo_pose",

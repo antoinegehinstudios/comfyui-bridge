@@ -27,7 +27,7 @@ mais le template délivre les choses qu'il porte, sans mentir, sans faux paramè
 pas tenir ».
 
 Le socle (`gabarits/socle.json`) EXIGE le réconciliant `charte` (`reconciliants_requis`). La charte promet
-sept choses à toute création qui la prend, et c'est le réconciliant qui dit lesquelles, une fois :
+huit choses à toute création qui la prend, et c'est le réconciliant qui dit lesquelles, une fois :
 
 | Promesse | Tenue par l'un de ces emplacements |
 |---|---|
@@ -38,6 +38,7 @@ sept choses à toute création qui la prend, et c'est le réconciliant qui dit l
 | `police` : la police des titres de la charte sur les textes posés | `texte.police` |
 | `couleurs_du_texte` : la couleur et le fond des titres sur les textes posés | `texte.couleur`, `texte.fond` |
 | `references` : le fond et les images de référence de la charte, montrés au modèle | `references.*` |
+| `nom_du_logo` : le nom que le logo écrit, ôté des textes posés quand le logo est posé | `texte.laisse_au_logo` |
 
 Chaque mode TIENT une promesse (il lit l'un de ses emplacements, lui-même ou par sa technique) ou la
 DÉCLINE avec sa raison : `"reconciliants": {"charte": {…, "sans": {"references": "Z-Image ne prend aucune
@@ -47,9 +48,11 @@ image de référence…"}}}`. Ni l'un ni l'autre, ou les deux, est refusé au ch
 Aucun faux champ : un réglage que le mode ne sait pas tenir n'est pas exposé (`logo_ou` n'existe que pour une
 vidéo, qui a un carton final).
 
-Au 2026-09-25 : Créer une image décline la police, les couleurs du texte et les références ; le visuel pour
-les réseaux décline les références ; Écrire une vidéo tient tout ; Révéler une image décline la consigne, les
-interdits, les couleurs du texte et les références. Révéler une image tient le logo et la texture par son
+Au 2026-09-25 : Créer une image décline la police, les couleurs du texte, les références et le nom du logo
+(elle ne pose aucun texte) ; le visuel pour les réseaux décline les références ; Écrire une vidéo tient tout ;
+Révéler une image décline la consigne, les interdits, les couleurs du texte, les références et le nom du logo
+(son appel s'écrit tel quel, à l'encre, avant le carton du logo : vu sur sa preuve, où « Grabuge Fest » se
+lisait deux fois). Révéler une image tient le logo et la texture par son
 montage, et la police par son appel final, c'est-à-dire par sa technique.
 
 ## Les techniques lisent les emplacements

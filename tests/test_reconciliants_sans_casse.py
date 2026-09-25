@@ -180,10 +180,12 @@ def _lus_par_les_techniques(chaine):
 
 
 # Ce que chaque mode DÉCLINE de la charte — dit sous le champ « Charte » dans maestro, avant qu'on la choisisse.
-DECLINES = {"image-creation": {"police", "couleurs_du_texte", "references"},
+DECLINES = {"image-creation": {"police", "couleurs_du_texte", "references", "nom_du_logo"},
             "image-visuel-social": {"references"},
             "video-depuis-un-texte": set(),
-            "video-revelation": {"consigne", "interdits", "couleurs_du_texte", "references"}}
+            # l'appel final s'écrit tel quel, à l'encre, avant le carton du logo (vu sur la preuve du 2026-09-25) :
+            # le nom que le logo écrit n'en est pas ôté — décliné, dit, et le constat ne s'y pose plus sans rien voir
+            "video-revelation": {"consigne", "interdits", "couleurs_du_texte", "references", "nom_du_logo"}}
 
 
 @pytest.mark.parametrize("nom", AU_TEMPLATE)
