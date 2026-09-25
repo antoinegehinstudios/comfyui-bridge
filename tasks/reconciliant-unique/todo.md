@@ -65,3 +65,31 @@ trouve pas de place est DIT ; le gabarit n'évolue que pour un rôle nouveau ; u
     la bascule.
 - Banc vidéo c7 de la session charte : lancé ; il attend la place (47,8 Gio atteignables pour 48 exigés). Le
   résultat viendra ici.
+
+## Revue, second et troisième temps (2026-09-25, après-midi)
+
+- Demande d'Antoine : « j'ai demandé un template, la prise de charte doit y être présente, et à son poids exactement
+  comme c'est défini par le template ; les spécificités propres au workflow sont portées ailleurs, mais le template
+  délivre les choses qu'il porte, sans mentir, sans faux paramètre que le workflow ne sait pas tenir ».
+- Le socle EXIGE le réconciliant « charte ». Celui-ci déclare huit promesses ; chaque mode tient chacune (un emplacement
+  lu, par la chaîne ou par sa technique) ou la décline avec sa raison (« sans »). Ni l'un ni l'autre, ou les deux, est
+  refusé au chargement. Les promesses déclinées sont publiées sous le champ « Charte » (« Ne tient pas … ») et vues dans
+  maestro.
+- Les techniques lisent les emplacements, réécrites pour la chaîne qui les emploie. Le silo des trois techniques de
+  révélation, qui lisaient `$analyse.recit.markers_json`, est refermé.
+- Révéler une image prend la charte : logo et texture au montage, police de l'appel final.
+- L'affiche et le prolongement quittent la vitrine : jamais lancés par Antoine, ils ne savent pas tenir la charte.
+- Preuves :
+  - Rejeu de la demande « Sepia » d'Antoine sans charte, après chaque bascule : 1 210 images identiques sur 1 210,
+    octets identiques. Les 12 étapes d'origine sont inchangées (intention reprise de la mémoire, même clé) ; les 3
+    étapes de charte sont sautées.
+  - La même demande avec la charte grabuge-fest@4 et un appel : logo posé en carton final, texture fondue, police de la
+    charte reçue par InkCaption (historique du moteur), palette 0,85 contre 0,6, logo retrouvé sur 100 % des images.
+  - Cette preuve a montré « Grabuge Fest » réécrit dans l'appel alors que le logo signe, et un constat qui se disait
+    tenu sans avoir vu. D'où la huitième promesse (nom du logo), déclinée par la révélation, et le constat réservé aux
+    textes que pose la livraison.
+- Suites : 678 tests passent en arbre isolé (13 échecs préexistants) ; 706 sur une copie de l'arbre vivant (second
+  temps) ; 101 témoins verts dans l'arbre vivant ; maestro 71/71.
+- Bascules : 14:59:24 (second temps) et 15:31:14 (troisième), file et moteur vides.
+- Banc vidéo c7 : relancé après la troisième bascule ; il attend 48 Gio atteignables.
+
